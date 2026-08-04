@@ -28,13 +28,19 @@ struct DrillConfig {
   std::vector<uint8_t> path;   // Path mode: positions in order
 };
 
+// The sensor that fired (ToF vs piezo) is NOT tracked here: it lives in the
+// ESP-NOW Pressed packet, a transport detail the engine is deliberately blind
+// to. The brain splices Pressed.sensor onto the record when serializing to
+// BLE/CSV — see contract.ts HitRecord.sensor and docs/architecture.md.
 struct HitRecord {
   uint16_t seq = 0;
   uint8_t position = 0;
   uint64_t t_lit_us = 0;
   uint64_t t_hit_us = 0;      // 0 on a miss
   uint32_t reaction_ms = 0;  // t_hit - t_lit (timeout value on a miss)
-  uint32_t movement_ms = 0;  // t_hit[n] - t_hit[n-1]; 0 for the first hit
+  // t_hit[n] - t_hit[n-1]; 0 for the first hit. A miss does not update the
+  // baseline, so the next hit's movement_ms spans the skipped target.
+  uint32_t movement_ms = 0;
   bool miss = false;
 };
 

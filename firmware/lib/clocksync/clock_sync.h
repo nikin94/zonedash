@@ -3,10 +3,12 @@
 // comparable. Pure logic: the caller supplies both clocks; no hardware here,
 // so it runs and tests on the host.
 //
-// One Sync sample gives an offset (central = local + offset). Two or more give
-// skew too: crystals drift tens of ppm, which over a multi-minute session is
-// milliseconds — enough to bias reaction times — so once a second sample lands
-// we fit a line through the first and latest points instead of a fixed offset.
+// One Sync sample gives an offset (central = local + offset). Skew is added
+// only once the samples span a meaningful baseline (~20 s): crystals drift tens
+// of ppm, which over a multi-minute session is milliseconds — enough to bias
+// reaction times — but a two-point fit over a short base would amplify µs RX
+// jitter into phantom drift, so we stay offset-only until the base is wide and
+// clamp the fitted rate to a plausible ppm bound.
 #pragma once
 #include <stdint.h>
 

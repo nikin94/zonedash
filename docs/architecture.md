@@ -211,7 +211,10 @@ Data model (app side):
   the random / time-limited modes, not a fourth mode.
 - **Session** = a run of a drill → list of hits `{ seq, target_id, t_lit, t_hit,
   reaction_ms, movement_ms, sensor, miss }` + summary (total time, avg/best
-  reaction, hits, misses).
+  reaction, hits, misses). `sensor` is NOT part of the engine's `HitRecord`
+  (drill_engine.h) — it comes from the ESP-NOW `Pressed` packet and the brain
+  splices it in when serializing results. `movement_ms` on a hit that follows a
+  miss spans the skipped target (the miss doesn't reset the movement baseline).
 - Results pulled at session end and stored locally (later: sync/export).
 
 ### iOS vs Android notes
