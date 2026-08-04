@@ -1,9 +1,23 @@
 # ZoneDash app
 
-React Native (Expo SDK 57) operator app. Currently a runnable shell — screens
-(connect, drill builder, live session, results) land once the BLE link to the
-central unit exists (see [`../docs/architecture.md`](../docs/architecture.md),
-build order).
+React Native (Expo SDK 57) operator app. Currently a runnable shell with a
+connect flow driven by a **mock central unit** — screens are built against the
+transport seam first, then pointed at the real hardware (see
+[`../docs/architecture.md`](../docs/architecture.md), build order).
+
+## Transport seam
+
+The UI only talks to the `CentralTransport` interface
+([`src/ble/transport.ts`](src/ble/transport.ts)); each method maps 1:1 to a
+`ControlOp` in the GATT contract. Implementations:
+
+- **`MockCentralTransport`** ([`src/ble/mock.ts`](src/ble/mock.ts)) — in-app
+  simulator of pairing rounds and drill sessions (mirrors `lib/pairing` /
+  `lib/engine` behavior). Runs in Expo Go; what all screens are developed
+  against.
+- **BLE implementation (later)** — `react-native-ble-plx` over the contract in
+  [`src/ble/contract.ts`](src/ble/contract.ts), added together with the
+  dev-client switch.
 
 ## Run
 
