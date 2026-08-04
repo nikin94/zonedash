@@ -254,7 +254,7 @@ swaps the transport later.
 | `drill N seq…` | Load a drill: N active targets + sequence (e.g. `drill 4 rand` or `drill 6 0,3,5,1,…`) + params | Control: config |
 | `start` | Run the loaded drill (SYNC broadcast → ARM first target → loop) | Control: start |
 | `stop` | Abort the run, DISARM all | Control: stop |
-| `dump` | Print the session's hit records as CSV: `seq,pos,t_lit,t_hit,reaction_ms,move_ms,sensor` | Results read |
+| `dump` | Print the session's hit records as CSV: `seq,pos,t_lit,t_hit,reaction_ms,move_ms,sensor,miss` | Results read |
 | `sensor tof\|piezo` | Select which trigger the target reports (court A/B test) | (dev-only) |
 | `sync` | Force a clock re-sync beacon; print per-node offsets | (internal) |
 

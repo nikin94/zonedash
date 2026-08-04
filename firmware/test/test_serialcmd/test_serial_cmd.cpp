@@ -88,6 +88,7 @@ static void test_drill_errors() {
   ZD_CHECK(!parse_command("drill 0 rand").ok());       // N too small
   ZD_CHECK(!parse_command("drill 9 rand").ok());       // N too big
   ZD_CHECK(!parse_command("drill 4 rand count=x").ok()); // bad number
+  ZD_CHECK(!parse_command("drill 4 rand count=70000").ok()); // count > uint16 max
   ZD_CHECK(!parse_command("drill 4 rand bogus").ok());   // bad param
   ZD_CHECK(!parse_command("drill 4 path 0,9,2").ok());   // position >= N
   ZD_CHECK(!parse_command("drill 4 wobble").ok());       // unknown mode

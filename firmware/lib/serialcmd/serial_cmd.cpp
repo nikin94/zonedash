@@ -67,7 +67,10 @@ bool apply_param(const std::string& tok, DrillConfig& d, std::string& err) {
   std::string key = tok.substr(0, eq);
   uint32_t v;
   if (!parse_uint(tok.substr(eq + 1), v)) { err = "bad number in: " + tok; return false; }
-  if (key == "count") d.count = static_cast<uint16_t>(v);
+  if (key == "count") {
+    if (v > 0xFFFF) { err = "count too large (max 65535)"; return false; }
+    d.count = static_cast<uint16_t>(v);
+  }
   else if (key == "delay") d.delay_ms = v;
   else if (key == "timeout") d.timeout_ms = v;
   else if (key == "dur") d.duration_ms = v;
