@@ -258,6 +258,11 @@ swaps the transport later.
 | `sensor tof\|piezo` | Select which trigger the target reports (court A/B test) | (dev-only) |
 | `sync` | Force a clock re-sync beacon; print per-node offsets | (internal) |
 
+The line parser is a pure, host-tested module (`lib/serialcmd/`): it turns a
+line into a structured command (filling a `DrillConfig` for `drill`, reusing the
+engine's own type so the two can't drift). The command it emits is transport-
+agnostic — the future BLE `Control` handler produces the same structs.
+
 Free-running telemetry (not commands) is printed as it happens: `HIT pos=… t=… rssi=…`,
 `FALSE pos=… d=…mm` (ToF trigger while not armed — the calibration signal),
 `DROP seq=…` (missed/timed-out target). This log is the **source of truth for ToF

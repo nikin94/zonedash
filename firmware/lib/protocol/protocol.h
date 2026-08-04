@@ -9,6 +9,9 @@ namespace zd {
 // Bump on any breaking layout change; both sides reject a mismatch.
 constexpr uint8_t PROTOCOL_VERSION = 1;
 
+// Physical target count — the largest active layout (4 corners + 4 mid-sides).
+constexpr uint8_t MAX_TARGETS = 8;
+
 // Which sensor registered a hit (logged so we can A/B ToF vs piezo on court).
 enum class Sensor : uint8_t { ToF = 0, Piezo = 1 };
 
