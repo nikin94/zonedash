@@ -1,0 +1,20 @@
+name: CI
+
+# Runs the hardware-free (host) firmware test suites on every push to main and
+# every pull request — the same `run_native.sh` we run locally. The embedded
+# brain/target builds need the Espressif toolchain and real boards, so they are
+# not built here; only the pure-logic libs (engine, clocksync, …) are tested.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  firmware-tests:
+    name: firmware native tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run native test suites
+        working-directory: firmware
+        run: ./test/run_native.sh
