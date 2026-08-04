@@ -1,10 +1,31 @@
 # ZoneDash app
 
-React Native (Expo, dev-client) operator app. **Deferred** until the hardware
-link is proven — the firmware + court prototype come first (see
-[`../docs/architecture.md`](../docs/architecture.md), build order).
+React Native (Expo SDK 57) operator app. Currently a runnable shell — screens
+(connect, drill builder, live session, results) land once the BLE link to the
+central unit exists (see [`../docs/architecture.md`](../docs/architecture.md),
+build order).
 
-Scope when built:
+## Run
+
+```
+cd app
+npm install
+npm start          # Expo dev server — scan the QR with Expo Go
+```
+
+Or launch directly: `npm run ios` / `npm run android`. No dev-client or prebuild
+needed yet — that starts when `react-native-ble-plx` (BLE) is added.
+
+## Checks
+
+```
+npm run typecheck
+npm test
+```
+
+Both also run in CI on every PR.
+
+## Scope when built
 
 - Connect / pair with the central unit over BLE.
 - Drill library (author, edit, pick).
