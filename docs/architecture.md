@@ -126,10 +126,13 @@ Target → central:
   buffered node can't double-count.
 
 The concrete structs live in `firmware/lib/protocol/protocol.h`. Their byte
-layout is pinned with compile-time `static_assert` size locks, so an accidental
-field reorder / type change breaks the build instead of silently desyncing the
-two firmwares; `test/test_protocol/` round-trips each packet through a byte
-buffer and exercises `peek_header` (version + length gate before decode). `Ack`
+layout is pinned two ways: compile-time `static_assert` locks on **size and
+per-field offset** (a size check alone misses reordering two same-size fields),
+and golden expected-byte buffers in `test/test_protocol/` that pin the exact
+on-wire bytes — offsets *and* little-endianness (both ESP32s are LE; the tests
+make that a checked contract). `peek_header` gates version **and full per-type
+length** (`wire_size(MsgType)`), so a true return guarantees the caller can
+decode the whole packet with no out-of-bounds read; unknown types reject. `Ack`
 and `Ping` are enumerated but have no payload struct yet — they gain one when the
 brain's ESP-NOW receive path is written (that's also where app-level dedup on
 `seq` lands).

@@ -69,26 +69,67 @@ struct __attribute__((packed)) Pressed {
   uint8_t sensor;    // Sensor
 };
 
-// Compile-time layout locks: the on-wire size of every packet is pinned here, so
-// an accidental field reorder, type change, or lost `packed` breaks the build
-// instead of silently desyncing brain and target. Update a number here only when
-// the wire format changes on purpose — and bump PROTOCOL_VERSION with it.
-static_assert(sizeof(Header) == 2, "Header layout changed");
-static_assert(sizeof(Sync) == 14, "Sync layout changed");
-static_assert(sizeof(Arm) == 9, "Arm layout changed");
-static_assert(sizeof(Disarm) == 6, "Disarm layout changed");
-static_assert(sizeof(Hello) == 5, "Hello layout changed");
-static_assert(sizeof(Pressed) == 18, "Pressed layout changed");
+// Compile-time layout locks: size AND per-field offset of every packet are
+// pinned here, so a field reorder, a same-size type swap, or a lost `packed`
+// breaks the build instead of silently desyncing brain and target. (A size
+// check alone would miss reordering two same-size fields.) Update a number here
+// only when the wire format changes on purpose — and bump PROTOCOL_VERSION.
+static_assert(sizeof(Header) == 2, "Header size changed");
+static_assert(offsetof(Header, version) == 0, "Header layout changed");
+static_assert(offsetof(Header, type) == 1, "Header layout changed");
+
+static_assert(sizeof(Sync) == 14, "Sync size changed");
+static_assert(offsetof(Sync, session_id) == 2, "Sync layout changed");
+static_assert(offsetof(Sync, t_central_us) == 6, "Sync layout changed");
+
+static_assert(sizeof(Arm) == 9, "Arm size changed");
+static_assert(offsetof(Arm, session_id) == 2, "Arm layout changed");
+static_assert(offsetof(Arm, position) == 6, "Arm layout changed");
+static_assert(offsetof(Arm, seq) == 7, "Arm layout changed");
+
+static_assert(sizeof(Disarm) == 6, "Disarm size changed");
+static_assert(offsetof(Disarm, session_id) == 2, "Disarm layout changed");
+
+static_assert(sizeof(Hello) == 5, "Hello size changed");
+static_assert(offsetof(Hello, fw_version) == 2, "Hello layout changed");
+static_assert(offsetof(Hello, batt_mv) == 3, "Hello layout changed");
+
+static_assert(sizeof(Pressed) == 18, "Pressed size changed");
+static_assert(offsetof(Pressed, session_id) == 2, "Pressed layout changed");
+static_assert(offsetof(Pressed, position) == 6, "Pressed layout changed");
+static_assert(offsetof(Pressed, seq) == 7, "Pressed layout changed");
+static_assert(offsetof(Pressed, t_hit_us) == 9, "Pressed layout changed");
+static_assert(offsetof(Pressed, sensor) == 17, "Pressed layout changed");
+
 // ESP-NOW payloads cap at 250 bytes; the largest packet must stay well under.
 static_assert(sizeof(Pressed) <= 250, "packet exceeds ESP-NOW payload cap");
 
-// Validate a received buffer's header before decoding: it must hold at least a
-// Header and carry our protocol version. Returns the message type via `type`.
-// Keeps version/length gating in one place so brain and target dispatch alike.
+// On-wire size for each message type; 0 = unknown (reject). Ping/Ack carry no
+// payload structs yet (deferred to the recv path) — header-only for now.
+inline size_t wire_size(MsgType t) {
+  switch (t) {
+    case MsgType::Sync:    return sizeof(Sync);
+    case MsgType::Arm:     return sizeof(Arm);
+    case MsgType::Disarm:  return sizeof(Disarm);
+    case MsgType::Hello:   return sizeof(Hello);
+    case MsgType::Pressed: return sizeof(Pressed);
+    case MsgType::Ping:
+    case MsgType::Ack:     return sizeof(Header);
+  }
+  return 0;
+}
+
+// Validate a received buffer before decoding: protocol version must match and
+// `len` must cover the FULL packet for its type (not just the header), so a
+// caller that decodes after a true return can never read out of bounds. An
+// unknown type is rejected. One gate, used identically by brain and target.
 inline bool peek_header(const uint8_t* buf, size_t len, MsgType& type) {
   if (buf == nullptr || len < sizeof(Header)) return false;
   if (buf[0] != PROTOCOL_VERSION) return false; // byte 0 is Header::version
-  type = static_cast<MsgType>(buf[1]);           // byte 1 is Header::type
+  const MsgType t = static_cast<MsgType>(buf[1]); // byte 1 is Header::type
+  const size_t need = wire_size(t);
+  if (need == 0 || len < need) return false; // unknown type / truncated payload
+  type = t;
   return true;
 }
 
