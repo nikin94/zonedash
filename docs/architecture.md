@@ -23,18 +23,22 @@ drift when they live in one place and change in one commit.
 ```
 zonedash/
 ├── docs/
-├── firmware/                  PlatformIO — two envs, shared lib
-│   ├── platformio.ini           env:brain (S3) + env:target (C3)
+├── firmware/                  PlatformIO — three envs, shared libs
+│   ├── platformio.ini           env:brain (S3) + env:target (C3) + env:native (tests)
 │   ├── lib/protocol/protocol.h  ESP-NOW packet format (brain ⇄ target)
-│   └── src/
-│       ├── brain/               ESP32-S3: engine, HUB75, ESP-NOW, BLE, Ed25519
-│       └── target/              ESP32-C3: ToF/piezo, timestamp, ESP-NOW
+│   ├── lib/engine/              drill engine — pure C++, no hardware, host-tested
+│   ├── src/
+│   │   ├── brain/               ESP32-S3: engine, HUB75, ESP-NOW, BLE, Ed25519
+│   │   └── target/              ESP32-C3: ToF/piezo, timestamp, ESP-NOW
+│   └── test/test_engine/        drill engine tests (custom harness, host)
 └── app/                       Expo app (deferred)
     └── src/ble/contract.ts      BLE GATT mirror (the one C++ ⇄ TS seam)
 ```
 
 `build_src_filter` in `platformio.ini` selects `src/brain/` vs `src/target/`
-per env; `lib/protocol/` auto-links into both.
+per env; `lib/protocol/` + `lib/engine/` auto-link into both. The **drill engine
+is hardware-free** (time in µs from the caller, RNG injected), so it's fully
+unit-tested on the host — `pio test -e native`, or directly with clang++/g++.
 
 ## Roles
 
@@ -181,18 +185,28 @@ Minimal custom GATT service:
 | **Results** | notify / read | buffered per-hit records (chunked if large) |
 
 Data model (app side):
-- **Drill** = active-target count `N` + a **mode** + params (count, interval,
-  timeout, trigger type). N (4–8) is part of the setup, so a drill is portable
-  across layouts. Modes carried over from v0 (see `history-v0.md`):
-  - **random** — random order over the N positions, `count` reps (no same target
-    twice in a row).
+- **Drill** = active-target count `N` + a **mode** + params. N (4–8) is part of
+  the setup, so a drill is portable across layouts. Four modes (three from v0 —
+  see `history-v0.md` — plus time-limited):
+  - **random** — random order over the N positions, `count` reps.
   - **path** — a fixed, pre-authored sequence the player runs.
   - **live** — the operator picks the next target on demand (coach-in-the-loop);
-    the engine has no pre-built sequence, it just lights whatever it's told.
-  The `live` mode means the engine must accept an **externally-driven next-target**
-  command, not only self-sequence — a real constraint on the engine API.
+    the engine has no pre-built sequence, it just lights whatever it's told. This
+    means the engine must accept an **externally-driven next-target** command, not
+    only self-sequence — a real constraint on the engine API.
+  - **time-limited** — random order, run for a fixed `duration_ms`; the score is
+    "how many targets in the window." Not count-bounded.
+- **Two settings that shape sequencing** (not separate modes):
+  - `delay_ms` — gap after a hit before the next target lights (0 = instant).
+  - `allow_immediate_repeat` (bool) — may the same target light again right after
+    it was just hit. Because a `delay_ms` gap exists before the next target, a
+    re-light of the *same* position is meaningful (the player leaves and returns),
+    so this is a toggle, not a hardcoded "no-repeat." Default off.
+  These replace v0's implicit "no same target twice in a row": it's now a flag on
+  the random / time-limited modes, not a fourth mode.
 - **Session** = a run of a drill → list of hits `{ seq, target_id, t_lit, t_hit,
-  reaction_ms, movement_ms, sensor }` + summary (total time, avg reaction, misses).
+  reaction_ms, movement_ms, sensor, miss }` + summary (total time, avg/best
+  reaction, hits, misses).
 - Results pulled at session end and stored locally (later: sync/export).
 
 ### iOS vs Android notes
