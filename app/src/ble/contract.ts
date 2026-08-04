@@ -39,6 +39,10 @@ export enum ControlOp {
 export interface PairingProgress {
   currentPrompt: number; // 0-based slot being prompted, or -1 when done
   total: number; // N — active targets this round
+  /** True while the prompted slot has a candidate MAC waiting for its second
+   *  confirm tap (firmware Tap::Await) — the UI shows "press again to confirm"
+   *  (display-ui.md screen 2, "AGAIN?"). */
+  awaitingConfirm: boolean;
 }
 
 /**

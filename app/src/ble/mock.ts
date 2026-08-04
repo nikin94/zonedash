@@ -88,21 +88,22 @@ export class MockCentralTransport implements CentralTransport {
     this.session = "pairing";
     this.paired = 0;
     this.emitSession();
-    // One simulated confirm-tap per slot, then done (currentPrompt = -1).
-    for (let slot = 0; slot <= total; slot++) {
-      this.after(this.latencyMs + slot * this.stepMs, () => {
-        const progress: PairingProgress = {
-          currentPrompt: slot < total ? slot : -1,
-          total,
-        };
-        this.emit({ kind: "pairing", progress });
-        if (slot === total) {
-          this.paired = total;
-          this.session = "idle";
-          this.emitSession();
-        }
-      });
+    // Two-tap semantics per lib/pairing: a slot is prompted ("press here"),
+    // the first tap makes a candidate (awaitingConfirm — "again?"), the second
+    // binds and advances. A candidate being replaced by another stray MAC would
+    // re-emit the same confirm state, so it needs no distinct event; operator
+    // undo isn't modeled here.
+    for (let slot = 0; slot < total; slot++) {
+      const at = this.latencyMs + slot * this.stepMs;
+      this.after(at, () => this.emitPairing(slot, total, false));
+      this.after(at + this.stepMs / 2, () => this.emitPairing(slot, total, true));
     }
+    this.after(this.latencyMs + total * this.stepMs, () => {
+      this.emitPairing(-1, total, false);
+      this.paired = total;
+      this.session = "idle";
+      this.emitSession();
+    });
   }
 
   async loadDrill(config: DrillConfig): Promise<void> {
@@ -172,7 +173,12 @@ export class MockCentralTransport implements CentralTransport {
   async stopSession(): Promise<void> {
     this.assertConnected();
     this.clearTimers();
-    if (this.session === "running" || this.session === "pairing") {
+    // A cancelled pairing round leaves no session to summarize — back to idle;
+    // an aborted drill keeps its partial records and reads as done.
+    if (this.session === "pairing") {
+      this.session = "idle";
+      this.emitSession();
+    } else if (this.session === "running") {
       this.session = "done";
       this.emitSession();
     }
@@ -192,6 +198,11 @@ export class MockCentralTransport implements CentralTransport {
   // ── internals ──────────────────────────────────────────
   private emit(e: StatusEvent) {
     this.listeners.forEach((l) => l(e));
+  }
+
+  private emitPairing(currentPrompt: number, total: number, awaitingConfirm: boolean) {
+    const progress: PairingProgress = { currentPrompt, total, awaitingConfirm };
+    this.emit({ kind: "pairing", progress });
   }
 
   private emitSession() {

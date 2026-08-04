@@ -26,6 +26,14 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
         setProgress(e.progress);
         if (e.progress.currentPrompt < 0) setRunning(false);
       }
+      // A lost/failed link mid-round must end with a message, not a silent
+      // vanish — real BLE drops routinely.
+      if (e.kind === "connection" && e.state !== "connected") {
+        setRunning((was) => {
+          if (was) setError(e.reason ?? "connection lost");
+          return false;
+        });
+      }
     });
     return unsub;
   }, [transport]);
@@ -38,6 +46,14 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
       setRunning(false);
       setError(err instanceof Error ? err.message : "pairing failed");
     });
+  };
+
+  // Escape hatch for a round that never progresses (a real BLE write can be
+  // acked while Status notifications never arrive) — never trap the operator.
+  const cancel = () => {
+    setRunning(false);
+    setProgress(null);
+    transport.stopSession().catch(() => {});
   };
 
   const done = !running && progress !== null && progress.currentPrompt < 0;
@@ -53,8 +69,12 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
             <Pressable
               key={n}
               accessibilityRole="button"
+              accessibilityLabel={`${n} ${n === 1 ? "target" : "targets"}`}
               accessibilityState={{ selected: total === n }}
-              onPress={() => setTotal(n)}
+              onPress={() => {
+                setTotal(n);
+                setProgress(null); // stale "Paired N" must not outlive a new pick
+              }}
               style={[styles.chip, total === n && styles.chipActive]}
             >
               <Text style={[styles.chipLabel, total === n && styles.chipLabelActive]}>
@@ -68,7 +88,9 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
       {prompting ? (
         <>
           <Text style={styles.prompt}>
-            Press slot {progress.currentPrompt + 1} of {progress.total}
+            {progress.awaitingConfirm
+              ? `Slot ${progress.currentPrompt + 1}: press again to confirm`
+              : `Press slot ${progress.currentPrompt + 1} of ${progress.total}`}
           </Text>
           <View style={styles.slotRow}>
             {Array.from({ length: progress.total }, (_, i) => (
@@ -76,7 +98,9 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
                 key={i}
                 testID={
                   i === progress.currentPrompt
-                    ? "slot-active"
+                    ? progress.awaitingConfirm
+                      ? "slot-confirm"
+                      : "slot-active"
                     : i < progress.currentPrompt
                       ? "slot-bound"
                       : "slot-idle"
@@ -85,6 +109,9 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
                   styles.slot,
                   i < progress.currentPrompt && styles.slotBound,
                   i === progress.currentPrompt && styles.slotActive,
+                  i === progress.currentPrompt &&
+                    progress.awaitingConfirm &&
+                    styles.slotConfirm,
                 ]}
               />
             ))}
@@ -100,7 +127,15 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
 
       {error !== null && <Text style={styles.error}>{error}</Text>}
 
-      {!running && (
+      {running ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={cancel}
+          style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+        >
+          <Text style={styles.buttonLabel}>Cancel</Text>
+        </Pressable>
+      ) : (
         <Pressable
           accessibilityRole="button"
           onPress={start}
@@ -173,6 +208,9 @@ const styles = StyleSheet.create({
   },
   slotActive: {
     backgroundColor: "#818cf8",
+  },
+  slotConfirm: {
+    backgroundColor: "#fbbf24", // candidate awaiting its second confirm tap
   },
   doneText: {
     color: "#34d399",

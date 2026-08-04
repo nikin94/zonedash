@@ -36,7 +36,7 @@ test("commands reject while disconnected", async () => {
   await expect(t.startPairing(4)).rejects.toThrow("not connected");
 });
 
-test("pairing walks each slot then reports done", async () => {
+test("pairing walks each slot with a confirm phase then reports done", async () => {
   const t = make();
   const events = record(t);
   const p = t.connect();
@@ -46,14 +46,39 @@ test("pairing walks each slot then reports done", async () => {
   await t.startPairing(3);
   await jest.runAllTimersAsync();
 
+  // Two-tap semantics (lib/pairing): prompt, then awaiting-confirm, per slot.
   const prompts = events
     .filter((e) => e.kind === "pairing")
-    .map((e) => (e as { progress: { currentPrompt: number } }).progress.currentPrompt);
-  expect(prompts).toEqual([0, 1, 2, -1]);
+    .map((e) => {
+      const pr = (e as Extract<StatusEvent, { kind: "pairing" }>).progress;
+      return `${pr.currentPrompt}${pr.awaitingConfirm ? "+" : ""}`;
+    });
+  expect(prompts).toEqual(["0", "0+", "1", "1+", "2", "2+", "-1"]);
 
   // After the round the session returns to idle with all targets online.
   const last = events.filter((e) => e.kind === "session").pop();
   expect(last).toMatchObject({ state: "idle", targetsOnline: 3 });
+});
+
+test("cancelling a pairing round returns to idle without a done event", async () => {
+  const t = make();
+  const events = record(t);
+  const p = t.connect();
+  await jest.runAllTimersAsync();
+  await p;
+
+  await t.startPairing(4);
+  await jest.advanceTimersByTimeAsync(120); // partway through the round
+
+  await t.stopSession();
+  await jest.runAllTimersAsync(); // no further pairing events may fire
+
+  const doneEvents = events.filter(
+    (e) => e.kind === "pairing" && e.progress.currentPrompt === -1,
+  );
+  expect(doneEvents).toHaveLength(0);
+  const last = events.filter((e) => e.kind === "session").pop();
+  expect(last).toMatchObject({ state: "idle" });
 });
 
 test("a session produces hit records and finishes", async () => {

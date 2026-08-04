@@ -184,7 +184,9 @@ The round's logic is the hardware-free `lib/pairing/` core (`PairingRound` +
 stray re-taps of already-bound nodes, and yields the `MAC → position` map (with a
 bounds-checked `mac_at`). Board firmware just feeds it `Pressed` MACs and renders
 the current prompt; progress is surfaced to the app as `PairingProgress`
-(`currentPrompt`, `total`) on the Status characteristic.
+(`currentPrompt`, `total`, `awaitingConfirm`) on the Status characteristic —
+`awaitingConfirm` mirrors the two-tap confirm phase (`Tap::Await`), so the phone
+can render "press again to confirm" like the panel does.
 
 **Drills operate on positions, not MACs.** The operator authors "corner → mid →
 corner…" in position terms; the central unit translates to MACs via the map. So a
@@ -216,7 +218,7 @@ Minimal custom GATT service:
 | Characteristic | Dir | Payload |
 |----------------|-----|---------|
 | **Control** | write | start/stop, select drill, drill config (sequence, timing, mode) |
-| **Status** | notify | session state, connected-target count, live progress, pairing progress (`currentPrompt`, `total`) |
+| **Status** | notify | session state, connected-target count, live progress, pairing progress (`currentPrompt`, `total`, `awaitingConfirm`) |
 | **Results** | notify / read | buffered per-hit records (chunked if large) |
 
 Data model (app side):

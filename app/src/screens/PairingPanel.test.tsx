@@ -85,3 +85,65 @@ test("defaults to 8 targets when no size is picked", async () => {
   await act(() => jest.advanceTimersByTimeAsync(0));
   expect(screen.getByText("Press slot 1 of 8")).toBeTruthy();
 });
+
+test("shows the confirm phase (press again) after the first tap", async () => {
+  const t = await connectedTransport();
+  render(<PairingPanel transport={t} />);
+
+  fireEvent.press(screen.getByText("2"));
+  fireEvent.press(screen.getByText("Start pairing"));
+
+  // Mid-slot the mock emits the awaiting-confirm phase (firmware Tap::Await).
+  await act(() => jest.advanceTimersByTimeAsync(50));
+  expect(screen.getByText("Slot 1: press again to confirm")).toBeTruthy();
+  expect(screen.getByTestId("slot-confirm")).toBeTruthy();
+
+  // The second tap binds and moves the prompt on.
+  await act(() => jest.advanceTimersByTimeAsync(50));
+  expect(screen.getByText("Press slot 2 of 2")).toBeTruthy();
+});
+
+test("cancel during a round returns to idle and stops further prompts", async () => {
+  const t = await connectedTransport();
+  render(<PairingPanel transport={t} />);
+
+  fireEvent.press(screen.getByText("4"));
+  fireEvent.press(screen.getByText("Start pairing"));
+  await act(() => jest.advanceTimersByTimeAsync(100)); // round in progress
+
+  fireEvent.press(screen.getByText("Cancel"));
+  await act(() => jest.runAllTimersAsync()); // cancelled — nothing more fires
+
+  expect(screen.getByText("Start pairing")).toBeTruthy();
+  expect(screen.queryByText(/Press slot/)).toBeNull();
+  expect(screen.queryByText(/Paired/)).toBeNull();
+});
+
+test("a dropped link mid-round surfaces a message instead of vanishing", async () => {
+  const t = await connectedTransport();
+  render(<PairingPanel transport={t} />);
+
+  fireEvent.press(screen.getByText("Start pairing"));
+  await act(() => jest.advanceTimersByTimeAsync(100)); // round in progress
+
+  await act(async () => {
+    await t.disconnect();
+  });
+
+  expect(screen.getByText("connection lost")).toBeTruthy();
+  expect(screen.getByText("Start pairing")).toBeTruthy(); // not trapped
+});
+
+test("picking a new N clears the stale 'Paired N' text", async () => {
+  const t = await connectedTransport();
+  render(<PairingPanel transport={t} />);
+
+  fireEvent.press(screen.getByText("2"));
+  fireEvent.press(screen.getByText("Start pairing"));
+  await act(() => jest.runAllTimersAsync());
+  expect(screen.getByText("Paired 2 targets")).toBeTruthy();
+
+  fireEvent.press(screen.getByText("5")); // new pick — old result is stale
+  expect(screen.queryByText("Paired 2 targets")).toBeNull();
+  expect(screen.getByText("Start pairing")).toBeTruthy(); // not "Re-pair"
+});
