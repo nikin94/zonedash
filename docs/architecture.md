@@ -156,6 +156,11 @@ or the order in the case, or how many are used. (Rejected: fixed numbered sticke
 — simpler code but demands placement discipline and breaks on a swapped corner;
 RSSI/range auto-localization — unreliable indoors.)
 
+The round's logic is the hardware-free `lib/pairing/` core (`PairingRound` +
+`TargetMap`): it prompts slots in order, binds the tapping MAC, ignores stray
+re-taps of already-bound nodes, and yields the `MAC → position` map. Board
+firmware just feeds it `Pressed` MACs and renders the current prompt.
+
 **Drills operate on positions, not MACs.** The operator authors "corner → mid →
 corner…" in position terms; the central unit translates to MACs via the map. So a
 drill config is decoupled from hardware — swap a broken target for a fresh one,
