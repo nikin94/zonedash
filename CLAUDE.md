@@ -70,5 +70,5 @@ pick it up with no config change.
 ## Status
 
 Prototype-first. Hardware on order (VL53L1X ToF is the long-lead item). The
-hardware-free cores (drill engine, clock sync) are written and tested; board
-firmware and the app are skeletons until boards arrive.
+hardware-free cores (drill engine, clock sync, serial command parser) are written
+and tested; board firmware and the app are skeletons until boards arrive.
