@@ -2,6 +2,7 @@
 // packet format shared by the brain (ESP32-S3) and the targets (ESP32-C3).
 // Change here once; both builds pick it up.
 #pragma once
+#include <stddef.h> // size_t
 #include <stdint.h>
 
 namespace zd {
@@ -67,5 +68,28 @@ struct __attribute__((packed)) Pressed {
   uint64_t t_hit_us; // in the central clock domain (after Sync)
   uint8_t sensor;    // Sensor
 };
+
+// Compile-time layout locks: the on-wire size of every packet is pinned here, so
+// an accidental field reorder, type change, or lost `packed` breaks the build
+// instead of silently desyncing brain and target. Update a number here only when
+// the wire format changes on purpose — and bump PROTOCOL_VERSION with it.
+static_assert(sizeof(Header) == 2, "Header layout changed");
+static_assert(sizeof(Sync) == 14, "Sync layout changed");
+static_assert(sizeof(Arm) == 9, "Arm layout changed");
+static_assert(sizeof(Disarm) == 6, "Disarm layout changed");
+static_assert(sizeof(Hello) == 5, "Hello layout changed");
+static_assert(sizeof(Pressed) == 18, "Pressed layout changed");
+// ESP-NOW payloads cap at 250 bytes; the largest packet must stay well under.
+static_assert(sizeof(Pressed) <= 250, "packet exceeds ESP-NOW payload cap");
+
+// Validate a received buffer's header before decoding: it must hold at least a
+// Header and carry our protocol version. Returns the message type via `type`.
+// Keeps version/length gating in one place so brain and target dispatch alike.
+inline bool peek_header(const uint8_t* buf, size_t len, MsgType& type) {
+  if (buf == nullptr || len < sizeof(Header)) return false;
+  if (buf[0] != PROTOCOL_VERSION) return false; // byte 0 is Header::version
+  type = static_cast<MsgType>(buf[1]);           // byte 1 is Header::type
+  return true;
+}
 
 } // namespace zd

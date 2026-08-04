@@ -125,6 +125,15 @@ Target → central:
 - Every message carries `session_id` + `seq` so stale/duplicate packets from a
   buffered node can't double-count.
 
+The concrete structs live in `firmware/lib/protocol/protocol.h`. Their byte
+layout is pinned with compile-time `static_assert` size locks, so an accidental
+field reorder / type change breaks the build instead of silently desyncing the
+two firmwares; `test/test_protocol/` round-trips each packet through a byte
+buffer and exercises `peek_header` (version + length gate before decode). `Ack`
+and `Ping` are enumerated but have no payload struct yet — they gain one when the
+brain's ESP-NOW receive path is written (that's also where app-level dedup on
+`seq` lands).
+
 ## Target identity & addressing (two layers)
 
 Identity and court position are **separate concerns** — conflating them is a bug.
