@@ -5,8 +5,8 @@
  *
  * Behavior mirrors the firmware cores: pairing prompts slots in order
  * (lib/pairing), a session arms one target at a time and resolves each step as
- * a hit or a timeout miss (lib/engine). Timings are configurable so tests can
- * run on fake timers.
+ * a hit or a timeout miss (lib/engine — misses exist only when timeoutMs > 0).
+ * Timings are configurable so tests can run on fake timers.
  */
 import type { HitRecord, PairingProgress } from "./contract";
 import type {
@@ -21,11 +21,18 @@ import type {
 export interface MockOptions {
   /** Simulated link latency for connect and command round-trips. */
   latencyMs?: number;
-  /** Simulated time between pairing taps / drill hits. */
+  /** Simulated time between pairing taps / drill steps. */
   stepMs?: number;
-  /** Every n-th step of a session is a timeout miss (0 = never). */
+  /** Every n-th step of a session is a timeout miss (0 = never). Only takes
+   *  effect when the drill has timeoutMs > 0 — matching lib/engine, a drill
+   *  without a timeout can never miss. */
   missEvery?: number;
+  /** Make connect() fail — exercises the error path real BLE will hit
+   *  (Bluetooth off, device not found, permissions denied). */
+  failConnect?: boolean;
 }
+
+const clampPositions = (n: number) => Math.max(1, Math.min(8, Math.floor(n) || 1));
 
 export class MockCentralTransport implements CentralTransport {
   connectionState: ConnectionState = "disconnected";
@@ -33,9 +40,11 @@ export class MockCentralTransport implements CentralTransport {
   private readonly latencyMs: number;
   private readonly stepMs: number;
   private readonly missEvery: number;
+  private readonly failConnect: boolean;
 
   private listeners = new Set<(e: StatusEvent) => void>();
   private timers = new Set<ReturnType<typeof setTimeout>>();
+  private connectPromise: Promise<void> | null = null;
   private session: SessionState = "idle";
   private drill: DrillConfig = { mode: "random", numPositions: 8, count: 10 };
   private paired = 0; // targets bound by the last pairing round
@@ -45,14 +54,26 @@ export class MockCentralTransport implements CentralTransport {
     this.latencyMs = opts.latencyMs ?? 150;
     this.stepMs = opts.stepMs ?? 900;
     this.missEvery = opts.missEvery ?? 4;
+    this.failConnect = opts.failConnect ?? false;
   }
 
-  async connect(): Promise<void> {
-    if (this.connectionState !== "disconnected") return;
+  connect(): Promise<void> {
+    if (this.connectionState === "connected") return Promise.resolve();
+    // A second call while connecting joins the in-flight attempt.
+    if (this.connectPromise) return this.connectPromise;
     this.setConnection("connecting");
-    await this.wait(this.latencyMs);
-    this.setConnection("connected");
-    this.emitSession();
+    this.connectPromise = (async () => {
+      await this.wait(this.latencyMs);
+      if (this.failConnect) {
+        this.setConnection("error", "mock: connect failed");
+        throw new Error("connect failed");
+      }
+      this.setConnection("connected");
+      this.emitSession();
+    })().finally(() => {
+      this.connectPromise = null;
+    });
+    return this.connectPromise;
   }
 
   async disconnect(): Promise<void> {
@@ -63,7 +84,7 @@ export class MockCentralTransport implements CentralTransport {
 
   async startPairing(numPositions: number): Promise<void> {
     this.assertConnected();
-    const total = Math.max(1, Math.min(8, numPositions));
+    const total = clampPositions(numPositions);
     this.session = "pairing";
     this.paired = 0;
     this.emitSession();
@@ -86,7 +107,7 @@ export class MockCentralTransport implements CentralTransport {
 
   async loadDrill(config: DrillConfig): Promise<void> {
     this.assertConnected();
-    this.drill = config;
+    this.drill = { ...config, numPositions: clampPositions(config.numPositions) };
   }
 
   async startSession(): Promise<void> {
@@ -96,21 +117,35 @@ export class MockCentralTransport implements CentralTransport {
     this.hits = [];
     this.emitSession();
 
+    const { mode, path } = this.drill;
+    // time mode fills its window ("how many in durationMs"), not a rep count.
     const steps =
-      this.drill.mode === "path"
-        ? (this.drill.path?.length ?? 0)
-        : (this.drill.count ?? 10);
-    const n = this.drill.numPositions;
+      mode === "path"
+        ? (path?.length ?? 0)
+        : mode === "time"
+          ? Math.max(1, Math.floor((this.drill.durationMs ?? 60000) / this.stepMs))
+          : (this.drill.count ?? 10);
+    const n = clampPositions(this.drill.numPositions);
+    const timeoutMs = this.drill.timeoutMs ?? 0;
     let prevHitUs = 0;
     for (let seq = 0; seq < steps; seq++) {
-      this.after(this.latencyMs + seq * this.stepMs, () => {
-        const position =
-          this.drill.mode === "path" ? this.drill.path![seq] : (seq * 3 + 1) % n;
-        this.emit({ kind: "progress", seq, position });
+      // Deterministic spread; does not model allowImmediateRepeat/no-repeat
+      // (the engine's reroll) — fine for a mock, noted so screens don't rely
+      // on it.
+      const position = mode === "path" ? path![seq] : (seq * 3 + 1) % n;
+      const armAt = this.latencyMs + seq * this.stepMs;
 
-        const miss = this.missEvery > 0 && (seq + 1) % this.missEvery === 0;
+      this.after(armAt, () => {
+        this.emit({ kind: "progress", seq, position });
+      });
+      // The step closes mid-slot: hit record lands and `resolved` fires before
+      // the next `progress`, exactly what the live screen keys its flash on.
+      this.after(armAt + this.stepMs / 2, () => {
+        // Like lib/engine: misses only exist when a timeout is configured.
+        const miss =
+          timeoutMs > 0 && this.missEvery > 0 && (seq + 1) % this.missEvery === 0;
         const tLitUs = seq * this.stepMs * 1000;
-        const reactionMs = miss ? (this.drill.timeoutMs ?? 1500) : 380 + seq * 37;
+        const reactionMs = miss ? timeoutMs : 380 + seq * 37;
         const tHitUs = miss ? 0 : tLitUs + reactionMs * 1000;
         this.hits.push({
           seq,
@@ -118,11 +153,13 @@ export class MockCentralTransport implements CentralTransport {
           tLitUs,
           tHitUs,
           reactionMs,
-          movementMs: miss || prevHitUs === 0 ? 0 : Math.round((tHitUs - prevHitUs) / 1000),
+          movementMs:
+            miss || prevHitUs === 0 ? 0 : Math.round((tHitUs - prevHitUs) / 1000),
           sensor: "tof",
           miss,
         });
         if (!miss) prevHitUs = tHitUs;
+        this.emit({ kind: "resolved", seq, position, miss, reactionMs });
 
         if (seq === steps - 1) {
           this.session = "done";
@@ -161,13 +198,15 @@ export class MockCentralTransport implements CentralTransport {
     this.emit({
       kind: "session",
       state: this.session,
+      // Count from the last pairing round; a session started without pairing
+      // reports 0 even while running (the mock doesn't fake node presence).
       targetsOnline: this.paired,
     });
   }
 
-  private setConnection(state: ConnectionState) {
+  private setConnection(state: ConnectionState, reason?: string) {
     this.connectionState = state;
-    this.emit({ kind: "connection", state });
+    this.emit({ kind: "connection", state, reason });
   }
 
   private assertConnected() {

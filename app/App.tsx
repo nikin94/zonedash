@@ -13,10 +13,14 @@ import type { ConnectionState } from "./src/ble/transport";
 export default function App() {
   const transport = useMemo(() => new MockCentralTransport(), []);
   const [connection, setConnection] = useState<ConnectionState>("disconnected");
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const unsub = transport.onStatus((e) => {
-      if (e.kind === "connection") setConnection(e.state);
+      if (e.kind === "connection") {
+        setConnection(e.state);
+        setError(e.state === "error" ? (e.reason ?? "connection failed") : null);
+      }
     });
     return () => {
       unsub();
@@ -27,26 +31,41 @@ export default function App() {
   const connected = connection === "connected";
   const busy = connection === "connecting";
 
+  // Real BLE rejects routinely (Bluetooth off, not found, permissions) — the
+  // state flip to "error" arrives via onStatus; the catch just stops the
+  // rejection from being unhandled.
+  const toggle = () => {
+    (connected ? transport.disconnect() : transport.connect()).catch(() => {});
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>ZoneDash</Text>
       <Text style={styles.subtitle}>Court reaction trainer</Text>
 
       <View style={styles.statusRow}>
-        <View style={[styles.dot, connected && styles.dotConnected]} />
+        <View
+          style={[
+            styles.dot,
+            connected && styles.dotConnected,
+            connection === "error" && styles.dotError,
+          ]}
+        />
         <Text style={styles.status}>
           {connected
             ? "Central unit: connected (mock)"
             : busy
               ? "Central unit: connecting…"
-              : "Central unit: not connected"}
+              : connection === "error"
+                ? `Central unit: ${error ?? "connection failed"}`
+                : "Central unit: not connected"}
         </Text>
       </View>
 
       <Pressable
         accessibilityRole="button"
         disabled={busy}
-        onPress={() => (connected ? transport.disconnect() : transport.connect())}
+        onPress={toggle}
         style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
       >
         <Text style={styles.buttonLabel}>
@@ -91,6 +110,9 @@ const styles = StyleSheet.create({
   },
   dotConnected: {
     backgroundColor: "#34d399",
+  },
+  dotError: {
+    backgroundColor: "#f87171",
   },
   status: {
     color: "#71717a",

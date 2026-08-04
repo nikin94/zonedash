@@ -22,16 +22,20 @@ export interface DrillConfig {
 export type ConnectionState =
   | "disconnected"
   | "connecting"
-  | "connected";
+  | "connected"
+  | "error"; // connect failed / link lost; `reason` on the connection event
 
 export type SessionState = "idle" | "pairing" | "running" | "done";
 
 /** Decoded Status-characteristic notifications. */
 export type StatusEvent =
-  | { kind: "connection"; state: ConnectionState }
+  | { kind: "connection"; state: ConnectionState; reason?: string }
   | { kind: "session"; state: SessionState; targetsOnline: number }
   | { kind: "pairing"; progress: PairingProgress }
-  | { kind: "progress"; seq: number; position: number }; // armed target changed
+  | { kind: "progress"; seq: number; position: number } // armed target changed
+  // A step closed — hit or timeout miss. This is what the live drill screen
+  // renders (green/red flash) without owning any game state.
+  | { kind: "resolved"; seq: number; position: number; miss: boolean; reactionMs: number };
 
 export type Unsubscribe = () => void;
 
