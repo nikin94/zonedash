@@ -21,7 +21,7 @@ firmware/      PlatformIO: one project, two builds (brain=ESP32-S3, target=ESP32
   lib/         Hardware-free, host-testable cores (engine, clocksync, protocol)
   src/         Board firmware (brain/, target/) — needs Espressif toolchain + real boards
   test/        Native test suites (run on the host, no hardware)
-app/           React Native (Expo) operator app — deferred until the HW link is proven
+app/           React Native (Expo) operator app — runnable shell (see app/README.md)
 ```
 
 Start with `docs/concept.md` (product + decisions), then `docs/architecture.md`
@@ -67,9 +67,15 @@ Adding a new core: put it in `lib/<name>/`, add `test/test_<name>/test_<name>.cp
 that includes `../zd_test.h` and returns non-zero on failure — the runner and CI
 pick it up with no config change.
 
+App checks (Jest via jest-expo + `tsc --noEmit`), also run in CI:
+
+```
+cd app && npm install && npm run typecheck && npm test
+```
+
 ## Status
 
 Prototype-first. Hardware on order (VL53L1X ToF is the long-lead item). The
 hardware-free cores (drill engine, clock sync, serial command parser, pairing
-round, wire protocol) are written and tested; board firmware and the app are
-skeletons until boards arrive.
+round, wire protocol) are written and tested; board firmware stays a skeleton
+until boards arrive. The Expo app is a runnable shell (no BLE yet).
