@@ -1,0 +1,21 @@
+# macOS
+.DS_Store
+
+# ── Firmware (PlatformIO) ───────────────────────────────
+firmware/.pio/
+firmware/.vscode/
+firmware/CMakeListsPrivate.txt
+
+# ── App (React Native / Expo) ───────────────────────────
+app/node_modules/
+app/.expo/
+app/dist/
+app/web-build/
+app/ios/
+app/android/
+app/*.log
+app/.env*
+
+# Editors / OS
+*.swp
+.idea/
