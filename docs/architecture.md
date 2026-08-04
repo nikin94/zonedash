@@ -181,10 +181,16 @@ Minimal custom GATT service:
 | **Results** | notify / read | buffered per-hit records (chunked if large) |
 
 Data model (app side):
-- **Drill** = active-target count `N` + ordered/random sequence over those N
-  positions + params (count, interval mode, timeout, trigger type). N is part of
-  the drill/session setup (4–8), so a drill is portable across layouts. Authored
-  on the phone, pushed once.
+- **Drill** = active-target count `N` + a **mode** + params (count, interval,
+  timeout, trigger type). N (4–8) is part of the setup, so a drill is portable
+  across layouts. Modes carried over from v0 (see `history-v0.md`):
+  - **random** — random order over the N positions, `count` reps (no same target
+    twice in a row).
+  - **path** — a fixed, pre-authored sequence the player runs.
+  - **live** — the operator picks the next target on demand (coach-in-the-loop);
+    the engine has no pre-built sequence, it just lights whatever it's told.
+  The `live` mode means the engine must accept an **externally-driven next-target**
+  command, not only self-sequence — a real constraint on the engine API.
 - **Session** = a run of a drill → list of hits `{ seq, target_id, t_lit, t_hit,
   reaction_ms, movement_ms, sensor }` + summary (total time, avg reaction, misses).
 - Results pulled at session end and stored locally (later: sync/export).

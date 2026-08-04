@@ -8,6 +8,11 @@ overall result.
 
 ## Existing prototype (v0)
 
+> Full write-up and lessons in `history-v0.md`. Key takeaways: the **three drill
+> modes** (random / path / live) carry forward, and v0's **failed peer-RF
+> wireless attempt** (channel conflicts, weak range, latency) is exactly what our
+> ESP-NOW-star-plus-gateway choice is built to avoid.
+
 - **8 targets** around the perimeter of one player's half of the court:
   4 in the corners + 1 at the midpoint of each side.
 - Targets are **physical buttons**, each wired to a **Raspberry Pi with a
