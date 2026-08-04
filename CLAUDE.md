@@ -71,5 +71,5 @@ pick it up with no config change.
 
 Prototype-first. Hardware on order (VL53L1X ToF is the long-lead item). The
 hardware-free cores (drill engine, clock sync, serial command parser, pairing
-round) are written and tested; board firmware and the app are skeletons until
-boards arrive.
+round, wire protocol) are written and tested; board firmware and the app are
+skeletons until boards arrive.
