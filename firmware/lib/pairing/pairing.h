@@ -1,6 +1,6 @@
 // ZoneDash pairing round — builds the MAC→position map before a session.
-// The central unit prompts each active slot in turn ("Press here"); whichever
-// target presses is bound to that slot. Pure logic, host-testable: feed taps,
+// The central unit prompts each active slot in turn ("Press here"); the target
+// that presses is bound to that slot. Pure logic, host-testable: feed taps,
 // read the resulting map. See docs/architecture.md "Target identity".
 #pragma once
 #include <array>
@@ -20,29 +20,47 @@ struct TargetMap {
 
   // Position of a MAC, or -1 if it isn't bound.
   int position_of(const Mac& mac) const;
-  const Mac& mac_at(uint8_t position) const { return macs[position]; }
+  // MAC bound to a position. Returns false and leaves `out` untouched if the
+  // position isn't bound (>= count) — no silent zero-MAC for out-of-range reads.
+  bool mac_at(uint8_t position, Mac& out) const;
 };
 
 // Drives the "prompt a slot, bind whoever presses" round.
 class PairingRound {
  public:
+  // What a tap did, so the board can react (prompt to confirm, advance, ...).
+  enum class Tap : uint8_t {
+    Ignored, // no active round, round done, or a re-tap of an already-bound node
+    Await,   // new candidate for the current slot — ask "press again to confirm"
+    Bound,   // same candidate tapped again — MAC bound to the slot, prompt advanced
+  };
+
   // Begin binding `num_positions` slots (clamped to 1..MAX_TARGETS); prompts
-  // position 0. Discards any previous map.
+  // position 0. Discards any previous map and candidate.
   void begin(uint8_t num_positions);
 
-  // A target pressed. Binds it to the current prompt unless it's already bound
-  // (a stray re-tap), then advances. Returns the next prompt position, or -1
-  // when the round is complete (or not running).
-  int on_tap(const Mac& mac);
+  // A target pressed. Binding takes TWO consecutive taps from the same MAC: the
+  // first makes it the slot's candidate (Await), the second confirms and binds
+  // (Bound). This rejects a stray single tap (ball bounce, ToF ghost, piezo
+  // cross-talk) that would otherwise mis-bind the wrong node. A different unbound
+  // MAC replaces the candidate (Await again); an already-bound MAC is Ignored.
+  Tap on_tap(const Mac& mac);
 
-  bool done() const { return prompt_ < 0 && target_ > 0; }
-  int current_prompt() const { return prompt_; } // slot prompted; -1 = done/idle
+  // Operator correction: unbind the most recent slot and re-prompt it. No-op if
+  // nothing is bound. Returns the slot now prompted, or -1 if idle.
+  int undo_last();
+
+  bool active() const { return target_ > 0 && map_.count < target_; }
+  bool done() const { return target_ > 0 && map_.count >= target_; }
+  // Slot awaiting a bind (== bound count while running), or -1 when done/idle.
+  int current_prompt() const { return active() ? map_.count : -1; }
   const TargetMap& map() const { return map_; }
 
  private:
   TargetMap map_;
-  uint8_t target_ = 0; // total slots to bind this round
-  int prompt_ = -1;    // slot being prompted; -1 = idle/done
+  uint8_t target_ = 0;       // total slots to bind this round (0 = idle)
+  Mac candidate_{};          // MAC awaiting a confirming second tap
+  bool have_candidate_ = false;
 };
 
 } // namespace zd

@@ -4,6 +4,7 @@
 #include "../zd_test.h"
 
 using namespace zd;
+using Tap = PairingRound::Tap;
 
 // Distinct sample MACs (double braces to satisfy -Wmissing-braces under -Werror).
 static const Mac A{{0x01, 0, 0, 0, 0, 0x0A}};
@@ -11,91 +12,150 @@ static const Mac B{{0x02, 0, 0, 0, 0, 0x0B}};
 static const Mac C{{0x03, 0, 0, 0, 0, 0x0C}};
 static const Mac D{{0x04, 0, 0, 0, 0, 0x0D}};
 
-// Prompts slots 0..N-1 in order, one per tap.
+// Confirm-bind a MAC to the current slot: two consecutive taps (Await, Bound).
+static void bind(PairingRound& p, const Mac& m) {
+  p.on_tap(m);
+  p.on_tap(m);
+}
+
+// Prompts slots 0..N-1 in order; a slot only advances once the tap is confirmed.
 static void test_prompts_in_order() {
   PairingRound p;
   p.begin(4);
   ZD_EQ(p.current_prompt(), 0);
-  ZD_EQ(p.on_tap(A), 1);
-  ZD_EQ(p.on_tap(B), 2);
-  ZD_EQ(p.on_tap(C), 3);
+  ZD_CHECK(p.on_tap(A) == Tap::Await); // first tap: candidate, not bound
+  ZD_EQ(p.current_prompt(), 0);        // still slot 0
+  ZD_CHECK(p.on_tap(A) == Tap::Bound); // confirm
+  ZD_EQ(p.current_prompt(), 1);        // advanced
+  bind(p, B);
+  bind(p, C);
+  ZD_EQ(p.current_prompt(), 3);
   ZD_CHECK(!p.done());
 }
 
-// Binds each tapped MAC to its prompted slot; map lookups both directions.
+// Binds each confirmed MAC to its prompted slot; map lookups both directions.
 static void test_binds_map() {
   PairingRound p;
   p.begin(4);
-  p.on_tap(A);
-  p.on_tap(B);
-  p.on_tap(C);
-  p.on_tap(D);
+  bind(p, A);
+  bind(p, B);
+  bind(p, C);
+  bind(p, D);
   const TargetMap& m = p.map();
   ZD_EQ(m.count, 4);
   ZD_EQ(m.position_of(A), 0);
   ZD_EQ(m.position_of(C), 2);
-  ZD_CHECK(m.mac_at(1) == B);
-  ZD_CHECK(m.mac_at(3) == D);
+  Mac out;
+  ZD_CHECK(m.mac_at(1, out) && out == B);
+  ZD_CHECK(m.mac_at(3, out) && out == D);
+  ZD_CHECK(!m.mac_at(4, out)); // out of range -> false, no silent zero-MAC
   ZD_EQ(m.position_of(Mac{{0xEE, 0, 0, 0, 0, 0}}), -1); // unknown MAC
 }
 
-// A stray re-tap of an already-bound target is ignored — no rebind, no advance.
+// A single stray tap never binds — the robustness case: an unbound phantom
+// (ball bounce / ToF ghost) taps once, then a different node confirms the slot.
+static void test_stray_single_tap_no_bind() {
+  PairingRound p;
+  p.begin(3);
+  ZD_CHECK(p.on_tap(A) == Tap::Await); // A becomes the candidate for slot 0
+  ZD_CHECK(p.on_tap(B) == Tap::Await); // stray unbound B replaces it — no bind
+  ZD_EQ(p.map().count, 0);             // nothing bound yet
+  ZD_EQ(p.current_prompt(), 0);        // still on slot 0
+  ZD_CHECK(p.on_tap(B) == Tap::Bound); // B confirms -> slot 0 is B, not A
+  ZD_EQ(p.map().position_of(B), 0);
+  ZD_EQ(p.map().position_of(A), -1);
+}
+
+// A re-tap of an already-bound target is ignored — no rebind, no advance.
 static void test_ignores_retap() {
   PairingRound p;
   p.begin(3);
-  ZD_EQ(p.on_tap(A), 1); // A -> slot 0
-  ZD_EQ(p.on_tap(A), 1); // A again: still prompting slot 1
+  bind(p, A); // A -> slot 0
+  ZD_CHECK(p.on_tap(A) == Tap::Ignored); // A already bound: ignored
+  ZD_EQ(p.current_prompt(), 1);          // still prompting slot 1
   ZD_EQ(p.map().count, 1);
-  ZD_EQ(p.on_tap(B), 2); // B -> slot 1, advances normally
-  ZD_EQ(p.map().count, 2);
+  bind(p, B); // B -> slot 1
+  ZD_EQ(p.map().position_of(B), 1);
 }
 
 // Completing the last slot ends the round; further taps are no-ops.
 static void test_done() {
   PairingRound p;
   p.begin(2);
-  p.on_tap(A);
-  ZD_EQ(p.on_tap(B), -1); // last slot bound -> done
+  bind(p, A);
+  bind(p, B); // last slot bound -> done
   ZD_CHECK(p.done());
   ZD_EQ(p.current_prompt(), -1);
-  ZD_EQ(p.on_tap(C), -1); // ignored after completion
+  ZD_CHECK(p.on_tap(C) == Tap::Ignored); // ignored after completion
   ZD_EQ(p.map().count, 2);
+}
+
+// Taps before begin() are ignored; the round is neither active nor done.
+static void test_tap_before_begin() {
+  PairingRound p;
+  ZD_CHECK(p.on_tap(A) == Tap::Ignored);
+  ZD_CHECK(!p.active());
+  ZD_CHECK(!p.done());
+  ZD_EQ(p.current_prompt(), -1);
+}
+
+// undo_last() unbinds the most recent slot and re-prompts it (operator fix).
+static void test_undo() {
+  PairingRound p;
+  p.begin(3);
+  bind(p, A);
+  bind(p, B);
+  ZD_EQ(p.current_prompt(), 2);
+  ZD_EQ(p.undo_last(), 1); // unbind B, back to prompting slot 1
+  ZD_EQ(p.map().count, 1);
+  ZD_EQ(p.map().position_of(B), -1);
+  ZD_EQ(p.map().position_of(A), 0);
+  bind(p, C); // slot 1 now C
+  ZD_EQ(p.map().position_of(C), 1);
+  p.undo_last(); // remove C
+  p.undo_last(); // remove A
+  ZD_EQ(p.map().count, 0);
+  ZD_EQ(p.undo_last(), 0); // nothing bound: no-op, still prompting slot 0
 }
 
 // N is clamped to 1..MAX_TARGETS.
 static void test_clamp() {
   PairingRound p;
   p.begin(0); // -> 1
-  p.on_tap(A);
+  bind(p, A);
   ZD_CHECK(p.done());
   ZD_EQ(p.map().count, 1);
 
   p.begin(200); // -> MAX_TARGETS
-  int prompt = 0;
   for (uint8_t i = 0; i < MAX_TARGETS; ++i)
-    prompt = p.on_tap(Mac{{i, 0, 0, 0, 0, 0}});
-  ZD_EQ(prompt, -1);
+    bind(p, Mac{{i, 0, 0, 0, 0, 0}});
+  ZD_EQ(p.current_prompt(), -1);
   ZD_EQ(p.map().count, MAX_TARGETS);
+  ZD_CHECK(p.done());
 }
 
-// begin() restarts cleanly, discarding a prior map.
+// begin() restarts cleanly, discarding a prior map and any pending candidate.
 static void test_restart() {
   PairingRound p;
   p.begin(4);
-  p.on_tap(A);
-  p.on_tap(B);
-  p.begin(2); // fresh round
+  bind(p, A);
+  p.on_tap(B);  // leave a pending (unconfirmed) candidate for slot 1
+  p.begin(2);   // fresh round
   ZD_EQ(p.current_prompt(), 0);
   ZD_EQ(p.map().count, 0);
-  ZD_EQ(p.map().position_of(A), -1); // old binding gone
+  ZD_EQ(p.map().position_of(A), -1);      // old binding gone
+  ZD_CHECK(p.on_tap(B) == Tap::Await);    // stale candidate gone: B is fresh again
 }
 
 int main() {
   std::printf("pairing tests\n");
   ZD_RUN(test_prompts_in_order);
   ZD_RUN(test_binds_map);
+  ZD_RUN(test_stray_single_tap_no_bind);
   ZD_RUN(test_ignores_retap);
   ZD_RUN(test_done);
+  ZD_RUN(test_tap_before_begin);
+  ZD_RUN(test_undo);
   ZD_RUN(test_clamp);
   ZD_RUN(test_restart);
   std::printf("%d checks, %d failures\n", zd_checks, zd_fails);
