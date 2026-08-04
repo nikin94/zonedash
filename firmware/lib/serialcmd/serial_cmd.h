@@ -15,6 +15,7 @@ namespace zd {
 enum class CmdType : uint8_t {
   Empty,   // blank / whitespace-only line — no-op
   Pair,    // enter pairing round
+  Undo,    // pairing: unbind the last slot and re-prompt it
   Nodes,   // list paired targets
   Drill,   // load a drill (fills `drill`)
   Start,   // run the loaded drill

@@ -30,8 +30,10 @@ area**. The main area holds the layout map (drill/pairing) or large text
 
 ```
 ┌────────────────────────────┐  y 0–11  status strip (5×7 font, dim)
-│ [state]   [time]   [batt]  │
-├────────────────────────────┤  y 12–63 main area (52 px)
+│ [state]   [time]   [batt]  │          batt = central unit's own cell, read
+├────────────────────────────┤  y 12–63 main area (52 px)   via a local ADC
+                                        divider — NOT from radio (Hello.batt_mv
+                                        carries target batteries only)
 │                            │
 │         main area          │
 │                            │
@@ -83,12 +85,23 @@ Per `architecture.md`: prompt slots in order, two-tap confirm.
   (the confirm state from `lib/pairing/` `Tap::Await`).
 - Bound slots turn dim white as they lock in; last slot bound → brief
   full-map green pulse → Idle (`ready · paired 8`).
+- **Operator correction:** serial `undo` calls `PairingRound::undo_last()` —
+  the last bound slot un-locks (back to pulsing) and is re-prompted. Shown as
+  a dim `UNDO ok` hint line for one beat.
 
 ### 3. Countdown
 
 Player-distance screen. Full main area digit, ~40 px tall, one per second:
 `3` → `2` → `1` → drill starts. Status strip shows the drill mode
 (`RAND 10`, `TIME 60`, `PATH 6`).
+
+**Ordering is part of the timing contract:** `DrillEngine::start()` is called
+**only after** the countdown fully completes — the first `Arm` (and so the first
+`t_lit`) comes out of `start()` after "1" has been shown. Calling `start()`
+first and then playing the countdown would stamp the first target ~3 s before
+the player can see it, inflating its reaction time by the countdown length.
+Countdown is deliberately a firmware/UI-owned state (the engine has none) —
+the one sanctioned exception to "the UI is a renderer."
 
 ### 4. Drill run (the core screen)
 
@@ -125,12 +138,19 @@ Operator-distance, text-first. Two pages, toggled every 4 s (or by serial/BLE):
 │  total   1:47              │      │  slow   890 ms             │
 ```
 
-(`slow` = slowest attempt — the v0 operator metric, `history-v0.md`.)
+(`slow` = slowest attempt — the v0 operator metric, `history-v0.md`; backed by
+`DrillSummary.worst_reaction_ms`. Page toggle is automatic (every 4 s) or via
+the serial console — **serial-only for now**; a BLE opcode is added only if the
+app ever renders these pages itself.)
 
 ### 6. Error / degraded states
 
 - **Node offline** (misses `Ping`/`Hello` heartbeats): its dot blinks red;
-  status strip `NODE 3 LOST`. Drill pauses if the armed node is the lost one.
+  status strip `NODE 3 LOST`. The engine has **no pause state** — if the lost
+  node is the armed one, the drill resolves exactly as the engine does: the
+  target times out into a **miss** and advances (when `timeout_ms` is set), or
+  keeps waiting for the hit (when it isn't). The UI only overlays the warning;
+  it never suspends or mutates the run. The operator can `stop` at any time.
 - **Low battery on a target** (`Hello.batt_mv` threshold): dot gets a 1 px
   yellow ring in Idle; listed via serial `nodes`.
 - **BLE connected/disconnected:** 3×3 px indicator in the status strip; no

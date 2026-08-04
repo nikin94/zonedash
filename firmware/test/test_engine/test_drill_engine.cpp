@@ -200,6 +200,9 @@ static void test_timeout_miss() {
   DrillSummary s = e.summary();
   ZD_EQ(s.hits, 1);
   ZD_EQ(s.misses, 1);
+  // A miss carries reaction_ms = timeout (400) but must not count as worst;
+  // the only real hit (armed at 400, hit at 500) sets it.
+  ZD_EQ(s.worst_reaction_ms, 100);
 }
 
 // ── Live: operator drives each target; stop() finishes ────────────
@@ -251,7 +254,7 @@ static void test_live_timeout_waits_operator() {
   ZD_EQ(a.position, 5);
 }
 
-// ── Summary: avg / best / total ───────────────────────────────────
+// ── Summary: avg / best / worst / total ───────────────────────────
 static void test_summary() {
   DrillConfig c;
   c.mode = DrillMode::Path;
@@ -268,6 +271,7 @@ static void test_summary() {
   ZD_EQ(s.misses, 0);
   ZD_EQ(s.avg_reaction_ms, 300);  // (200+400+300)/3
   ZD_EQ(s.best_reaction_ms, 200);
+  ZD_EQ(s.worst_reaction_ms, 400); // slowest attempt (v0 operator metric)
   ZD_EQ(s.total_ms, 900);         // 1900 - 1000
 }
 

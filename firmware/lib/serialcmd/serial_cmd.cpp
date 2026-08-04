@@ -140,6 +140,7 @@ ParsedCommand parse_command(const std::string& line) {
     c.num_positions = static_cast<uint8_t>(n);
     return c;
   }
+  if (verb == "undo")  { c.type = CmdType::Undo;  return c; }
   if (verb == "nodes") { c.type = CmdType::Nodes; return c; }
   if (verb == "start") { c.type = CmdType::Start; return c; }
   if (verb == "stop")  { c.type = CmdType::Stop;  return c; }

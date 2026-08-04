@@ -283,6 +283,7 @@ swaps the transport later.
 | Command | Does | BLE equivalent |
 |---------|------|----------------|
 | `pair N` | Enter pairing round for N slots: prompt each slot, confirm-bind the MAC that presses twice → `MAC→position` map | Control: StartPairing (N byte) |
+| `undo` | Pairing: unbind the last bound slot and re-prompt it (`PairingRound::undo_last()`) | (dev-only for now) |
 | `nodes` | List paired targets: `position, MAC, fw, batt_mv, last_rssi` | Status read |
 | `drill N seq…` | Load a drill: N active targets + sequence (e.g. `drill 4 rand` or `drill 6 0,3,5,1,…`) + params | Control: config |
 | `start` | Run the loaded drill (SYNC broadcast → ARM first target → loop) | Control: start |
