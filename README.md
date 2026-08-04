@@ -32,6 +32,7 @@ change touch both sides in one commit.
 - [`docs/architecture.md`](docs/architecture.md) — system design, protocol, timing
 - [`docs/bom.md`](docs/bom.md) — bill of materials + prototype shopping list
 - [`docs/enclosure.md`](docs/enclosure.md) — 3D-printed enclosures
+- [`docs/display-ui.md`](docs/display-ui.md) — HUB75 panel screen spec
 - [`docs/solana.md`](docs/solana.md) — optional on-chain layer (parked)
 - [`docs/history-v0.md`](docs/history-v0.md) — the wired v0 prototype (context + lessons)
 

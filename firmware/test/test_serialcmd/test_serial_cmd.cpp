@@ -12,6 +12,7 @@ static void test_empty_and_whitespace() {
 }
 
 static void test_simple_verbs() {
+  ZD_CHECK(parse_command("undo").type == CmdType::Undo);
   ZD_CHECK(parse_command("nodes").type == CmdType::Nodes);
   ZD_CHECK(parse_command("start").type == CmdType::Start);
   ZD_CHECK(parse_command("stop").type == CmdType::Stop);

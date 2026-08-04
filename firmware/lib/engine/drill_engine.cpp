@@ -143,6 +143,7 @@ DrillSummary DrillEngine::summary() const {
   DrillSummary s;
   uint64_t sum_r = 0;
   uint32_t best = 0xFFFFFFFF;
+  uint32_t worst = 0;
   uint64_t last_res = first_lit_us_;
   for (const auto& h : hits_) {
     if (h.miss) {
@@ -152,10 +153,12 @@ DrillSummary DrillEngine::summary() const {
     s.hits++;
     sum_r += h.reaction_ms;
     if (h.reaction_ms < best) best = h.reaction_ms;
+    if (h.reaction_ms > worst) worst = h.reaction_ms;
     if (h.t_hit_us > last_res) last_res = h.t_hit_us;
   }
   s.avg_reaction_ms = s.hits ? static_cast<uint32_t>(sum_r / s.hits) : 0;
   s.best_reaction_ms = s.hits ? best : 0;
+  s.worst_reaction_ms = worst;
   s.total_ms =
       have_first_ ? static_cast<uint32_t>((last_res - first_lit_us_) / 1000) : 0;
   return s;

@@ -50,6 +50,9 @@ struct DrillSummary {
   uint32_t total_ms = 0;        // first lit -> last resolved hit
   uint32_t avg_reaction_ms = 0; // over hits only
   uint32_t best_reaction_ms = 0;
+  // Slowest attempt (over hits only; misses don't count) — the v0 operator
+  // metric, rendered on the summary screen (docs/display-ui.md).
+  uint32_t worst_reaction_ms = 0;
 };
 
 enum class ActionType : uint8_t { None, Arm, Finished };
