@@ -52,16 +52,18 @@ Action DrillEngine::on_hit(uint8_t position, uint64_t now) {
   last_hit_us_ = now;
   have_prev_hit_ = true;
 
-  if (cfg_.mode == DrillMode::Live) {
-    seq_++;
-    state_ = State::WaitOperator; // wait for the operator's next pick
-    return {};
-  }
   return advance_or_finish(now);
 }
 
 Action DrillEngine::advance_or_finish(uint64_t now) {
   seq_++;
+  // Live is coach-in-the-loop: the engine never self-advances — it waits for the
+  // operator's next set_next. This holds whether the step ended in a hit or a
+  // timeout miss, so both paths funnel through here.
+  if (cfg_.mode == DrillMode::Live) {
+    state_ = State::WaitOperator;
+    return {};
+  }
   if (reached_end(now)) {
     state_ = State::Done;
     return {ActionType::Finished, 0, 0};

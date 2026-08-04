@@ -3,6 +3,15 @@
 #include <cmath>
 
 namespace zd {
+namespace {
+// A two-point skew fit is only trustworthy once the samples span a real
+// interval: over a short base, µs-level RX jitter on the beacon timestamp turns
+// into hundreds of thousands of phantom ppm. Below this, stay offset-only.
+constexpr int64_t MIN_SKEW_BASE_US = 20'000'000; // 20 s
+// A real crystal pair drifts tens of ppm; clamp the estimate to a plausible
+// bound so one bad sample can't bias the whole session.
+constexpr double MAX_SKEW = 200e-6; // ±200 ppm
+} // namespace
 
 void ClockSync::addSample(uint64_t t_central_us, uint64_t t_local_us) {
   if (count_ == 0) {
@@ -15,12 +24,14 @@ void ClockSync::addSample(uint64_t t_central_us, uint64_t t_local_us) {
 }
 
 double ClockSync::rate() const {
-  // One sample (or two at the same local instant) → assume the clocks tick at
-  // the same rate; correction is offset-only.
-  if (last_local_ == first_local_) return 1.0;
-  const int64_t dc = (int64_t)(last_central_ - first_central_);
   const int64_t dl = (int64_t)(last_local_ - first_local_);
-  return (double)dc / (double)dl;
+  // Too little baseline (one sample, or samples too close) → offset-only.
+  if (dl < MIN_SKEW_BASE_US) return 1.0;
+  const int64_t dc = (int64_t)(last_central_ - first_central_);
+  double r = (double)dc / (double)dl;
+  if (r > 1.0 + MAX_SKEW) r = 1.0 + MAX_SKEW;
+  if (r < 1.0 - MAX_SKEW) r = 1.0 - MAX_SKEW;
+  return r;
 }
 
 uint64_t ClockSync::toCentral(uint64_t t_local_us) const {

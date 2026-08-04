@@ -229,6 +229,28 @@ static void test_live() {
   ZD_EQ(e.hits().size(), 1);
 }
 
+// ── Live + timeout: a miss must NOT hand control back to the engine ──
+static void test_live_timeout_waits_operator() {
+  DrillConfig c;
+  c.mode = DrillMode::Live;
+  c.timeout_ms = 1500;
+
+  DrillEngine e;
+  e.start(c, 0, nullptr);              // WaitOperator
+  Action a = e.set_next(3, 0);         // operator arms position 3 at t=0
+  ZD_CHECK(a.type == ActionType::Arm);
+
+  a = e.poll(1500 * MS);               // timeout: records a miss...
+  ZD_CHECK(a.type == ActionType::None); // ...but does NOT self-arm the next
+  ZD_EQ(e.hits().size(), 1);
+  ZD_CHECK(e.hits()[0].miss);
+  ZD_CHECK(e.running());               // still waiting for the operator
+
+  a = e.set_next(5, 1600 * MS);        // operator stays in control
+  ZD_CHECK(a.type == ActionType::Arm);
+  ZD_EQ(a.position, 5);
+}
+
 // ── Summary: avg / best / total ───────────────────────────────────
 static void test_summary() {
   DrillConfig c;
@@ -260,6 +282,7 @@ int main() {
   ZD_RUN(test_time_limited);
   ZD_RUN(test_timeout_miss);
   ZD_RUN(test_live);
+  ZD_RUN(test_live_timeout_waits_operator);
   ZD_RUN(test_summary);
   std::printf("%d checks, %d failures\n", zd_checks, zd_fails);
   return zd_fails ? 1 : 0;
