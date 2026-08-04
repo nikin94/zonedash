@@ -211,13 +211,32 @@ central unit has direct dev I/O that bypasses the phone entirely:
 - **Output — already there:** the HUB75 panel (lit target, score, time) shows the
   drill running.
 - **Input / logs — USB-serial from the S3.** Tether the board to a laptop and use
-  the **serial console** as a temporary operator pad:
-  - **send commands** — "start drill 1", "random sequence", "stop", "dump results";
-  - **read everything** — hit timestamps, intervals, ToF false triggers, packet
-    RSSI, session results, as raw numbers to analyze.
+  the **serial console** as a temporary operator pad.
 
 The full loop is exercised over serial: `serial "start" → display lights → player
 hits target → ESP-NOW packet → central logs t_hit to serial → next target`. No app.
+
+### Serial operator protocol (dev stand-in for BLE)
+
+Line-based ASCII over USB-serial @ 115200. Each command maps 1:1 to a future BLE
+`Control` write, so the drill engine is driven identically either way — BLE just
+swaps the transport later.
+
+| Command | Does | BLE equivalent |
+|---------|------|----------------|
+| `pair` | Enter pairing round: prompt each active slot on the panel, bind the MAC that presses → `MAC→position` map | Control: pair |
+| `nodes` | List paired targets: `position, MAC, fw, batt_mv, last_rssi` | Status read |
+| `drill N seq…` | Load a drill: N active targets + sequence (e.g. `drill 4 rand` or `drill 6 0,3,5,1,…`) + params | Control: config |
+| `start` | Run the loaded drill (SYNC broadcast → ARM first target → loop) | Control: start |
+| `stop` | Abort the run, DISARM all | Control: stop |
+| `dump` | Print the session's hit records as CSV: `seq,pos,t_lit,t_hit,reaction_ms,move_ms,sensor` | Results read |
+| `sensor tof\|piezo` | Select which trigger the target reports (court A/B test) | (dev-only) |
+| `sync` | Force a clock re-sync beacon; print per-node offsets | (internal) |
+
+Free-running telemetry (not commands) is printed as it happens: `HIT pos=… t=… rssi=…`,
+`FALSE pos=… d=…mm` (ToF trigger while not armed — the calibration signal),
+`DROP seq=…` (missed/timed-out target). This log is the **source of truth for ToF
+calibration** — real trigger distances from a live racket, in numbers.
 
 **Why this is the right order, not a workaround:** the BLE layer is just a
 *transport for the same commands* we drive over serial. Nail the logic (drill,
@@ -254,6 +273,7 @@ working central unit. Sketch of app scope:
 5. **Firmware:** drill engine, sync, HUB75 UI.
 6. **Expo app** against the finished central unit.
 
-_Last updated: 2026-08-03 (session 3: pairing round + "Press here" prompt,
+_Last updated: 2026-08-04 (session 4: monorepo scaffolded, serial operator
+protocol drafted). Earlier — session 3: pairing round + "Press here" prompt,
 configurable N=4–8 active targets, nRF52840-DK noted as dev/bench tool). Draft —
 revise as the prototype teaches us._
