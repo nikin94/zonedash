@@ -146,15 +146,31 @@ not a hardcoded 8-slot court grid. `N` is picked when the drill/session is set u
 positions are just labels/order in that set, with the geometric meaning ("far-left
 corner") supplied by the pairing prompts, not baked into firmware.
 
-**How the map is built — pairing round (chosen).** At session start the operator
-picks how many targets are in play (N). The central unit then walks them one by
-one: it prompts on the display — e.g. **"Press here"** with the target's slot
-highlighted on the court/layout diagram — the person taps that physical target,
-the unit hears the press and binds that MAC to that slot → "next." N taps build
-the whole map. Self-calibrating: it doesn't matter which physical unit went where,
-or the order in the case, or how many are used. (Rejected: fixed numbered stickers
-— simpler code but demands placement discipline and breaks on a swapped corner;
-RSSI/range auto-localization — unreliable indoors.)
+**How the map is built — pairing round (chosen).** The operator picks how many
+targets are in play (N) — passed explicitly, never inferred: serial `pair N`, and
+the BLE `StartPairing` op carries a 1-byte N payload. The central unit then walks
+the slots one by one: it prompts on the display — e.g. **"Press here"** with the
+target's slot highlighted on the court/layout diagram — the person taps that
+physical target, and after a confirming second tap the unit binds that MAC to the
+slot → "next." N binds build the whole map. Self-calibrating: it doesn't matter
+which physical unit went where, or the order in the case, or how many are used.
+(Rejected: fixed numbered stickers — simpler code but demands placement discipline
+and breaks on a swapped corner; RSSI/range auto-localization — unreliable indoors.)
+
+**Two-tap confirm (robustness).** A bind takes **two consecutive taps from the
+same MAC**: the first makes it the slot's candidate ("press again to confirm"),
+the second binds. This rejects a stray single trigger — a ball bounce, a ToF
+ghost, piezo cross-talk from an unbound node — that would otherwise silently
+mis-bind the wrong target and corrupt the whole session's map. A different unbound
+MAC just replaces the candidate; an already-bound MAC is ignored. `undo_last()`
+re-prompts the most recent slot for operator correction.
+
+The round's logic is the hardware-free `lib/pairing/` core (`PairingRound` +
+`TargetMap`): it prompts slots in order, confirm-binds the tapping MAC, ignores
+stray re-taps of already-bound nodes, and yields the `MAC → position` map (with a
+bounds-checked `mac_at`). Board firmware just feeds it `Pressed` MACs and renders
+the current prompt; progress is surfaced to the app as `PairingProgress`
+(`currentPrompt`, `total`) on the Status characteristic.
 
 **Drills operate on positions, not MACs.** The operator authors "corner → mid →
 corner…" in position terms; the central unit translates to MACs via the map. So a
@@ -186,7 +202,7 @@ Minimal custom GATT service:
 | Characteristic | Dir | Payload |
 |----------------|-----|---------|
 | **Control** | write | start/stop, select drill, drill config (sequence, timing, mode) |
-| **Status** | notify | session state, connected-target count, live progress |
+| **Status** | notify | session state, connected-target count, live progress, pairing progress (`currentPrompt`, `total`) |
 | **Results** | notify / read | buffered per-hit records (chunked if large) |
 
 Data model (app side):
@@ -252,7 +268,7 @@ swaps the transport later.
 
 | Command | Does | BLE equivalent |
 |---------|------|----------------|
-| `pair` | Enter pairing round: prompt each active slot on the panel, bind the MAC that presses → `MAC→position` map | Control: pair |
+| `pair N` | Enter pairing round for N slots: prompt each slot, confirm-bind the MAC that presses twice → `MAC→position` map | Control: StartPairing (N byte) |
 | `nodes` | List paired targets: `position, MAC, fw, batt_mv, last_rssi` | Status read |
 | `drill N seq…` | Load a drill: N active targets + sequence (e.g. `drill 4 rand` or `drill 6 0,3,5,1,…`) + params | Control: config |
 | `start` | Run the loaded drill (SYNC broadcast → ARM first target → loop) | Control: start |

@@ -129,7 +129,17 @@ ParsedCommand parse_command(const std::string& line) {
   if (t.empty()) return c; // Empty
 
   std::string verb = lower(t[0]);
-  if (verb == "pair")  { c.type = CmdType::Pair;  return c; }
+  if (verb == "pair") {
+    c.type = CmdType::Pair;
+    // N is explicit so the pairing round never depends on hidden state.
+    uint32_t n;
+    if (t.size() != 2 || !parse_uint(t[1], n) || n < 1 || n > MAX_TARGETS) {
+      c.error = "usage: pair N (1.." + std::to_string(MAX_TARGETS) + ")";
+      return c;
+    }
+    c.num_positions = static_cast<uint8_t>(n);
+    return c;
+  }
   if (verb == "nodes") { c.type = CmdType::Nodes; return c; }
   if (verb == "start") { c.type = CmdType::Start; return c; }
   if (verb == "stop")  { c.type = CmdType::Stop;  return c; }

@@ -30,6 +30,7 @@ struct ParsedCommand {
   std::string error;           // non-empty => malformed; human-readable reason
   DrillConfig drill;           // valid when type == Drill && ok()
   Sensor sensor = Sensor::ToF; // valid when type == Sensor && ok()
+  uint8_t num_positions = 0;   // active target count; valid when type == Pair && ok()
 
   bool ok() const { return error.empty(); }
 };

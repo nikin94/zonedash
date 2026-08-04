@@ -25,9 +25,20 @@ export const CHAR = {
 export enum ControlOp {
   StartSession = 1,
   StopSession = 2,
-  StartPairing = 3, // MAC→position pairing round
+  StartPairing = 3, // MAC→position pairing round; payload: 1 byte N (active targets, 1..8)
   DumpResults = 4,
   LoadDrill = 5, // push a drill config (mode, N, sequence, timing) — "Control: config"
+}
+
+/**
+ * Pairing progress, notified on the Status characteristic during a pairing
+ * round so the app can render "press slot (currentPrompt+1) of total". Mirrors
+ * PairingRound (firmware/lib/pairing): `currentPrompt` is the slot awaiting a
+ * bind, or -1 when the round is done.
+ */
+export interface PairingProgress {
+  currentPrompt: number; // 0-based slot being prompted, or -1 when done
+  total: number; // N — active targets this round
 }
 
 /**

@@ -12,13 +12,26 @@ static void test_empty_and_whitespace() {
 }
 
 static void test_simple_verbs() {
-  ZD_CHECK(parse_command("pair").type == CmdType::Pair);
   ZD_CHECK(parse_command("nodes").type == CmdType::Nodes);
   ZD_CHECK(parse_command("start").type == CmdType::Start);
   ZD_CHECK(parse_command("stop").type == CmdType::Stop);
   ZD_CHECK(parse_command("dump").type == CmdType::Dump);
   ZD_CHECK(parse_command("sync").type == CmdType::Sync);
   ZD_CHECK(parse_command("start").ok());
+}
+
+static void test_pair() {
+  auto c = parse_command("pair 8");
+  ZD_CHECK(c.type == CmdType::Pair);
+  ZD_CHECK(c.ok());
+  ZD_EQ(c.num_positions, 8);
+  ZD_CHECK(parse_command("PAIR 4").ok()); // case-insensitive
+  // N is mandatory and range-checked — no hidden fallback.
+  ZD_CHECK(parse_command("pair").type == CmdType::Pair);
+  ZD_CHECK(!parse_command("pair").ok());   // missing N
+  ZD_CHECK(!parse_command("pair 0").ok()); // N too small
+  ZD_CHECK(!parse_command("pair 9").ok()); // N too big (> MAX_TARGETS)
+  ZD_CHECK(!parse_command("pair x").ok()); // not a number
 }
 
 static void test_case_and_whitespace_tolerant() {
@@ -114,6 +127,7 @@ int main() {
   std::printf("serial_cmd tests\n");
   ZD_RUN(test_empty_and_whitespace);
   ZD_RUN(test_simple_verbs);
+  ZD_RUN(test_pair);
   ZD_RUN(test_case_and_whitespace_tolerant);
   ZD_RUN(test_unknown);
   ZD_RUN(test_drill_random_defaults);
