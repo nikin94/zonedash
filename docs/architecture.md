@@ -26,6 +26,9 @@ zonedash/
 ├── firmware/                  PlatformIO — three envs, shared libs
 │   ├── platformio.ini           env:brain (S3) + env:target (C3) + env:native (tests)
 │   ├── lib/protocol/protocol.h  ESP-NOW packet format (brain ⇄ target)
+│   ├── lib/engine/              drill engine (host-tested, hardware-free)
+│   ├── lib/clocksync/           local→central clock mapping (offset + skew)
+│   ├── test/                    native tests (custom harness: test/zd_test.h)
 │   ├── lib/engine/              drill engine — pure C++, no hardware, host-tested
 │   ├── src/
 │   │   ├── brain/               ESP32-S3: engine, HUB75, ESP-NOW, BLE, Ed25519
@@ -59,9 +62,11 @@ Interval accuracy depends on **where** the timestamp is stamped, not on transpor
 latency. Plan:
 
 1. **Session clock sync.** At session start the central unit broadcasts a sync
-   beacon; each target records `offset = t_local − t_central`. All later target
-   timestamps are reported in the central clock domain. Re-sync periodically
-   (crystal drift is small over a session but non-zero).
+   beacon; each target records the (central, local) pair. All later target
+   timestamps are reported in the central clock domain. A single sample gives a
+   fixed offset; a second (from a periodic re-sync) adds **skew** — a two-point
+   linear fit that corrects crystal drift (tens of ppm ≈ ms over a session).
+   Implemented hardware-free in `lib/clocksync/` (`ClockSync`), host-tested.
 2. **Two measured intervals:**
    - **Movement time** = `pressed[n] − pressed[n−1]` — both events on targets,
      both in the synced domain. Robust.

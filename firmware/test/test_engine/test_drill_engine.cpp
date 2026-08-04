@@ -2,7 +2,7 @@
 // time), so every run is repeatable. Covers all four modes plus the delay /
 // no-repeat / timeout / summary behaviour.
 #include "drill_engine.h"
-#include "zd_test.h"
+#include "../zd_test.h"
 
 using namespace zd;
 
