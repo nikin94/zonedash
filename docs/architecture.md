@@ -153,7 +153,7 @@ Identity and court position are **separate concerns** — conflating them is a b
   map, built fresh each session and held on the central unit.
 
 **Layout is not fixed — the active set is chosen per session.** The v0 prototype
-used 6 points; the full kit is 8, but a session may use **4, 5, 6, or 8** targets,
+used 6 points; the full kit is 8, but a session may use **any count from 1 to 8**,
 and the layout isn't tied to a badminton court (other venues / free placement).
 So the position map is a **dynamic list of the N active targets for this session**,
 not a hardcoded 8-slot court grid. `N` is picked when the drill/session is set up;
@@ -220,7 +220,7 @@ Minimal custom GATT service:
 | **Results** | notify / read | buffered per-hit records (chunked if large) |
 
 Data model (app side):
-- **Drill** = active-target count `N` + a **mode** + params. N (4–8) is part of
+- **Drill** = active-target count `N` + a **mode** + params. N (1–8) is part of
   the setup, so a drill is portable across layouts. Four modes (three from v0 —
   see `history-v0.md` — plus time-limited):
   - **random** — random order over the N positions, `count` reps.

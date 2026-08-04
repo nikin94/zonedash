@@ -53,6 +53,30 @@ test("startPairing rejection surfaces as an error, not a crash", async () => {
   expect(screen.getByText("Start pairing")).toBeTruthy(); // back to idle
 });
 
+test("offers every layout size from 1 to 8", async () => {
+  const t = await connectedTransport();
+  render(<PairingPanel transport={t} />);
+
+  for (let n = 1; n <= 8; n++) {
+    expect(screen.getByText(String(n))).toBeTruthy();
+  }
+});
+
+test("N=1 pairs a single target", async () => {
+  const t = await connectedTransport();
+  render(<PairingPanel transport={t} />);
+
+  fireEvent.press(screen.getByText("1"));
+  fireEvent.press(screen.getByText("Start pairing"));
+
+  await act(() => jest.advanceTimersByTimeAsync(0));
+  expect(screen.getByText("Press slot 1 of 1")).toBeTruthy();
+  expect(screen.queryAllByTestId("slot-idle")).toHaveLength(0);
+
+  await act(() => jest.runAllTimersAsync());
+  expect(screen.getByText("Paired 1 target")).toBeTruthy();
+});
+
 test("defaults to 8 targets when no size is picked", async () => {
   const t = await connectedTransport();
   render(<PairingPanel transport={t} />);

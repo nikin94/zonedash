@@ -4,8 +4,8 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { PairingProgress } from "../ble/contract";
 import type { CentralTransport } from "../ble/transport";
 
-/** Active-layout sizes the operator can pick (concept.md: 4–8 targets). */
-const LAYOUT_SIZES = [4, 5, 6, 8] as const;
+/** Active-layout sizes the operator can pick — any count up to MAX_TARGETS. */
+const LAYOUT_SIZES = [1, 2, 3, 4, 5, 6, 7, 8] as const;
 
 /**
  * Pairing round UI (display-ui.md screen 2, phone side). A renderer over the
@@ -93,7 +93,9 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
       ) : running ? (
         <Text style={styles.prompt}>Starting pairing…</Text>
       ) : done ? (
-        <Text style={styles.doneText}>Paired {progress.total} targets</Text>
+        <Text style={styles.doneText}>
+          Paired {progress.total} {progress.total === 1 ? "target" : "targets"}
+        </Text>
       ) : null}
 
       {error !== null && <Text style={styles.error}>{error}</Text>}
@@ -125,14 +127,19 @@ const styles = StyleSheet.create({
   },
   countRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
     gap: 8,
+    paddingHorizontal: 16,
   },
   chip: {
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "#3f3f46",
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 6,
+    minWidth: 36,
+    alignItems: "center",
   },
   chipActive: {
     borderColor: "#818cf8",
