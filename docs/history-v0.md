@@ -65,6 +65,26 @@ externally-driven next-target, not only self-sequencing.
 - **Pi + touchscreen operator** → the phone app (and serial pad on the bench).
   The Pi is removed; the engine moves onto the gateway ESP32.
 
+## From the build photos (v0 images)
+
+Three things the photos add on top of the write-up:
+
+- **Operator UI metrics (directly reusable).** The touchscreen showed, per run:
+  **Total time · Repeats (n/N) · Average time · Fastest attempt · Slowest
+  attempt**, with modes Random / Single(=live) / Path and an adjustable attempt
+  count. This is the exact stat set the coach found useful — our session summary
+  should match it. The engine currently reports avg/best reaction; **add
+  worst(slowest) and per-attempt (rep) time** to line up. → future engine PR.
+- **Schematic topology (father's board).** Opto-isolators on the 8 button inputs
+  to the Pi, transistor drivers (VT1–VT8) for the 8 display-LED clusters, fed by
+  a 220 V transformer PSU. The opto-isolation exists **only because** logic and
+  LED drive shared a mains supply — going all-low-voltage LiPo/ESP-NOW removes
+  that whole layer. Validates the simplification.
+- **Final button construction.** Microswitch on an **inverted flower-pot base**
+  (wide, heavy, stable) with a large **arcade dome cap** as the strike surface —
+  spring-loaded, forgiving. This is our "soft tap target" fallback in physical
+  form; a good mechanical reference for the piezo target's dome + weighted base.
+
 ## The owner's own stated goal for v1
 
 Verbatim intent from the write-up: *"remove the wires and make a mobile
