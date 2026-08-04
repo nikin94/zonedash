@@ -33,6 +33,24 @@ change touch both sides in one commit.
 - [`docs/bom.md`](docs/bom.md) — bill of materials + prototype shopping list
 - [`docs/enclosure.md`](docs/enclosure.md) — 3D-printed enclosures
 - [`docs/solana.md`](docs/solana.md) — optional on-chain layer (parked)
+- [`docs/history-v0.md`](docs/history-v0.md) — the wired v0 prototype (context + lessons)
+
+New here? Read [`CLAUDE.md`](CLAUDE.md) first — it covers the working agreement
+(branch + PR per feature, English-only, mandatory tests), git identity, and how
+to run the tests.
+
+## Development
+
+The `firmware/lib/` cores (drill engine, clock sync, protocol) are hardware-free
+and run on the host — no boards needed. Run the full native test suite:
+
+```
+cd firmware && ./test/run_native.sh
+```
+
+It auto-discovers every `test/test_<lib>/` suite, compiles with `-Wall -Wextra`,
+and exits non-zero on failure. The same script runs in CI on every push and PR;
+`main` is branch-protected, so a green run is required before merge.
 
 ## Status
 
