@@ -79,6 +79,8 @@ latency. Plan:
 Open detail: display **photon latency** (command → LED actually visibly on) is a
 few ms of panel refresh; if we want reaction time to the *visible* photon, stamp
 `lit[n]` at the panel flush, not at the command issue. Decide during calibration.
+The panel's screens themselves are specced in `docs/display-ui.md` (layouts,
+states, and the flush-hook requirement for `t_lit`).
 
 ## Sequencer: single-target arming (chosen) — spatial false-triggers come free
 
