@@ -65,3 +65,25 @@ test("re-renders with an unchanged visual don't restart a dot's fade", () => {
   rerender(<CourtMap spots={confirmed} />);
   expect(timing).toHaveBeenCalledTimes(2);
 });
+
+// Regression for the Start-pairing blink: all 8 dots change at once
+// (off → available). Each must fade exactly once, and the fade must be an
+// opacity-only animation on the native driver — a JS-driven color fade could
+// slip its reset past a frame under that load and read as a double blink.
+test("a mass change (Start pairing) fades each dot exactly once, natively driven", () => {
+  const timing = jest.spyOn(Animated, "timing");
+  const { rerender } = render(<CourtMap spots={allOff} />);
+
+  const available = Array.from({ length: 8 }, () => "available" as SpotVisual);
+  rerender(<CourtMap spots={available} />);
+  expect(timing).toHaveBeenCalledTimes(8);
+  for (const [, config] of timing.mock.calls) {
+    expect((config as { useNativeDriver: boolean }).useNativeDriver).toBe(true);
+  }
+
+  // Letting the fades finish and re-rendering the same visuals adds nothing.
+  act(() => jest.advanceTimersByTime(250));
+  rerender(<CourtMap spots={[...available]} />);
+  expect(timing).toHaveBeenCalledTimes(8);
+  expect(screen.getAllByTestId(/spot-\d-available/)).toHaveLength(8);
+});

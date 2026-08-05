@@ -77,68 +77,70 @@ const A11Y_STATE: Record<SpotVisual, string> = {
 };
 
 /**
- * One court dot, cross-fading its fill/outline on every state change instead
- * of snapping. Plain Animated (JS driver) on purpose: a 200 ms color fade
- * needs no Reanimated dependency, and color interpolation can't use the
- * native driver anyway.
+ * One court dot, cross-fading on every state change instead of snapping.
+ * Two statically-colored layers: the base wears the NEW state's colors, an
+ * overlay wears the OLD state's and fades its opacity 1→0 on the native
+ * driver. No color interpolation at all — the previous approach reset a
+ * JS-driven color fade in a layout effect, and when all 8 dots changed at
+ * once (Start pairing) that reset could slip past a frame under JS load:
+ * a flash of the new color, a snap back, then the fade — read as a double
+ * blink. With static layers the commit frame is pixel-identical to the
+ * previous one (old color at full opacity), so no flash is possible, and
+ * the opacity fade runs on the UI thread regardless of JS load.
  *
- * memo: the panel re-renders on every Status event (prompt, confirm, session),
- * and a re-render used to recreate this dot's interpolation nodes while a fade
- * was in flight — each event read as an extra blink on dots whose state hadn't
- * changed. With memo, a dot re-renders only when ITS visual actually changes.
+ * memo: the panel re-renders on every Status event (prompt, confirm,
+ * session); a dot re-renders only when ITS visual actually changes.
  */
 const AnimatedDot = memo(function AnimatedDot({
   visual,
 }: {
   visual: SpotVisual;
 }) {
-  const anim = useRef(new Animated.Value(1)).current;
   const fromRef = useRef(visual);
   const toRef = useRef(visual);
+  const overlayRef = useRef(new Animated.Value(0));
 
-  // Swap the interpolation range during render so this commit already maps
-  // from the previous color; the value reset lives in the layout effect below,
-  // which runs before the frame paints (no one-frame snap).
+  // Detect the change during render. A FRESH value born at 1 (instead of
+  // setValue on the live one, which would force-update the Animated view
+  // mid-render) attaches with this commit — the first painted frame shows the
+  // old color at full strength, so it matches the previous frame exactly.
   if (visual !== toRef.current) {
     fromRef.current = toRef.current;
     toRef.current = visual;
+    overlayRef.current = new Animated.Value(1);
   }
 
   useLayoutEffect(() => {
     if (fromRef.current === toRef.current) return;
-    // A superseded fade must not keep writing frames over the new one — that
-    // races the reset below and reads as repeated blinking.
-    anim.stopAnimation();
-    anim.setValue(0);
-    Animated.timing(anim, {
-      toValue: 1,
+    const overlay = overlayRef.current;
+    Animated.timing(overlay, {
+      toValue: 0,
       duration: FADE_MS,
-      useNativeDriver: false, // color interpolation is JS-driver only
+      useNativeDriver: true, // opacity-only — off the JS thread entirely
     }).start(({ finished }) => {
-      // Settle so a later unrelated effect run can't replay this fade.
-      if (finished) fromRef.current = toRef.current;
+      // Settle so a later unrelated effect run can't replay this fade; a
+      // superseded fade (its value already swapped out) must not settle.
+      if (finished && overlayRef.current === overlay) {
+        fromRef.current = toRef.current;
+      }
     });
-  }, [visual, anim]);
+  }, [visual]);
 
   const from = DOT_STYLE[fromRef.current];
   const to = DOT_STYLE[toRef.current];
-  const range = { inputRange: [0, 1] };
   return (
-    <Animated.View
-      style={[
-        styles.dot,
-        {
-          backgroundColor: anim.interpolate({
-            ...range,
-            outputRange: [from.fill, to.fill],
-          }),
-          borderColor: anim.interpolate({
-            ...range,
-            outputRange: [from.ring, to.ring],
-          }),
-        },
-      ]}
-    />
+    <View style={[styles.dot, { backgroundColor: to.fill, borderColor: to.ring }]}>
+      <Animated.View
+        style={[
+          styles.dotOverlay,
+          {
+            backgroundColor: from.fill,
+            borderColor: from.ring,
+            opacity: overlayRef.current,
+          },
+        ]}
+      />
+    </View>
   );
 });
 
@@ -243,10 +245,21 @@ const styles = StyleSheet.create({
   },
   // One size for every state — the active/confirm emphasis is color, not
   // scale, so idle and bound spots are just as easy to hit. The border is
-  // always present with an animated color, so "off" cross-fades too.
+  // always present with a per-state color, so "off" cross-fades too.
   dot: {
     width: 30,
     height: 30,
+    borderRadius: 15,
+    borderWidth: 1,
+  },
+  // The old-color layer covers the base including its border (-1 offsets),
+  // then fades out to reveal the new color underneath.
+  dotOverlay: {
+    position: "absolute",
+    top: -1,
+    left: -1,
+    right: -1,
+    bottom: -1,
     borderRadius: 15,
     borderWidth: 1,
   },
