@@ -31,6 +31,16 @@ export function CloseIcon() {
   );
 }
 
+/** A ✓ built from two rotated bars — sized for the 38 px court dots. */
+export function CheckIcon() {
+  return (
+    <View style={styles.checkBox} accessible={false}>
+      <View style={[styles.checkBar, styles.checkBarShort]} />
+      <View style={[styles.checkBar, styles.checkBarLong]} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   slidersBox: {
     width: W,
@@ -67,6 +77,28 @@ const styles = StyleSheet.create({
     transform: [{ rotate: "45deg" }],
   },
   closeBarB: {
+    transform: [{ rotate: "-45deg" }],
+  },
+  checkBox: {
+    width: 16,
+    height: 16,
+  },
+  checkBar: {
+    position: "absolute",
+    height: 2.5,
+    borderRadius: 1.25,
+    backgroundColor: "#0a0a0a", // dark on the emerald bound fill
+  },
+  checkBarShort: {
+    width: 7,
+    left: 0.5,
+    top: 9,
+    transform: [{ rotate: "45deg" }],
+  },
+  checkBarLong: {
+    width: 12,
+    left: 4,
+    top: 7.5,
     transform: [{ rotate: "-45deg" }],
   },
 });

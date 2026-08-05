@@ -127,7 +127,7 @@ test("path mode authors positions by tapping paired spots — slot-index wire fo
   // Author: back left (6) → net left (0) → back left again (repeats allowed).
   fireEvent.press(screen.getByTestId("spot-6-available"));
   fireEvent.press(screen.getByTestId("spot-0-available"));
-  fireEvent.press(screen.getByTestId("spot-6-active")); // 6 already in path → active
+  fireEvent.press(screen.getByTestId("spot-6-selected")); // 6 already in path → selected
   expect(screen.getByTestId("path-sequence")).toHaveTextContent(
     "back left → net left → back left",
   );

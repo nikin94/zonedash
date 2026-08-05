@@ -130,7 +130,9 @@ export function DrillPanel({
 
   const visuals: SpotVisual[] = Array.from({ length: 8 }, (_, i) => {
     if (!pairedSpots.includes(i)) return "off";
-    if (uiMode === "path" && path.includes(i)) return "active";
+    // Path steps are a static pick, not an in-progress prompt — "selected"
+    // (accent fill), while "active" now renders the pairing spinner.
+    if (uiMode === "path" && path.includes(i)) return "selected";
     return "available";
   });
 

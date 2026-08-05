@@ -1,5 +1,6 @@
 import { memo, useLayoutEffect, useRef, type ReactNode } from "react";
 import {
+  ActivityIndicator,
   Animated,
   Dimensions,
   Pressable,
@@ -8,13 +9,16 @@ import {
   View,
 } from "react-native";
 
+import { CheckIcon } from "./Icons";
+
 /** Visual state of one canonical spot on the map. */
 export type SpotVisual =
   | "off" // faint outline — a potential location, nothing assigned
   | "available" // pairing round waiting for the operator to pick this (or any) spot
-  | "active" // being prompted ("press here")
+  | "active" // being prompted ("press here") — in-progress spinner, not a color
   | "confirm" // candidate tapped once, awaiting the confirm tap
-  | "bound"; // bound (this round / done)
+  | "bound" // bound (this round / done) — green with a check mark
+  | "selected"; // a static pick (e.g. a path step in the drill builder)
 
 /** Human names for the canonical spots, for prompts and screen readers. */
 export const SPOT_NAMES = [
@@ -57,24 +61,28 @@ const DOT = 38; // visible dot diameter — one size for every state
 
 // Fill + outline per state, as rgba so Animated can interpolate between them.
 // "off" fades to a zero-alpha fill (outline only) instead of snapping away.
+// "active" is deliberately NOT a color of its own: the in-progress prompt is
+// communicated by the spinner inside the dot, on a neutral dark fill.
 const DOT_STYLE: Record<SpotVisual, { fill: string; ring: string }> = {
   off: { fill: "rgba(63,63,70,0)", ring: "rgba(63,63,70,1)" },
   available: { fill: "rgba(82,82,91,1)", ring: "rgba(63,63,70,0)" },
-  active: { fill: "rgba(129,140,248,1)", ring: "rgba(63,63,70,0)" },
+  active: { fill: "rgba(24,24,27,1)", ring: "rgba(63,63,70,1)" },
   confirm: { fill: "rgba(251,191,36,1)", ring: "rgba(63,63,70,0)" },
   bound: { fill: "rgba(52,211,153,1)", ring: "rgba(63,63,70,0)" },
+  selected: { fill: "rgba(129,140,248,1)", ring: "rgba(63,63,70,0)" },
 };
 
 const FADE_MS = 200;
 
-// Screen-reader wording per state — the label must carry it, since color is
-// the only visual differentiator between bound/available/confirm.
+// Screen-reader wording per state — the label must carry it, since fill and
+// glyph are the only visual differentiators between the states.
 const A11Y_STATE: Record<SpotVisual, string> = {
   off: "empty",
   available: "available",
   active: "press here",
   confirm: "awaiting confirm",
   bound: "bound",
+  selected: "selected",
 };
 
 /**
@@ -141,6 +149,16 @@ const AnimatedDot = memo(function AnimatedDot({
           },
         ]}
       />
+      {/* Glyphs sit above the fade overlay so they appear with the new state:
+          a spinner while the spot is prompted, a check once it is bound. */}
+      {toRef.current === "active" && (
+        <ActivityIndicator testID="dot-spinner" size="small" color="#fafafa" />
+      )}
+      {toRef.current === "bound" && (
+        <View testID="dot-check" style={styles.dotGlyph}>
+          <CheckIcon />
+        </View>
+      )}
     </View>
   );
 });
@@ -247,12 +265,19 @@ const styles = StyleSheet.create({
   },
   // One size for every state — the active/confirm emphasis is color, not
   // scale, so idle and bound spots are just as easy to hit. The border is
-  // always present with a per-state color, so "off" cross-fades too.
+  // always present with a per-state color, so "off" cross-fades too. Centers
+  // the state glyph (spinner / check).
   dot: {
     width: DOT,
     height: DOT,
     borderRadius: DOT / 2,
     borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dotGlyph: {
+    alignItems: "center",
+    justifyContent: "center",
   },
   // The old-color layer covers the base including its border (-1 offsets, so
   // its diameter is DOT + 2 and its radius must match — a hardcoded radius
