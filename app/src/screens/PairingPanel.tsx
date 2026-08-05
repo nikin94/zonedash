@@ -20,6 +20,13 @@ const WHEEL_W = 48; // barely wider than the pill — single digits need no more
 const WHEEL_PAD_V = 6; // matches the button's small vertical padding
 const PILL_H = 28;
 
+// Fixed footprints for the court-centre info block, so phase changes never
+// shift the layout: the tallest status text is 3 lines, the error is 1 line,
+// and every action row is one button tall (empty slot when Undo is hidden).
+const TEXT_SLOT_H = 60; // 3 lines at lineHeight 20
+const ERROR_SLOT_H = 18;
+const BUTTON_H = 48; // fingertip-sized; explicit so hidden slots match exactly
+
 /**
  * Pairing round UI (display-ui.md screen 2, phone side). The count wheel only
  * sets HOW MANY targets get bound; WHERE each one stands is chosen during the
@@ -228,31 +235,42 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
           )
         ) : (
           <>
-            {choosing ? (
-              <Text style={styles.prompt}>
-                Tap the map where target {boundCount + 1} of {progress.total} stands
-              </Text>
-            ) : prompting ? (
-              <Text style={styles.prompt}>
-                {progress.awaitingConfirm
-                  ? "Press again to confirm"
-                  : `Press the ${SPOT_NAMES[progress.currentSpot!]} target (${
-                      boundCount + 1
-                    }/${progress.total})`}
-              </Text>
-            ) : running ? (
-              <Text style={styles.prompt}>Starting pairing…</Text>
-            ) : done ? (
-              <Text style={styles.doneText}>
-                Paired {progress.total} {progress.total === 1 ? "target" : "targets"}
-              </Text>
-            ) : (
-              <Text style={styles.hint}>
-                Pick a count, then place each target during pairing
-              </Text>
-            )}
+            {/* Every slot below has a FIXED footprint — the text area, the
+                error line, and both button rows keep their size across all
+                round phases, so nothing shifts as states change. */}
+            <View testID="status-slot" style={styles.textSlot}>
+              {choosing ? (
+                <Text style={styles.prompt}>
+                  Tap the map where target {boundCount + 1} of {progress.total} stands
+                </Text>
+              ) : prompting ? (
+                <Text style={styles.prompt}>
+                  {progress.awaitingConfirm
+                    ? "Press again to confirm"
+                    : `Press the ${SPOT_NAMES[progress.currentSpot!]} target (${
+                        boundCount + 1
+                      }/${progress.total})`}
+                </Text>
+              ) : running ? (
+                <Text style={styles.prompt}>Starting pairing…</Text>
+              ) : done ? (
+                <Text style={styles.doneText}>
+                  Paired {progress.total} {progress.total === 1 ? "target" : "targets"}
+                </Text>
+              ) : (
+                <Text style={styles.hint}>
+                  Pick a count, then place each target during pairing
+                </Text>
+              )}
+            </View>
 
-            {error !== null && <Text style={styles.error}>{error}</Text>}
+            <View testID="error-slot" style={styles.errorSlot}>
+              {error !== null && (
+                <Text style={styles.error} numberOfLines={1}>
+                  {error}
+                </Text>
+              )}
+            </View>
 
             {/* Actions stack vertically — primary on top, Undo always at the
                 very bottom — so the block reads top-to-bottom in one place. */}
@@ -277,17 +295,20 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
                 </Pressable>
               )}
               {/* Undo is only offered between binds (choosing) or after done —
-                  never mid-prompt, matching the central's refusal. */}
-              {(choosing || done) && boundCount > 0 && (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Undo last bind"
-                  onPress={undo}
-                  style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-                >
-                  <Text style={styles.buttonLabel}>Undo</Text>
-                </Pressable>
-              )}
+                  never mid-prompt, matching the central's refusal. The slot
+                  keeps the row's height when the button is hidden. */}
+              <View testID="undo-slot" style={styles.undoSlot}>
+                {(choosing || done) && boundCount > 0 && (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Undo last bind"
+                    onPress={undo}
+                    style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+                  >
+                    <Text style={styles.buttonLabel}>Undo</Text>
+                  </Pressable>
+                )}
+              </View>
             </View>
           </>
         )}
@@ -383,40 +404,57 @@ const styles = StyleSheet.create({
     backgroundColor: "#27272a",
     borderRadius: 8,
   },
+  // Fixed-height slots: their size never depends on which child (if any) is
+  // rendered, so the info block can't jump between phases.
+  textSlot: {
+    alignSelf: "stretch",
+    height: TEXT_SLOT_H,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  errorSlot: {
+    height: ERROR_SLOT_H,
+    marginBottom: 8,
+    justifyContent: "center",
+  },
+  undoSlot: {
+    height: BUTTON_H,
+    alignSelf: "stretch",
+  },
   prompt: {
     color: "#fafafa",
     fontSize: 16,
+    lineHeight: 20,
     fontWeight: "600",
     textAlign: "center",
-    marginBottom: 16,
   },
   hint: {
     color: "#71717a",
     fontSize: 13,
+    lineHeight: 20,
     textAlign: "center",
-    marginBottom: 16,
   },
   doneText: {
     color: "#34d399",
     fontSize: 15,
+    lineHeight: 20,
     fontWeight: "600",
     textAlign: "center",
-    marginBottom: 16,
   },
   error: {
     color: "#f87171",
     fontSize: 13,
     textAlign: "center",
-    marginBottom: 12,
   },
-  // Fingertip-sized action buttons (~48 px tall).
   button: {
+    height: BUTTON_H,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "#3f3f46",
     backgroundColor: "#0a0a0a",
     paddingHorizontal: 32,
-    paddingVertical: 14,
+    alignItems: "center",
+    justifyContent: "center",
   },
   buttonPressed: {
     backgroundColor: "#18181b",
