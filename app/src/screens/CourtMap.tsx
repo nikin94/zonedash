@@ -53,6 +53,7 @@ const MAP_W = Math.min(Dimensions.get("window").width - 56, 340);
 const MAP_H = Math.round(MAP_W * 1.09);
 const HIT = 52; // pressable hit box; the visible dot is smaller
 const HIT_SLOP = 8; // extra forgiveness around each spot
+const DOT = 38; // visible dot diameter — one size for every state
 
 // Fill + outline per state, as rgba so Animated can interpolate between them.
 // "off" fades to a zero-alpha fill (outline only) instead of snapping away.
@@ -248,12 +249,14 @@ const styles = StyleSheet.create({
   // scale, so idle and bound spots are just as easy to hit. The border is
   // always present with a per-state color, so "off" cross-fades too.
   dot: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: DOT,
+    height: DOT,
+    borderRadius: DOT / 2,
     borderWidth: 1,
   },
-  // The old-color layer covers the base including its border (-1 offsets),
+  // The old-color layer covers the base including its border (-1 offsets, so
+  // its diameter is DOT + 2 and its radius must match — a hardcoded radius
+  // here once lagged a dot resize and drew as a rounded square mid-fade),
   // then fades out to reveal the new color underneath.
   dotOverlay: {
     position: "absolute",
@@ -261,7 +264,7 @@ const styles = StyleSheet.create({
     left: -1,
     right: -1,
     bottom: -1,
-    borderRadius: 15,
+    borderRadius: DOT / 2 + 1,
     borderWidth: 1,
   },
 });
