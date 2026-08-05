@@ -3,8 +3,9 @@
  * every screen can be built and tested in Expo Go before the real BLE link
  * (dev-client + react-native-ble-plx) or the S3 hardware exists.
  *
- * Behavior mirrors the firmware cores: pairing prompts slots in order
- * (lib/pairing), a session arms one target at a time and resolves each step as
+ * Behavior mirrors the firmware cores: a pairing round binds N targets one by
+ * one, each at an operator-picked court spot with a two-tap confirm
+ * (lib/pairing); a session arms one target at a time and resolves each step as
  * a hit or a timeout miss (lib/engine — misses exist only when timeoutMs > 0).
  * Timings are configurable so tests can run on fake timers.
  */
@@ -48,6 +49,7 @@ export class MockCentralTransport implements CentralTransport {
   private session: SessionState = "idle";
   private drill: DrillConfig = { mode: "random", numPositions: 8, count: 10 };
   private paired = 0; // targets bound by the last pairing round
+  private pairing: { total: number; bound: number[]; current: number | null } | null = null;
   private hits: HitRecord[] = [];
 
   constructor(opts: MockOptions = {}) {
@@ -82,27 +84,45 @@ export class MockCentralTransport implements CentralTransport {
     this.setConnection("disconnected");
   }
 
-  async startPairing(numPositions: number): Promise<void> {
+  async startPairing(numTargets: number): Promise<void> {
     this.assertConnected();
-    const total = clampPositions(numPositions);
+    const total = clampPositions(numTargets);
     this.session = "pairing";
     this.paired = 0;
+    this.pairing = { total, bound: [], current: null };
     this.emitSession();
-    // One simulated confirm-tap per slot, then done (currentPrompt = -1).
-    for (let slot = 0; slot <= total; slot++) {
-      this.after(this.latencyMs + slot * this.stepMs, () => {
-        const progress: PairingProgress = {
-          currentPrompt: slot < total ? slot : -1,
-          total,
-        };
-        this.emit({ kind: "pairing", progress });
-        if (slot === total) {
-          this.paired = total;
-          this.session = "idle";
-          this.emitSession();
-        }
-      });
-    }
+    // The round opens waiting for the operator's first spot pick — nothing is
+    // prompted until selectPairingSpot arrives.
+    this.after(this.latencyMs, () => this.emitPairing(false));
+  }
+
+  async selectPairingSpot(spot: number): Promise<void> {
+    this.assertConnected();
+    const p = this.pairing;
+    if (!p || this.session !== "pairing") throw new Error("no pairing round");
+    const s = Math.floor(spot);
+    if (s < 0 || s >= 8) throw new Error("bad spot");
+    // A prompt already in flight or an already-bound spot: ignore, like the
+    // central unit would.
+    if (p.current !== null || p.bound.includes(s)) return;
+    p.current = s;
+    this.emitPairing(false); // "press here" — the LED panel lights this spot too
+    // Two-tap semantics per lib/pairing: first physical tap makes a candidate
+    // (awaitingConfirm — "again?"), the second binds. A candidate replaced by
+    // another stray MAC re-emits the same confirm state; undo isn't modeled.
+    this.after(this.stepMs / 2, () => this.emitPairing(true));
+    this.after(this.stepMs, () => {
+      p.bound.push(s);
+      p.current = null;
+      if (p.bound.length >= p.total) {
+        this.paired = p.total;
+        this.session = "idle";
+        this.emitPairing(false); // done snapshot
+        this.emitSession();
+      } else {
+        this.emitPairing(false); // back to "pick the next spot"
+      }
+    });
   }
 
   async loadDrill(config: DrillConfig): Promise<void> {
@@ -172,7 +192,13 @@ export class MockCentralTransport implements CentralTransport {
   async stopSession(): Promise<void> {
     this.assertConnected();
     this.clearTimers();
-    if (this.session === "running" || this.session === "pairing") {
+    // A cancelled pairing round leaves no session to summarize — back to idle;
+    // an aborted drill keeps its partial records and reads as done.
+    if (this.session === "pairing") {
+      this.session = "idle";
+      this.pairing = null;
+      this.emitSession();
+    } else if (this.session === "running") {
       this.session = "done";
       this.emitSession();
     }
@@ -192,6 +218,19 @@ export class MockCentralTransport implements CentralTransport {
   // ── internals ──────────────────────────────────────────
   private emit(e: StatusEvent) {
     this.listeners.forEach((l) => l(e));
+  }
+
+  private emitPairing(awaitingConfirm: boolean) {
+    const p = this.pairing;
+    if (!p) return;
+    const progress: PairingProgress = {
+      total: p.total,
+      boundSpots: [...p.bound],
+      currentSpot: p.current,
+      awaitingConfirm,
+      done: p.bound.length >= p.total,
+    };
+    this.emit({ kind: "pairing", progress });
   }
 
   private emitSession() {

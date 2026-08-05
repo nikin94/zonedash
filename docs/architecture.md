@@ -153,23 +153,30 @@ Identity and court position are **separate concerns** — conflating them is a b
   map, built fresh each session and held on the central unit.
 
 **Layout is not fixed — the active set is chosen per session.** The v0 prototype
-used 6 points; the full kit is 8, but a session may use **4, 5, 6, or 8** targets,
+used 6 points; the full kit is 8, but a session may use **any count from 1 to 8**,
 and the layout isn't tied to a badminton court (other venues / free placement).
 So the position map is a **dynamic list of the N active targets for this session**,
 not a hardcoded 8-slot court grid. `N` is picked when the drill/session is set up;
 positions are just labels/order in that set, with the geometric meaning ("far-left
 corner") supplied by the pairing prompts, not baked into firmware.
 
-**How the map is built — pairing round (chosen).** The operator picks how many
-targets are in play (N) — passed explicitly, never inferred: serial `pair N`, and
-the BLE `StartPairing` op carries a 1-byte N payload. The central unit then walks
-the slots one by one: it prompts on the display — e.g. **"Press here"** with the
-target's slot highlighted on the court/layout diagram — the person taps that
-physical target, and after a confirming second tap the unit binds that MAC to the
-slot → "next." N binds build the whole map. Self-calibrating: it doesn't matter
-which physical unit went where, or the order in the case, or how many are used.
-(Rejected: fixed numbered stickers — simpler code but demands placement discipline
-and breaks on a swapped corner; RSSI/range auto-localization — unreliable indoors.)
+**How the map is built — interactive pairing round (chosen).** The operator
+starts a round with just a **count**: how many targets get bound (BLE
+`StartPairing`, 1-byte N; serial `pair N`). WHERE each one stands is chosen
+**during the round, one bind at a time**: the phone shows a half-court map (net
+at the top) and the operator taps the spot where the next target physically
+stands (BLE `SelectPairSpot`, 1 byte canonical spot 0..7; serial `spot S`). The
+central unit prompts that spot on its own copy of the **same canonical map** —
+phone and HUB75 panel light the same dot — with "Press here"; the person taps
+that physical target, and after a confirming second tap the unit binds that MAC
+to the spot → back to "pick the next spot" until N are bound. Spot choice is
+**free-form**: nothing forces a preset arrangement — e.g. 3 targets can all
+stand on the left side of the court. Self-calibrating: it doesn't matter which
+physical unit went where, or the order in the case, or how many are used.
+(Rejected: fixed numbered stickers — simpler code but demands placement
+discipline and breaks on a swapped corner; RSSI/range auto-localization —
+unreliable indoors; pre-declared spot sets — they forced the layout choice
+before the round instead of at the moment each target is placed.)
 
 **Two-tap confirm (robustness).** A bind takes **two consecutive taps from the
 same MAC**: the first makes it the slot's candidate ("press again to confirm"),
@@ -182,9 +189,14 @@ re-prompts the most recent slot for operator correction.
 The round's logic is the hardware-free `lib/pairing/` core (`PairingRound` +
 `TargetMap`): it prompts slots in order, confirm-binds the tapping MAC, ignores
 stray re-taps of already-bound nodes, and yields the `MAC → position` map (with a
-bounds-checked `mac_at`). Board firmware just feeds it `Pressed` MACs and renders
-the current prompt; progress is surfaced to the app as `PairingProgress`
-(`currentPrompt`, `total`) on the Status characteristic.
+bounds-checked `mac_at`). Board firmware feeds it `Pressed` MACs, keeps the
+slot-index → court-spot association from the operator's `SelectPairSpot` picks,
+and renders the current prompt; progress is surfaced to the app as
+`PairingProgress` (`total`, `boundSpots`, `currentSpot`, `awaitingConfirm`,
+`done`) on the Status characteristic — `currentSpot` is null while the round
+waits for the operator's next pick, and `awaitingConfirm` mirrors the two-tap
+confirm phase (`Tap::Await`), so the phone renders "press again to confirm"
+like the panel does.
 
 **Drills operate on positions, not MACs.** The operator authors "corner → mid →
 corner…" in position terms; the central unit translates to MACs via the map. So a
@@ -216,11 +228,11 @@ Minimal custom GATT service:
 | Characteristic | Dir | Payload |
 |----------------|-----|---------|
 | **Control** | write | start/stop, select drill, drill config (sequence, timing, mode) |
-| **Status** | notify | session state, connected-target count, live progress, pairing progress (`currentPrompt`, `total`) |
+| **Status** | notify | session state, connected-target count, live progress, pairing progress (`total`, `boundSpots`, `currentSpot`, `awaitingConfirm`, `done`) |
 | **Results** | notify / read | buffered per-hit records (chunked if large) |
 
 Data model (app side):
-- **Drill** = active-target count `N` + a **mode** + params. N (4–8) is part of
+- **Drill** = active-target count `N` + a **mode** + params. N (1–8) is part of
   the setup, so a drill is portable across layouts. Four modes (three from v0 —
   see `history-v0.md` — plus time-limited):
   - **random** — random order over the N positions, `count` reps.
@@ -282,7 +294,8 @@ swaps the transport later.
 
 | Command | Does | BLE equivalent |
 |---------|------|----------------|
-| `pair N` | Enter pairing round for N slots: prompt each slot, confirm-bind the MAC that presses twice → `MAC→position` map | Control: StartPairing (N byte) |
+| `pair N` | Open a pairing round for N targets; each bind then waits for a `spot` pick | Control: StartPairing (N byte) |
+| `spot S` | Pairing: pick canonical court spot S (0..7) for the next bind — the panel lights it, a two-tap confirm binds → `MAC→position` map | Control: SelectPairSpot (spot byte) |
 | `undo` | Pairing: unbind the last bound slot and re-prompt it (`PairingRound::undo_last()`) | (dev-only for now) |
 | `nodes` | List paired targets: `position, MAC, fw, batt_mv, last_rssi` | Status read |
 | `drill N seq…` | Load a drill: N active targets + sequence (e.g. `drill 4 rand` or `drill 6 0,3,5,1,…`) + params | Control: config |

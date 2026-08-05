@@ -25,20 +25,30 @@ export const CHAR = {
 export enum ControlOp {
   StartSession = 1,
   StopSession = 2,
-  StartPairing = 3, // MAC→position pairing round; payload: 1 byte N (active targets, 1..8)
+  StartPairing = 3, // open a pairing round; payload: 1 byte N (targets to bind, 1..8)
   DumpResults = 4,
   LoadDrill = 5, // push a drill config (mode, N, sequence, timing) — "Control: config"
+  SelectPairSpot = 6, // pairing: payload 1 byte — canonical court spot (0..7) for the next bind
 }
 
 /**
  * Pairing progress, notified on the Status characteristic during a pairing
- * round so the app can render "press slot (currentPrompt+1) of total". Mirrors
- * PairingRound (firmware/lib/pairing): `currentPrompt` is the slot awaiting a
- * bind, or -1 when the round is done.
+ * round. The round is interactive: the operator picks each bind's court spot
+ * on the phone map (SelectPairSpot) — spots are free-form, e.g. 3 targets all
+ * on the left side — the central unit lights that same spot on the LED panel,
+ * and a two-tap confirm on the physical target binds it (firmware
+ * lib/pairing Tap::Await → Bound). Repeats until `total` targets are bound.
  */
 export interface PairingProgress {
-  currentPrompt: number; // 0-based slot being prompted, or -1 when done
-  total: number; // N — active targets this round
+  total: number; // N — targets to bind this round
+  boundSpots: number[]; // canonical spots bound so far, in bind order
+  /** Spot currently prompted on the map + LED panel, or null while the round
+   *  waits for the operator's next SelectPairSpot (and after done). */
+  currentSpot: number | null;
+  /** True while the prompted spot has a candidate MAC waiting for its second
+   *  confirm tap — the UI shows "press again to confirm" ("AGAIN?"). */
+  awaitingConfirm: boolean;
+  done: boolean; // all `total` targets bound
 }
 
 /**

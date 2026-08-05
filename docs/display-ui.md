@@ -47,12 +47,20 @@ An abstract rectangle with up to `MAX_TARGETS = 8` slot dots on its perimeter �
 With N < 8 active slots only the bound slots are drawn. Dots are 5×5 px at rest.
 
 ```
-  0 ──── 1 ──── 2        slots for N=8 (canonical arrangement;
-  │             │        geometric meaning is assigned by the
-  7             3        pairing prompts, not hardcoded)
+  ═══════ NET ═══════    top edge = net side (the panel itself stands
+  0 ──── 1 ──── 2        at the net, facing the player)
   │             │
-  6 ──── 5 ──── 4
+  7             3        canonical spots 0..7, clockwise from net-left;
+  │             │        geometric meaning is assigned by the pairing
+  6 ──── 5 ──── 4        prompts, not hardcoded
 ```
+
+**Phone parity:** the operator app renders this same canonical map with the
+same indices and net-at-top orientation (`app/src/screens/CourtMap.tsx`).
+During pairing each bind's spot arrives from the operator's map tap
+(`SelectPairSpot`, one canonical index) and the panel lights that spot — so the
+phone and the panel always light **the same dot**. The brain drives the round;
+both UIs are renderers over its Status events.
 
 Dot states: **off** (unbound/unused), **dim white** (bound, idle), **bright
 accent, pulsing** (armed target), **green flash 300 ms** (hit), **red flash
@@ -77,14 +85,18 @@ Operator-distance screen after boot or between sessions.
 
 ### 2. Pairing round
 
-Per `architecture.md`: prompt slots in order, two-tap confirm.
+Per `architecture.md`: interactive — the operator picks each bind's spot on the
+phone map (`SelectPairSpot`); the panel mirrors it. Two-tap confirm per bind.
 
-- Current slot: **bright accent, pulsing** (~2 Hz).
-- Status strip: `PAIR 3/8`.
+- Waiting for the operator's pick: all unbound spots dim, hint line `PICK SPOT`
+  (the phone shows "tap the map").
+- Picked spot: **bright accent, pulsing** (~2 Hz) — the same dot the phone
+  lights.
+- Status strip: `PAIR 3/8` (bound so far / total).
 - Hint line: `PRESS HERE` → after first tap of a candidate MAC: `AGAIN?`
   (the confirm state from `lib/pairing/` `Tap::Await`).
-- Bound slots turn dim white as they lock in; last slot bound → brief
-  full-map green pulse → Idle (`ready · paired 8`).
+- Bound spots turn dim white as they lock in; last bind → brief full-map green
+  pulse → Idle (`ready · paired 8`).
 - **Operator correction:** serial `undo` calls `PairingRound::undo_last()` —
   the last bound slot un-locks (back to pulsing) and is re-prompted. Shown as
   a dim `UNDO ok` hint line for one beat.

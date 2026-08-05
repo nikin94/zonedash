@@ -36,24 +36,85 @@ test("commands reject while disconnected", async () => {
   await expect(t.startPairing(4)).rejects.toThrow("not connected");
 });
 
-test("pairing walks each slot then reports done", async () => {
+test("interactive pairing: each bind is prompted at the operator-picked spot", async () => {
   const t = make();
   const events = record(t);
   const p = t.connect();
   await jest.runAllTimersAsync();
   await p;
 
-  await t.startPairing(3);
+  await t.startPairing(2);
+  await jest.runAllTimersAsync(); // round opens, waiting for the first pick
+
+  // Free-form placement: both targets on the left side of the court.
+  await t.selectPairingSpot(7); // mid left
+  await jest.runAllTimersAsync();
+  await t.selectPairingSpot(6); // back left
   await jest.runAllTimersAsync();
 
-  const prompts = events
+  // Per pick: prompt ("press here") → confirm ("again?") → bound snapshot.
+  const trace = events
     .filter((e) => e.kind === "pairing")
-    .map((e) => (e as { progress: { currentPrompt: number } }).progress.currentPrompt);
-  expect(prompts).toEqual([0, 1, 2, -1]);
+    .map((e) => {
+      const pr = (e as Extract<StatusEvent, { kind: "pairing" }>).progress;
+      return `${pr.currentSpot ?? "-"}${pr.awaitingConfirm ? "+" : ""}b${pr.boundSpots.length}${pr.done ? "!" : ""}`;
+    });
+  expect(trace).toEqual(["-b0", "7b0", "7+b0", "-b1", "6b1", "6+b1", "-b2!"]);
+
+  const last = events.filter((e) => e.kind === "pairing").pop() as Extract<
+    StatusEvent,
+    { kind: "pairing" }
+  >;
+  expect(last.progress.boundSpots).toEqual([7, 6]); // bind order preserved
 
   // After the round the session returns to idle with all targets online.
+  const lastSession = events.filter((e) => e.kind === "session").pop();
+  expect(lastSession).toMatchObject({ state: "idle", targetsOnline: 2 });
+});
+
+test("selectPairingSpot rejects/ignores invalid picks like the central would", async () => {
+  const t = make();
+  const events = record(t);
+  const p = t.connect();
+  await jest.runAllTimersAsync();
+  await p;
+
+  // No round open yet.
+  await expect(t.selectPairingSpot(0)).rejects.toThrow("no pairing round");
+
+  await t.startPairing(2);
+  await jest.runAllTimersAsync();
+  await expect(t.selectPairingSpot(9)).rejects.toThrow("bad spot");
+
+  await t.selectPairingSpot(3);
+  await jest.runAllTimersAsync(); // spot 3 bound
+  const before = events.filter((e) => e.kind === "pairing").length;
+  await t.selectPairingSpot(3); // already bound — silently ignored
+  await jest.runAllTimersAsync();
+  expect(events.filter((e) => e.kind === "pairing").length).toBe(before);
+});
+
+test("cancelling a pairing round returns to idle without a done event", async () => {
+  const t = make();
+  const events = record(t);
+  const p = t.connect();
+  await jest.runAllTimersAsync();
+  await p;
+
+  await t.startPairing(4);
+  await jest.runAllTimersAsync();
+  await t.selectPairingSpot(0);
+  await jest.advanceTimersByTimeAsync(20); // mid-prompt, not yet bound
+
+  await t.stopSession();
+  await jest.runAllTimersAsync(); // no further pairing events may fire
+
+  const doneEvents = events.filter(
+    (e) => e.kind === "pairing" && e.progress.done,
+  );
+  expect(doneEvents).toHaveLength(0);
   const last = events.filter((e) => e.kind === "session").pop();
-  expect(last).toMatchObject({ state: "idle", targetsOnline: 3 });
+  expect(last).toMatchObject({ state: "idle" });
 });
 
 test("a session produces hit records and finishes", async () => {

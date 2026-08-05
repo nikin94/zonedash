@@ -6,6 +6,7 @@
 #pragma once
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "../engine/drill_engine.h" // DrillConfig / DrillMode (reused, not duplicated)
 #include "../protocol/protocol.h"   // Sensor, MAX_TARGETS
@@ -14,7 +15,8 @@ namespace zd {
 
 enum class CmdType : uint8_t {
   Empty,   // blank / whitespace-only line — no-op
-  Pair,    // enter pairing round
+  Pair,    // open a pairing round for N targets
+  Spot,    // pairing: pick the court spot (0..7) for the next bind
   Undo,    // pairing: unbind the last slot and re-prompt it
   Nodes,   // list paired targets
   Drill,   // load a drill (fills `drill`)
@@ -31,7 +33,8 @@ struct ParsedCommand {
   std::string error;           // non-empty => malformed; human-readable reason
   DrillConfig drill;           // valid when type == Drill && ok()
   Sensor sensor = Sensor::ToF; // valid when type == Sensor && ok()
-  uint8_t num_positions = 0;   // active target count; valid when type == Pair && ok()
+  uint8_t num_positions = 0;   // targets to bind; valid when type == Pair && ok()
+  uint8_t spot = 0;            // canonical court spot; valid when type == Spot && ok()
 
   bool ok() const { return error.empty(); }
 };

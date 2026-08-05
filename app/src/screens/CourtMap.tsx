@@ -1,0 +1,266 @@
+import { memo, useLayoutEffect, useRef, type ReactNode } from "react";
+import {
+  Animated,
+  Dimensions,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+
+/** Visual state of one canonical spot on the map. */
+export type SpotVisual =
+  | "off" // faint outline — a potential location, nothing assigned
+  | "available" // pairing round waiting for the operator to pick this (or any) spot
+  | "active" // being prompted ("press here")
+  | "confirm" // candidate tapped once, awaiting the confirm tap
+  | "bound"; // bound (this round / done)
+
+/** Human names for the canonical spots, for prompts and screen readers. */
+export const SPOT_NAMES = [
+  "net left",
+  "net centre",
+  "net right",
+  "mid right",
+  "back right",
+  "back centre",
+  "back left",
+  "mid left",
+] as const;
+
+/**
+ * Canonical spot geometry with the NET at the TOP of the map — the same
+ * layout the HUB75 panel draws (display-ui.md "layout map"), so the phone and
+ * the LED display always light the same dot. Clockwise from net-left:
+ *   0 ─ 1 ─ 2   ← net line
+ *   7       3
+ *   6 ─ 5 ─ 4   ← back line
+ */
+const SPOT_XY = [
+  { x: 0, y: 0 },
+  { x: 0.5, y: 0 },
+  { x: 1, y: 0 },
+  { x: 1, y: 0.5 },
+  { x: 1, y: 1 },
+  { x: 0.5, y: 1 },
+  { x: 0, y: 1 },
+  { x: 0, y: 0.5 },
+] as const;
+
+// Nearly full-screen width (small side margins), capped for tablets; a half
+// court is slightly longer than wide.
+const MAP_W = Math.min(Dimensions.get("window").width - 32, 380);
+const MAP_H = Math.round(MAP_W * 1.09);
+const HIT = 48; // pressable hit box; the visible dot is smaller
+const HIT_SLOP = 8; // extra forgiveness around each spot
+
+// Fill + outline per state, as rgba so Animated can interpolate between them.
+// "off" fades to a zero-alpha fill (outline only) instead of snapping away.
+const DOT_STYLE: Record<SpotVisual, { fill: string; ring: string }> = {
+  off: { fill: "rgba(63,63,70,0)", ring: "rgba(63,63,70,1)" },
+  available: { fill: "rgba(82,82,91,1)", ring: "rgba(63,63,70,0)" },
+  active: { fill: "rgba(129,140,248,1)", ring: "rgba(63,63,70,0)" },
+  confirm: { fill: "rgba(251,191,36,1)", ring: "rgba(63,63,70,0)" },
+  bound: { fill: "rgba(52,211,153,1)", ring: "rgba(63,63,70,0)" },
+};
+
+const FADE_MS = 200;
+
+// Screen-reader wording per state — the label must carry it, since color is
+// the only visual differentiator between bound/available/confirm.
+const A11Y_STATE: Record<SpotVisual, string> = {
+  off: "empty",
+  available: "available",
+  active: "press here",
+  confirm: "awaiting confirm",
+  bound: "bound",
+};
+
+/**
+ * One court dot, cross-fading on every state change instead of snapping.
+ * Two statically-colored layers: the base wears the NEW state's colors, an
+ * overlay wears the OLD state's and fades its opacity 1→0 on the native
+ * driver. No color interpolation at all — the previous approach reset a
+ * JS-driven color fade in a layout effect, and when all 8 dots changed at
+ * once (Start pairing) that reset could slip past a frame under JS load:
+ * a flash of the new color, a snap back, then the fade — read as a double
+ * blink. With static layers the commit frame is pixel-identical to the
+ * previous one (old color at full opacity), so no flash is possible, and
+ * the opacity fade runs on the UI thread regardless of JS load.
+ *
+ * memo: the panel re-renders on every Status event (prompt, confirm,
+ * session); a dot re-renders only when ITS visual actually changes.
+ */
+const AnimatedDot = memo(function AnimatedDot({
+  visual,
+}: {
+  visual: SpotVisual;
+}) {
+  const fromRef = useRef(visual);
+  const toRef = useRef(visual);
+  const overlayRef = useRef(new Animated.Value(0));
+
+  // Detect the change during render. A FRESH value born at 1 (instead of
+  // setValue on the live one, which would force-update the Animated view
+  // mid-render) attaches with this commit — the first painted frame shows the
+  // old color at full strength, so it matches the previous frame exactly.
+  if (visual !== toRef.current) {
+    fromRef.current = toRef.current;
+    toRef.current = visual;
+    overlayRef.current = new Animated.Value(1);
+  }
+
+  useLayoutEffect(() => {
+    if (fromRef.current === toRef.current) return;
+    const overlay = overlayRef.current;
+    Animated.timing(overlay, {
+      toValue: 0,
+      duration: FADE_MS,
+      useNativeDriver: true, // opacity-only — off the JS thread entirely
+    }).start(({ finished }) => {
+      // Settle so a later unrelated effect run can't replay this fade; a
+      // superseded fade (its value already swapped out) must not settle.
+      if (finished && overlayRef.current === overlay) {
+        fromRef.current = toRef.current;
+      }
+    });
+  }, [visual]);
+
+  const from = DOT_STYLE[fromRef.current];
+  const to = DOT_STYLE[toRef.current];
+  return (
+    <View style={[styles.dot, { backgroundColor: to.fill, borderColor: to.ring }]}>
+      <Animated.View
+        style={[
+          styles.dotOverlay,
+          {
+            backgroundColor: from.fill,
+            borderColor: from.ring,
+            opacity: overlayRef.current,
+          },
+        ]}
+      />
+    </View>
+  );
+});
+
+/**
+ * Half-court map. Pure renderer: the parent supplies each canonical spot's
+ * visual state; taps (when enabled) report the canonical spot index.
+ * `children` render centered inside the court — the perimeter is all dots, so
+ * the middle is free real estate for the round's status text and action.
+ */
+export function CourtMap({
+  spots,
+  onPressSpot,
+  children,
+}: {
+  spots: SpotVisual[]; // length 8, canonical order
+  onPressSpot?: (index: number) => void;
+  children?: ReactNode;
+}) {
+  return (
+    <View style={styles.wrap}>
+      <View style={styles.netRow}>
+        <View style={styles.netLine} />
+        <Text style={styles.netLabel}>NET</Text>
+        <View style={styles.netLine} />
+      </View>
+      <View style={styles.court}>
+        {children != null && (
+          // box-none: the centre content is interactive, the empty area around
+          // it stays transparent to touches so the perimeter spots keep working.
+          <View pointerEvents="box-none" style={styles.centre}>
+            {children}
+          </View>
+        )}
+        {SPOT_XY.map((p, i) => (
+          <Pressable
+            key={i}
+            testID={`spot-${i}-${spots[i]}`}
+            accessibilityRole="button"
+            accessibilityLabel={`${SPOT_NAMES[i]} spot, ${A11Y_STATE[spots[i]]}`}
+            accessibilityState={{ selected: spots[i] !== "off" }}
+            disabled={!onPressSpot}
+            onPress={() => onPressSpot?.(i)}
+            hitSlop={HIT_SLOP}
+            style={[
+              styles.hit,
+              { left: p.x * (MAP_W - HIT), top: p.y * (MAP_H - HIT) },
+            ]}
+          >
+            <AnimatedDot visual={spots[i]} />
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  wrap: {
+    alignItems: "center",
+  },
+  netRow: {
+    width: MAP_W,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 6,
+  },
+  netLine: {
+    flex: 1,
+    height: 2,
+    backgroundColor: "#3f3f46",
+  },
+  netLabel: {
+    color: "#71717a",
+    fontSize: 10,
+    letterSpacing: 2,
+  },
+  court: {
+    width: MAP_W,
+    height: MAP_H,
+    borderWidth: 1,
+    borderColor: "#3f3f46",
+    borderRadius: 4,
+  },
+  centre: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    // Keep the centre content clear of the perimeter dots' hit boxes.
+    padding: HIT + 8,
+  },
+  hit: {
+    position: "absolute",
+    width: HIT,
+    height: HIT,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  // One size for every state — the active/confirm emphasis is color, not
+  // scale, so idle and bound spots are just as easy to hit. The border is
+  // always present with a per-state color, so "off" cross-fades too.
+  dot: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1,
+  },
+  // The old-color layer covers the base including its border (-1 offsets),
+  // then fades out to reveal the new color underneath.
+  dotOverlay: {
+    position: "absolute",
+    top: -1,
+    left: -1,
+    right: -1,
+    bottom: -1,
+    borderRadius: 15,
+    borderWidth: 1,
+  },
+});

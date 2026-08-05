@@ -4,11 +4,13 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { MockCentralTransport } from "./src/ble/mock";
 import type { ConnectionState } from "./src/ble/transport";
+import { PairingPanel } from "./src/screens/PairingPanel";
 
 /**
  * ZoneDash operator app. Talks to the central unit through the CentralTransport
  * seam — currently the in-app mock, later the real BLE implementation. This
- * screen owns only the connection; drill/pairing/session screens come next.
+ * screen owns the connection and shows the pairing panel once connected;
+ * drill/session screens come next.
  */
 export default function App() {
   const transport = useMemo(() => new MockCentralTransport(), []);
@@ -72,6 +74,8 @@ export default function App() {
           {connected ? "Disconnect" : "Connect"}
         </Text>
       </Pressable>
+
+      {connected && <PairingPanel transport={transport} />}
 
       <StatusBar style="light" />
     </View>
