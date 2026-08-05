@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
 import type { HitRecord } from "../ble/contract";
@@ -12,6 +13,7 @@ import { CourtMap, SPOT_NAMES, type SpotVisual } from "../components/CourtMap";
 import { CustomPressable } from "../components/CustomPressable";
 import { Header } from "../components/Header";
 import { msOptions, WheelField } from "../components/WheelField";
+import type { Nav } from "../navigation";
 import { useAppState, type DrillSettings } from "../state/AppState";
 import { colors } from "../theme";
 
@@ -397,29 +399,39 @@ export const ExercisePanel = ({
 /** The app's home screen: Header + the exercise panel, gated on the link and
  *  the paired layout (a drill runs on the layout the pairing round bound). */
 export const ExerciseScreen = () => {
+  const navigation = useNavigation<Nav>();
   const { transport, connection, connectionError, pairedSpots, settings } =
     useAppState();
   const connected = connection === "connected";
   const busy = connection === "connecting";
+  const paired = pairedSpots.length > 0;
+
+  // Home is useless without a paired layout, so it never shows an empty hint
+  // screen: whenever it has focus while the link is up and nothing is paired
+  // (a fresh connect, or backing out of Pairing early), it hands straight
+  // over to the Pairing screen.
+  useFocusEffect(
+    useCallback(() => {
+      if (connected && !paired) navigation.navigate("Pairing");
+    }, [connected, paired, navigation]),
+  );
 
   return (
     <View style={styles.screen}>
       <Header />
-      {connected && pairedSpots.length > 0 ? (
+      {connected && paired ? (
         <ExercisePanel
           transport={transport}
           pairedSpots={pairedSpots}
           settings={settings}
         />
-      ) : (
+      ) : connected ? null : ( // unpaired: the focus effect is already navigating
         <AppText center size={13} color={colors.textMuted} style={styles.screenHint}>
-          {!connected
-            ? busy
-              ? "Connecting to the central unit…"
-              : connection === "error"
-                ? `${connectionError ?? "Connection failed"} — tap the status in the header to retry`
-                : "Not connected — tap the status in the header to connect"
-            : "Pair your targets first — open Pairing from the central unit menu"}
+          {busy
+            ? "Connecting to the central unit…"
+            : connection === "error"
+              ? `${connectionError ?? "Connection failed"} — tap the status in the header to retry`
+              : "Not connected — tap the status in the header to connect"}
         </AppText>
       )}
     </View>

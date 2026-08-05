@@ -57,9 +57,12 @@ export const Header = ({ back, title = "ZoneDash" }: { back?: boolean; title?: s
 
   const disconnect = () => {
     setDisconnectAsk(false);
+    // Drop the link BEFORE popping: home redirects to Pairing while connected
+    // and unpaired, so it must regain focus already disconnected — otherwise
+    // the redirect would bounce right back here.
+    transport.disconnect().catch(() => {});
     // A drop invalidates any pushed screen's context — land back on home.
     if (back) navigation.popToTop();
-    transport.disconnect().catch(() => {});
   };
 
   return (
