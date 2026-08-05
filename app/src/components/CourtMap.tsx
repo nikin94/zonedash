@@ -202,7 +202,7 @@ export const CourtMap = ({
           hitSlop={HIT_SLOP}
           testID={`spot-${i}-${spots[i]}`}
           accessibilityLabel={`${SPOT_NAMES[i]} spot, ${A11Y_STATE[spots[i]]}`}
-          accessibilityState={{ selected: spots[i] !== "off" }}
+          accessibilityState={{ disabled: !onPressSpot, selected: spots[i] !== "off" }}
           onPress={() => onPressSpot?.(i)}
           style={[
             styles.hit,

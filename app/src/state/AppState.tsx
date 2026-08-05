@@ -66,6 +66,13 @@ export const AppStateProvider = ({
         setConnectionError(
           e.state === "error" ? (e.reason ?? "connection failed") : null,
         );
+        // The paired layout lives on the brain and is built fresh each session
+        // (architecture.md) — this cache is only ever derived from a live
+        // pairing.done event. When the link leaves "connected", the cache must
+        // die with it: a reconnect may land on a rebooted or different central
+        // that has no map, and a stale layout here would let the exercise
+        // screen load a drill onto positions that don't exist.
+        if (e.state !== "connected") setPairedSpots([]);
       }
       if (e.kind === "pairing" && e.progress.done) {
         setPairedSpots(e.progress.boundSpots);

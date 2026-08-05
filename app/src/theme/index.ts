@@ -21,9 +21,12 @@ export const colors = {
   glow: "#fff", // floating-chrome shadow
 } as const;
 
-/** hex (#rrggbb) → rgba string, for styles that need an explicit alpha. */
+/** hex (#rgb or #rrggbb) → rgba string, for styles that need an explicit
+ *  alpha. Shorthand is expanded first — parsing "#fff" as one 6-digit number
+ *  would silently produce a garbage color. */
 export const alpha = (hex: string, a: number): string => {
-  const n = parseInt(hex.slice(1), 16);
+  const h = hex.length === 4 ? [...hex.slice(1)].map((c) => c + c).join("") : hex.slice(1);
+  const n = parseInt(h, 16);
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 };
 

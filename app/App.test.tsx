@@ -1,3 +1,4 @@
+import WheelPicker from "@quidone/react-native-wheel-picker";
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 
 import App from "./App";
@@ -88,6 +89,53 @@ test("Disconnect lives in the chip menu behind the confirm — No keeps the link
     await jest.runAllTimersAsync();
   });
   expect(screen.getByText("offline")).toBeTruthy();
+});
+
+// Regression: pairedSpots is an app-side cache of state that lives on the
+// brain and is built fresh each session. A reconnect can land on a rebooted
+// (or different) central with no map — the cache must not survive the link.
+test("a disconnect clears the paired layout — no phantom builder after reconnect", async () => {
+  await renderApp();
+  await connect();
+
+  // Pair two targets on the Pairing screen.
+  fireEvent.press(screen.getByTestId("status-chip"));
+  fireEvent.press(screen.getByText("Pairing"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+  fireEvent.press(screen.getByTestId("count-pill"));
+  const picker = screen.UNSAFE_getByType(WheelPicker);
+  act(() => picker.props.onValueChanged({ item: { value: 2, label: "2" } }));
+  fireEvent.press(screen.getByText("Start pairing"));
+  await act(() => jest.runAllTimersAsync());
+  fireEvent.press(screen.getByTestId("spot-0-available"));
+  await act(() => jest.runAllTimersAsync());
+  fireEvent.press(screen.getByTestId("spot-2-available"));
+  await act(() => jest.runAllTimersAsync());
+  expect(screen.getByText("Paired 2 targets")).toBeTruthy();
+
+  fireEvent.press(screen.getByTestId("header-back"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+  // Home now offers the drill config over the paired layout.
+  expect(screen.queryByText(/Pair your targets first/)).toBeNull();
+  expect(screen.getByText("Random")).toBeTruthy();
+
+  // Disconnect, then reconnect — the fresh session never paired anything.
+  fireEvent.press(screen.getByTestId("status-chip"));
+  fireEvent.press(screen.getByText("Disconnect"));
+  fireEvent.press(screen.getByText("Yes"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+  await connect();
+
+  // The stale layout must be gone — otherwise the builder would load a drill
+  // onto positions this central never bound.
+  expect(screen.getByText(/Pair your targets first/)).toBeTruthy();
+  expect(screen.queryByText("Random")).toBeNull();
 });
 
 test("the settings button opens the Settings screen — no timeout setting exists", async () => {
