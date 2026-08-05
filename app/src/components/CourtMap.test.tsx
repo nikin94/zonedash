@@ -101,3 +101,17 @@ test("active shows a spinner, bound shows a check, selected shows neither", () =
   expect(screen.getAllByTestId("dot-check")).toHaveLength(1);
   expect(screen.getByTestId("spot-2-selected")).toBeTruthy();
 });
+
+// Live-session flashes: a hit flash is green with a check (same glyph as
+// bound), a miss flash is red with a cross.
+test("hit flashes with a check, miss flashes with a cross", () => {
+  const spots = [...allOff];
+  spots[0] = "hit";
+  spots[1] = "miss";
+  render(<CourtMap spots={spots} />);
+
+  expect(screen.getByTestId("spot-0-hit")).toBeTruthy();
+  expect(screen.getAllByTestId("dot-check")).toHaveLength(1);
+  expect(screen.getByTestId("spot-1-miss")).toBeTruthy();
+  expect(screen.getAllByTestId("dot-cross")).toHaveLength(1);
+});

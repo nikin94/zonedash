@@ -26,6 +26,19 @@ test("tapping the status chip connects the mock transport", async () => {
   await connect();
   expect(screen.getByText("mock")).toBeTruthy(); // brief connected label
   expect(screen.getByText("Pairing")).toBeTruthy(); // sections are up
+  expect(screen.getByText("Drill")).toBeTruthy();
+  expect(screen.getByText("Session")).toBeTruthy();
+});
+
+test("the Session tab shows the live-session panel", async () => {
+  render(<App />);
+  await connect();
+
+  fireEvent.press(screen.getByText("Session"));
+  // No pairing yet — the panel gates on the paired layout like the builder.
+  expect(
+    screen.getByText(/Pair your targets first — a session runs/),
+  ).toBeTruthy();
 });
 
 test("disconnect goes through the confirm dialog — No keeps the link", async () => {

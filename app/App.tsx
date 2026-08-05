@@ -10,6 +10,7 @@ import { CustomPressable } from "./src/components/CustomPressable";
 import { CloseIcon, SlidersIcon } from "./src/components/Icons";
 import { DrillPanel } from "./src/screens/DrillPanel";
 import { PairingPanel } from "./src/screens/PairingPanel";
+import { SessionPanel } from "./src/screens/SessionPanel";
 import {
   DEFAULT_SETTINGS,
   SettingsPanel,
@@ -29,14 +30,14 @@ const CHIP_LABEL: Record<ConnectionState, string> = {
  * ZoneDash operator app. Talks to the central unit through the CentralTransport
  * seam — currently the in-app mock, later the real BLE implementation. This
  * screen owns the header (title, central-unit status chip, settings), the
- * connection, the Pair/Drill section switch, the drill settings, and the
- * paired layout lifted from pairing events; the live-session screen comes next.
+ * connection, the Pairing/Drill/Session section switch, the drill settings,
+ * and the paired layout lifted from pairing events.
  */
 const App = () => {
   const transport = useMemo(() => new MockCentralTransport(), []);
   const [connection, setConnection] = useState<ConnectionState>("disconnected");
   const [error, setError] = useState<string | null>(null);
-  const [section, setSection] = useState<"pair" | "drill">("pair");
+  const [section, setSection] = useState<"pair" | "drill" | "session">("pair");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState<DrillSettings>(DEFAULT_SETTINGS);
   // The header chip's only destructive action — confirmed before it runs.
@@ -151,25 +152,32 @@ const App = () => {
         {connected ? (
           <>
             <View style={styles.sectionRow}>
-              {(["pair", "drill"] as const).map((s) => (
+              {(
+                [
+                  { key: "pair", label: "Pairing" },
+                  { key: "drill", label: "Drill" },
+                  { key: "session", label: "Session" },
+                ] as const
+              ).map((s) => (
                 <CustomPressable
-                  key={s}
+                  key={s.key}
                   noFeedback
-                  accessibilityState={{ selected: section === s }}
-                  onPress={() => setSection(s)}
-                  style={[styles.section, section === s && styles.sectionActive]}
+                  accessibilityState={{ selected: section === s.key }}
+                  onPress={() => setSection(s.key)}
+                  style={[styles.section, section === s.key && styles.sectionActive]}
                 >
                   <AppText
                     weight="600"
-                    color={section === s ? colors.text : colors.textMuted}
+                    color={section === s.key ? colors.text : colors.textMuted}
                   >
-                    {s === "pair" ? "Pairing" : "Drill"}
+                    {s.label}
                   </AppText>
                 </CustomPressable>
               ))}
             </View>
-            {/* Both panels stay mounted — switching sections hides, not resets:
-                a pairing round or a half-built drill must survive a tab flip. */}
+            {/* All panels stay mounted — switching sections hides, not resets:
+                a pairing round, a half-built drill or a running session must
+                survive a tab flip. */}
             <View style={section === "pair" ? null : styles.hidden}>
               <PairingPanel transport={transport} />
             </View>
@@ -179,6 +187,9 @@ const App = () => {
                 pairedSpots={pairedSpots}
                 settings={settings}
               />
+            </View>
+            <View style={section === "session" ? null : styles.hidden}>
+              <SessionPanel transport={transport} pairedSpots={pairedSpots} />
             </View>
           </>
         ) : (

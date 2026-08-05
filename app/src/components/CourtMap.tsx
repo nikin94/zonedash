@@ -10,7 +10,7 @@ import {
 import { alpha, colors } from "../theme";
 import { AppText } from "./AppText";
 import { CustomPressable } from "./CustomPressable";
-import { CheckIcon } from "./Icons";
+import { CheckIcon, CrossIcon } from "./Icons";
 
 /** Visual state of one canonical spot on the map. */
 export type SpotVisual =
@@ -19,7 +19,9 @@ export type SpotVisual =
   | "active" // being prompted ("press here") — in-progress spinner, not a color
   | "confirm" // candidate tapped once, awaiting the confirm tap
   | "bound" // bound (this round / done) — green with a check mark
-  | "selected"; // a static pick (e.g. a path step in the drill builder)
+  | "selected" // a static pick (e.g. a path step in the drill builder)
+  | "hit" // live session: step resolved as a hit — green flash with a check
+  | "miss"; // live session: step resolved as a timeout miss — red flash with a cross
 
 /** Human names for the canonical spots, for prompts and screen readers. */
 export const SPOT_NAMES = [
@@ -71,6 +73,8 @@ const DOT_STYLE: Record<SpotVisual, { fill: string; ring: string }> = {
   confirm: { fill: colors.warning, ring: alpha(colors.border, 0) },
   bound: { fill: colors.success, ring: alpha(colors.border, 0) },
   selected: { fill: colors.accent, ring: alpha(colors.border, 0) },
+  hit: { fill: colors.success, ring: alpha(colors.border, 0) },
+  miss: { fill: colors.danger, ring: alpha(colors.border, 0) },
 };
 
 const FADE_MS = 200;
@@ -84,6 +88,8 @@ const A11Y_STATE: Record<SpotVisual, string> = {
   confirm: "awaiting confirm",
   bound: "bound",
   selected: "selected",
+  hit: "hit",
+  miss: "missed",
 };
 
 /**
@@ -147,13 +153,19 @@ const AnimatedDot = memo(({ visual }: { visual: SpotVisual }) => {
         ]}
       />
       {/* Glyphs sit above the fade overlay so they appear with the new state:
-          a spinner while the spot is prompted, a check once it is bound. */}
+          a spinner while the spot is prompted, a check on bound/hit, a cross
+          on a miss flash. */}
       {toRef.current === "active" && (
         <ActivityIndicator testID="dot-spinner" size="small" color={colors.text} />
       )}
-      {toRef.current === "bound" && (
+      {(toRef.current === "bound" || toRef.current === "hit") && (
         <View testID="dot-check" style={styles.dotGlyph}>
           <CheckIcon />
+        </View>
+      )}
+      {toRef.current === "miss" && (
+        <View testID="dot-cross" style={styles.dotGlyph}>
+          <CrossIcon />
         </View>
       )}
     </View>

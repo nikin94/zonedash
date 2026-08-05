@@ -37,6 +37,15 @@ export const CheckIcon = () => (
   </View>
 );
 
+/** A ✕ sized for the 38 px court dots (the miss flash) — dark on the fill,
+ *  like CheckIcon; CloseIcon is the bigger header variant. */
+export const CrossIcon = () => (
+  <View style={styles.crossBox} accessible={false}>
+    <View style={[styles.crossBar, styles.crossBarA]} />
+    <View style={[styles.crossBar, styles.crossBarB]} />
+  </View>
+);
+
 const styles = StyleSheet.create({
   slidersBox: {
     width: W,
@@ -49,15 +58,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.textMuted,
     justifyContent: "center",
   },
-  // Dark fill + light outline so the knob reads as a ring on the button's
-  // dark chrome instead of a solid white dot.
+  // Dark fill + outline matching the tracks, so the knob reads as a ring in
+  // the same tone as the rest of the icon.
   knob: {
     position: "absolute",
     width: KNOB,
     height: KNOB,
     borderRadius: KNOB / 2,
     borderWidth: 1,
-    borderColor: colors.text,
+    borderColor: colors.textMuted,
     backgroundColor: colors.background,
   },
   closeBox: {
@@ -99,6 +108,25 @@ const styles = StyleSheet.create({
     width: 12,
     left: 4,
     top: 7.5,
+    transform: [{ rotate: "-45deg" }],
+  },
+  crossBox: {
+    width: 12,
+    height: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  crossBar: {
+    position: "absolute",
+    width: 12,
+    height: 2.5,
+    borderRadius: 1.25,
+    backgroundColor: colors.background, // dark on the danger miss fill
+  },
+  crossBarA: {
+    transform: [{ rotate: "45deg" }],
+  },
+  crossBarB: {
     transform: [{ rotate: "-45deg" }],
   },
 });
