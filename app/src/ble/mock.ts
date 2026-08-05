@@ -125,6 +125,21 @@ export class MockCentralTransport implements CentralTransport {
     });
   }
 
+  async extendPairing(numTargets: number): Promise<void> {
+    this.assertConnected();
+    const p = this.pairing;
+    if (!p) throw new Error("no pairing round"); // never paired — use startPairing
+    const total = clampPositions(numTargets);
+    // Mirror PairingRound::extend: growth only, binds untouched.
+    if (total <= p.total) throw new Error("extend must grow the round");
+    p.total = total;
+    p.current = null;
+    this.session = "pairing"; // a completed round resumes
+    this.emitSession();
+    // Same shape as startPairing: the round waits for the next spot pick.
+    this.after(this.latencyMs, () => this.emitPairing(false));
+  }
+
   async loadDrill(config: DrillConfig): Promise<void> {
     this.assertConnected();
     this.drill = { ...config, numPositions: clampPositions(config.numPositions) };

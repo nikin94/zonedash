@@ -198,6 +198,14 @@ waits for the operator's next pick, and `awaitingConfirm` mirrors the two-tap
 confirm phase (`Tap::Await`), so the phone renders "press again to confirm"
 like the panel does.
 
+**Growing a layout is non-destructive.** The map is append-only, so adding
+targets never invalidates existing binds: `PairingRound::extend(N)` raises the
+round's target while keeping every bound pair, and the round resumes prompting
+for the extra slots (serial `extend N`, BLE `ExtendPairing`; on the phone the
+count-change dialog offers "Add K more" instead of a reset). Shrinking has no
+such shortcut — there is no way to know which bound target should go — so it
+stays a full re-pair.
+
 **Drills operate on positions, not MACs.** The operator authors "corner → mid →
 corner…" in position terms; the central unit translates to MACs via the map. So a
 drill config is decoupled from hardware — swap a broken target for a fresh one,
@@ -296,6 +304,7 @@ swaps the transport later.
 |---------|------|----------------|
 | `pair N` | Open a pairing round for N targets; each bind then waits for a `spot` pick | Control: StartPairing (N byte) |
 | `spot S` | Pairing: pick canonical court spot S (0..7) for the next bind — the panel lights it, a two-tap confirm binds → `MAC→position` map | Control: SelectPairSpot (spot byte) |
+| `extend N` | Pairing: grow the round to N total, keeping every bound target (`PairingRound::extend()`); the round resumes waiting for a `spot` pick | Control: ExtendPairing (N byte) |
 | `undo` | Pairing: unbind the last bound slot and re-prompt it (`PairingRound::undo_last()`) | (dev-only for now) |
 | `nodes` | List paired targets: `position, MAC, fw, batt_mv, last_rssi` | Status read |
 | `drill N seq…` | Load a drill: N active targets + sequence (e.g. `drill 4 rand` or `drill 6 0,3,5,1,…`) + params | Control: config |

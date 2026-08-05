@@ -100,6 +100,53 @@ static void test_tap_before_begin() {
 }
 
 // undo_last() unbinds the most recent slot and re-prompts it (operator fix).
+// extend() grows a completed round without touching existing binds.
+static void test_extend_keeps_binds() {
+  PairingRound p;
+  p.begin(2);
+  bind(p, A);
+  bind(p, B);
+  ZD_CHECK(p.done());
+  ZD_CHECK(p.extend(4)); // 2 bound + 2 more to go
+  ZD_CHECK(p.active());
+  ZD_CHECK(!p.done());
+  ZD_EQ(p.current_prompt(), 2);
+  ZD_EQ(p.map().position_of(A), 0); // existing binds untouched
+  ZD_EQ(p.map().position_of(B), 1);
+  bind(p, C);
+  bind(p, D);
+  ZD_CHECK(p.done());
+  ZD_EQ(p.map().count, 4);
+  ZD_EQ(p.map().position_of(D), 3);
+}
+
+// extend() also works mid-round, and refuses shrink / no-op / idle / overflow.
+static void test_extend_guards() {
+  PairingRound p;
+  ZD_CHECK(!p.extend(4)); // idle — nothing to extend
+
+  p.begin(3);
+  bind(p, A);
+  ZD_CHECK(p.extend(5));            // mid-round grow is fine
+  ZD_EQ(p.current_prompt(), 1);     // prompt position unchanged
+  ZD_CHECK(!p.extend(5));           // no-op refused
+  ZD_CHECK(!p.extend(2));           // shrink refused
+  ZD_CHECK(p.extend(200));          // clamped to MAX_TARGETS
+  for (uint8_t i = 1; i < MAX_TARGETS; ++i) bind(p, Mac{{i, 9, 9, 9, 9, i}});
+  ZD_CHECK(p.done());
+  ZD_EQ(p.map().count, MAX_TARGETS);
+}
+
+// A pending (unconfirmed) candidate does not survive an extend.
+static void test_extend_clears_candidate() {
+  PairingRound p;
+  p.begin(1);
+  bind(p, A);
+  p.extend(2);
+  ZD_CHECK(p.on_tap(B) == PairingRound::Tap::Await); // fresh two-tap cycle
+  ZD_CHECK(p.on_tap(B) == PairingRound::Tap::Bound);
+}
+
 static void test_undo() {
   PairingRound p;
   p.begin(3);
@@ -155,6 +202,9 @@ int main() {
   ZD_RUN(test_ignores_retap);
   ZD_RUN(test_done);
   ZD_RUN(test_tap_before_begin);
+  ZD_RUN(test_extend_keeps_binds);
+  ZD_RUN(test_extend_guards);
+  ZD_RUN(test_extend_clears_candidate);
   ZD_RUN(test_undo);
   ZD_RUN(test_clamp);
   ZD_RUN(test_restart);

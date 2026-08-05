@@ -141,6 +141,19 @@ ParsedCommand parse_command(const std::string& line) {
     c.num_positions = static_cast<uint8_t>(n);
     return c;
   }
+  if (verb == "extend") {
+    c.type = CmdType::Extend;
+    // Grow the round to N total, keeping existing binds (PairingRound::extend).
+    // Whether N actually exceeds the current bound count is round state — the
+    // caller checks it; the parser only validates the range.
+    uint32_t n;
+    if (t.size() != 2 || !parse_uint(t[1], n) || n < 2 || n > MAX_TARGETS) {
+      c.error = "usage: extend N (2.." + std::to_string(MAX_TARGETS) + ")";
+      return c;
+    }
+    c.num_positions = static_cast<uint8_t>(n);
+    return c;
+  }
   if (verb == "spot") {
     c.type = CmdType::Spot;
     uint32_t s;

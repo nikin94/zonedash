@@ -50,6 +50,13 @@ class PairingRound {
   // nothing is bound. Returns the slot now prompted, or -1 if idle.
   int undo_last();
 
+  // Grow a round to `num_positions` slots WITHOUT discarding existing binds —
+  // the map is append-only, so adding targets never invalidates bound pairs.
+  // Clamped to MAX_TARGETS; shrinking is refused (which bound slot would go?)
+  // as is extending an idle round (nothing to extend — use begin()). Returns
+  // true if the target count changed.
+  bool extend(uint8_t num_positions);
+
   bool active() const { return target_ > 0 && map_.count < target_; }
   bool done() const { return target_ > 0 && map_.count >= target_; }
   // Slot awaiting a bind (== bound count while running), or -1 when done/idle.

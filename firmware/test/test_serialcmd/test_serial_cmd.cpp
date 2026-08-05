@@ -35,6 +35,19 @@ static void test_pair() {
   ZD_CHECK(!parse_command("pair x").ok()); // not a number
 }
 
+// `extend N` grows the round keeping binds (PairingRound::extend / BLE ExtendPairing).
+static void test_extend() {
+  auto c = parse_command("extend 6");
+  ZD_CHECK(c.type == CmdType::Extend);
+  ZD_CHECK(c.ok());
+  ZD_EQ(c.num_positions, 6);
+  ZD_CHECK(parse_command("EXTEND 3").ok());  // case-insensitive
+  ZD_CHECK(!parse_command("extend").ok());   // missing N
+  ZD_CHECK(!parse_command("extend 1").ok()); // grow target must be >= 2
+  ZD_CHECK(!parse_command("extend 9").ok()); // > MAX_TARGETS
+  ZD_CHECK(!parse_command("extend x").ok()); // not a number
+}
+
 // `spot S` picks the court spot for the next bind (BLE: SelectPairSpot).
 static void test_spot() {
   auto c = parse_command("spot 5");
@@ -141,6 +154,7 @@ int main() {
   ZD_RUN(test_empty_and_whitespace);
   ZD_RUN(test_simple_verbs);
   ZD_RUN(test_pair);
+  ZD_RUN(test_extend);
   ZD_RUN(test_spot);
   ZD_RUN(test_case_and_whitespace_tolerant);
   ZD_RUN(test_unknown);

@@ -43,6 +43,16 @@ PairingRound::Tap PairingRound::on_tap(const Mac& mac) {
   return Tap::Bound;
 }
 
+bool PairingRound::extend(uint8_t num_positions) {
+  if (target_ == 0) return false; // idle round — nothing to extend
+  uint8_t n = num_positions;
+  if (n > MAX_TARGETS) n = MAX_TARGETS;
+  if (n <= target_) return false; // shrink / no-op refused
+  target_ = n;
+  have_candidate_ = false;
+  return true;
+}
+
 int PairingRound::undo_last() {
   if (map_.count > 0) {
     --map_.count;
