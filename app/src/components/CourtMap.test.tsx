@@ -87,3 +87,17 @@ test("a mass change (Start pairing) fades each dot exactly once, natively driven
   expect(timing).toHaveBeenCalledTimes(8);
   expect(screen.getAllByTestId(/spot-\d-available/)).toHaveLength(8);
 });
+
+// State glyphs: the prompted spot carries a spinner (in-progress, not a
+// color), a bound spot carries a check mark; static picks carry neither.
+test("active shows a spinner, bound shows a check, selected shows neither", () => {
+  const spots = [...allOff];
+  spots[0] = "active";
+  spots[1] = "bound";
+  spots[2] = "selected";
+  render(<CourtMap spots={spots} />);
+
+  expect(screen.getAllByTestId("dot-spinner")).toHaveLength(1);
+  expect(screen.getAllByTestId("dot-check")).toHaveLength(1);
+  expect(screen.getByTestId("spot-2-selected")).toBeTruthy();
+});

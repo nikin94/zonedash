@@ -1,10 +1,14 @@
 import WheelPicker from "@quidone/react-native-wheel-picker";
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import type { PairingProgress } from "../ble/contract";
 import type { CentralTransport } from "../ble/transport";
-import { CourtMap, SPOT_NAMES, type SpotVisual } from "./CourtMap";
+import { AppText } from "../components/AppText";
+import { ConfirmDialog } from "../components/ConfirmDialog";
+import { CustomPressable } from "../components/CustomPressable";
+import { CourtMap, SPOT_NAMES, type SpotVisual } from "../components/CourtMap";
+import { colors, glowShadow } from "../theme";
 
 /** Wheel choices for "how many targets". */
 const WHEEL_DATA = Array.from({ length: 8 }, (_, i) => ({
@@ -19,6 +23,13 @@ const WHEEL_W = 48; // barely wider than the pill — single digits need no more
 const WHEEL_PAD_V = 6; // matches the button's small vertical padding
 const PILL_H = 28;
 
+// Fixed footprints for the court-centre info block, so phase changes never
+// shift the layout: the tallest status text is 3 lines, the error is 1 line,
+// and every action row is one button tall (empty slot when Undo is hidden).
+const TEXT_SLOT_H = 60; // 3 lines at lineHeight 20
+const ERROR_SLOT_H = 18;
+const BUTTON_H = 48; // fingertip-sized; explicit so hidden slots match exactly
+
 /**
  * Pairing round UI (display-ui.md screen 2, phone side). The count wheel only
  * sets HOW MANY targets get bound; WHERE each one stands is chosen during the
@@ -30,7 +41,7 @@ const PILL_H = 28;
  * No pairing state is owned here — the central unit drives the round; this
  * only mirrors its Status events.
  */
-export function PairingPanel({ transport }: { transport: CentralTransport }) {
+export const PairingPanel = ({ transport }: { transport: CentralTransport }) => {
   const [total, setTotal] = useState(8);
   const [wheelOpen, setWheelOpen] = useState(false);
   // A new count picked AFTER a completed round — held until the operator
@@ -152,40 +163,46 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
   return (
     <View style={styles.panel}>
       <View style={styles.headerRow}>
-        <Text style={styles.heading}>Targets</Text>
+        <AppText size={12} color={colors.textSecondary} style={styles.heading}>
+          Targets
+        </AppText>
         {/* The wheel drops down as an absolute overlay anchored on the pill, so
             the selected item sits exactly where the pill is. */}
         <View style={styles.pillAnchor}>
-          <Pressable
-            testID="count-pill"
-            accessibilityRole="button"
-            accessibilityLabel={`${total} targets, tap to change`}
+          <CustomPressable
+            noFeedback
             disabled={running || confirming}
+            testID="count-pill"
+            accessibilityLabel={`${total} targets, tap to change`}
             onPress={() => setWheelOpen((v) => !v)}
             style={[styles.pill, wheelOpen && styles.pillActive]}
           >
-            <Text style={[styles.pillLabel, wheelOpen && styles.pillLabelActive]}>
+            <AppText
+              weight="600"
+              color={wheelOpen ? colors.accentText : colors.text}
+            >
               {total}
-            </Text>
-          </Pressable>
+            </AppText>
+          </CustomPressable>
           {wheelOpen && !running && (
             <>
               {/* Oversized invisible backdrop: any tap outside the dropdown
                   dismisses it, even when the settled value didn't change. */}
-              <Pressable
+              <CustomPressable
+                noFeedback
                 testID="wheel-backdrop"
                 accessibilityLabel="Close count picker"
-                style={styles.wheelBackdrop}
                 onPress={() => setWheelOpen(false)}
+                style={styles.wheelBackdrop}
               />
               <View testID="count-wheel" style={styles.wheelDropdown}>
                 <WheelPicker
-                  data={WHEEL_DATA}
                   value={total}
-                  onValueChanged={({ item }) => onWheelValue(item.value)}
                   itemHeight={WHEEL_ITEM_H}
                   visibleItemCount={WHEEL_VISIBLE}
                   width={WHEEL_W}
+                  data={WHEEL_DATA}
+                  onValueChanged={({ item }) => onWheelValue(item.value)}
                   itemTextStyle={styles.wheelText}
                   overlayItemStyle={styles.wheelOverlay}
                 />
@@ -199,129 +216,123 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
         {confirming ? (
           pendingTotal! > (progress?.total ?? 0) ? (
             // Growing keeps every bound target — no destructive reset needed.
-            <View testID="count-extend" style={styles.confirmBox}>
-              <Text style={styles.confirmTitle}>
-                Add {pendingTotal! - (progress?.total ?? 0)} more{" "}
-                {pendingTotal! - (progress?.total ?? 0) === 1
+            <ConfirmDialog
+              testID="count-extend"
+              title={`Add ${pendingTotal! - (progress?.total ?? 0)} more ${
+                pendingTotal! - (progress?.total ?? 0) === 1
                   ? "target"
-                  : "targets"}
-                ?
-              </Text>
-              <Text style={styles.confirmBody}>
-                The {progress?.total} paired {progress?.total === 1 ? "target stays" : "targets stay"}
-              </Text>
-              <View style={styles.confirmRow}>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => setPendingTotal(null)}
-                  style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-                >
-                  <Text style={styles.buttonLabel}>No</Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={extendRound}
-                  style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-                >
-                  <Text style={styles.buttonLabel}>Add</Text>
-                </Pressable>
-              </View>
-            </View>
+                  : "targets"
+              }?`}
+              body={`The ${progress?.total} paired ${
+                progress?.total === 1 ? "target stays" : "targets stay"
+              }`}
+              actions={[
+                { label: "No", onPress: () => setPendingTotal(null) },
+                { label: "Add", onPress: extendRound },
+              ]}
+            />
           ) : (
-            <View testID="count-confirm" style={styles.confirmBox}>
-              <Text style={styles.confirmTitle}>
-                Change target count to {pendingTotal}?
-              </Text>
-              <Text style={styles.confirmBody}>This resets the pairing</Text>
-              <View style={styles.confirmRow}>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => setPendingTotal(null)}
-                  style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-                >
-                  <Text style={styles.buttonLabel}>No</Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={confirmCountChange}
-                  style={({ pressed }) => [
-                    styles.button,
-                    styles.buttonDanger,
-                    pressed && styles.buttonPressed,
-                  ]}
-                >
-                  <Text style={styles.buttonLabel}>Yes</Text>
-                </Pressable>
-              </View>
-            </View>
+            <ConfirmDialog
+              testID="count-confirm"
+              title={`Change target count to ${pendingTotal}?`}
+              body="This resets the pairing"
+              actions={[
+                { label: "No", onPress: () => setPendingTotal(null) },
+                { label: "Yes", danger: true, onPress: confirmCountChange },
+              ]}
+            />
           )
         ) : (
           <>
-            {choosing ? (
-              <Text style={styles.prompt}>
-                Tap the map where target {boundCount + 1} of {progress.total} stands
-              </Text>
-            ) : prompting ? (
-              <Text style={styles.prompt}>
-                {progress.awaitingConfirm
-                  ? "Press again to confirm"
-                  : `Press the ${SPOT_NAMES[progress.currentSpot!]} target (${
-                      boundCount + 1
-                    }/${progress.total})`}
-              </Text>
-            ) : running ? (
-              <Text style={styles.prompt}>Starting pairing…</Text>
-            ) : done ? (
-              <Text style={styles.doneText}>
-                Paired {progress.total} {progress.total === 1 ? "target" : "targets"}
-              </Text>
-            ) : (
-              <Text style={styles.hint}>
-                Pick a count, then place each target during pairing
-              </Text>
-            )}
-
-            {error !== null && <Text style={styles.error}>{error}</Text>}
-
-            <View style={styles.actionRow}>
-              {/* Undo is only offered between binds (choosing) or after done —
-                  never mid-prompt, matching the central's refusal. */}
-              {(choosing || done) && boundCount > 0 && (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Undo last bind"
-                  onPress={undo}
-                  style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+            {/* Every slot below has a FIXED footprint — the text area, the
+                error line, and both button rows keep their size across all
+                round phases, so nothing shifts as states change. */}
+            <View testID="status-slot" style={styles.textSlot}>
+              {choosing ? (
+                <AppText center size={16} weight="600" style={styles.slotText}>
+                  Tap the map where target {boundCount + 1} of {progress.total} stands
+                </AppText>
+              ) : prompting ? (
+                <AppText center size={16} weight="600" style={styles.slotText}>
+                  {progress.awaitingConfirm
+                    ? "Press again to confirm"
+                    : `Press the ${SPOT_NAMES[progress.currentSpot!]} target (${
+                        boundCount + 1
+                      }/${progress.total})`}
+                </AppText>
+              ) : running ? (
+                <AppText center size={16} weight="600" style={styles.slotText}>
+                  Starting pairing…
+                </AppText>
+              ) : done ? (
+                <AppText
+                  center
+                  size={15}
+                  weight="600"
+                  color={colors.success}
+                  style={styles.slotText}
                 >
-                  <Text style={styles.buttonLabel}>Undo</Text>
-                </Pressable>
-              )}
-              {running ? (
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={cancel}
-                  style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-                >
-                  <Text style={styles.buttonLabel}>Cancel</Text>
-                </Pressable>
+                  Paired {progress.total} {progress.total === 1 ? "target" : "targets"}
+                </AppText>
               ) : (
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={start}
-                  style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+                <AppText
+                  center
+                  size={13}
+                  color={colors.textMuted}
+                  style={styles.slotText}
                 >
-                  <Text style={styles.buttonLabel}>
-                    {done ? "Re-pair" : "Start pairing"}
-                  </Text>
-                </Pressable>
+                  Pick a count, then place each target during pairing
+                </AppText>
               )}
+            </View>
+
+            <View testID="error-slot" style={styles.errorSlot}>
+              {error !== null && (
+                <AppText center size={13} numberOfLines={1} color={colors.danger}>
+                  {error}
+                </AppText>
+              )}
+            </View>
+
+            {/* Actions stack vertically — primary on top, Undo always at the
+                very bottom — so the block reads top-to-bottom in one place. */}
+            <View style={styles.actionCol}>
+              {running ? (
+                <CustomPressable onPress={cancel} style={styles.button}>
+                  <AppText center size={16} weight="600">
+                    Cancel
+                  </AppText>
+                </CustomPressable>
+              ) : (
+                <CustomPressable onPress={start} style={styles.button}>
+                  <AppText center size={16} weight="600">
+                    {done ? "Re-pair" : "Start pairing"}
+                  </AppText>
+                </CustomPressable>
+              )}
+              {/* Undo is only offered between binds (choosing) or after done —
+                  never mid-prompt, matching the central's refusal. The slot
+                  keeps the row's height when the button is hidden. */}
+              <View testID="undo-slot" style={styles.undoSlot}>
+                {(choosing || done) && boundCount > 0 && (
+                  <CustomPressable
+                    accessibilityLabel="Undo last bind"
+                    onPress={undo}
+                    style={styles.button}
+                  >
+                    <AppText center size={16} weight="600">
+                      Undo
+                    </AppText>
+                  </CustomPressable>
+                )}
+              </View>
             </View>
           </>
         )}
       </CourtMap>
     </View>
   );
-}
+};
 
 const styles = StyleSheet.create({
   panel: {
@@ -335,13 +346,12 @@ const styles = StyleSheet.create({
     gap: 10,
     zIndex: 10, // the wheel dropdown must overlay the map below
   },
-  actionRow: {
-    flexDirection: "row",
+  actionCol: {
+    alignItems: "stretch",
+    alignSelf: "stretch",
     gap: 10,
   },
   heading: {
-    color: "#a1a1aa",
-    fontSize: 12,
     letterSpacing: 2,
     textTransform: "uppercase",
   },
@@ -354,22 +364,14 @@ const styles = StyleSheet.create({
     height: PILL_H,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#3f3f46",
+    borderColor: colors.border,
     paddingHorizontal: 12,
     alignItems: "center",
     justifyContent: "center",
   },
   pillActive: {
-    borderColor: "#818cf8",
-    backgroundColor: "#1e1b4b",
-  },
-  pillLabel: {
-    color: "#fafafa",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  pillLabelActive: {
-    color: "#e0e7ff",
+    borderColor: colors.accent,
+    backgroundColor: colors.accentSurface,
   },
   wheelBackdrop: {
     // Far-oversized invisible catcher — the panel doesn't clip, so this covers
@@ -390,90 +392,53 @@ const styles = StyleSheet.create({
     paddingVertical: WHEEL_PAD_V,
     // Button-matched chrome: black fill, same border and full rounding, with a
     // soft white glow so the digits separate from the dark background.
-    backgroundColor: "#0a0a0a",
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: "#3f3f46",
+    borderColor: colors.border,
     borderRadius: 999,
     overflow: "hidden",
-    elevation: 8, // Android stacking
-    shadowColor: "#fff",
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 0 },
+    ...glowShadow,
   },
+  // WheelPicker's itemTextStyle is a third-party style prop — AppText (and its
+  // size/color props) can't reach inside the lib's items.
   wheelText: {
-    color: "#fafafa",
+    color: colors.text,
     fontSize: 18,
   },
   wheelOverlay: {
-    backgroundColor: "#27272a",
+    backgroundColor: colors.surfaceAlt,
     borderRadius: 8,
   },
-  prompt: {
-    color: "#fafafa",
-    fontSize: 16,
-    fontWeight: "600",
-    textAlign: "center",
-    marginBottom: 16,
+  // Fixed-height slots: their size never depends on which child (if any) is
+  // rendered, so the info block can't jump between phases.
+  textSlot: {
+    alignSelf: "stretch",
+    height: TEXT_SLOT_H,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  hint: {
-    color: "#71717a",
-    fontSize: 13,
-    textAlign: "center",
-    marginBottom: 16,
+  errorSlot: {
+    height: ERROR_SLOT_H,
+    marginBottom: 8,
+    justifyContent: "center",
   },
-  doneText: {
-    color: "#34d399",
-    fontSize: 15,
-    fontWeight: "600",
-    textAlign: "center",
-    marginBottom: 16,
+  undoSlot: {
+    height: BUTTON_H,
+    alignSelf: "stretch",
   },
-  error: {
-    color: "#f87171",
-    fontSize: 13,
-    textAlign: "center",
-    marginBottom: 12,
+  // Shared by every status-slot text: the fixed slot height assumes this
+  // lineHeight regardless of which text (and size) is showing.
+  slotText: {
+    lineHeight: 20,
   },
-  // Fingertip-sized action buttons (~48 px tall).
   button: {
+    height: BUTTON_H,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#3f3f46",
-    backgroundColor: "#0a0a0a",
+    borderColor: colors.border,
+    backgroundColor: colors.background,
     paddingHorizontal: 32,
-    paddingVertical: 14,
-  },
-  buttonDanger: {
-    borderColor: "#7f1d1d",
-  },
-  buttonPressed: {
-    backgroundColor: "#18181b",
-  },
-  buttonLabel: {
-    color: "#fafafa",
-    fontSize: 16,
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  confirmBox: {
     alignItems: "center",
-    gap: 8,
-  },
-  confirmTitle: {
-    color: "#fafafa",
-    fontSize: 16,
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  confirmBody: {
-    color: "#a1a1aa",
-    fontSize: 13,
-    textAlign: "center",
-    marginBottom: 8,
-  },
-  confirmRow: {
-    flexDirection: "row",
-    gap: 12,
+    justifyContent: "center",
   },
 });

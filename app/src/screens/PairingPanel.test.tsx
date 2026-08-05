@@ -326,3 +326,45 @@ test("shows the net side for orientation", async () => {
   render(<PairingPanel transport={t} />);
   expect(screen.getByText("NET")).toBeTruthy();
 });
+
+// Regression: the court-centre info block must keep a fixed footprint — the
+// status text, error line, and Undo row live in always-mounted fixed-height
+// slots, so phase changes can't shift the label or the buttons around.
+test("info-block slots stay mounted through every round phase", async () => {
+  const t = await connectedTransport();
+  render(<PairingPanel transport={t} />);
+
+  const expectSlots = () => {
+    expect(screen.getByTestId("status-slot")).toBeTruthy();
+    expect(screen.getByTestId("error-slot")).toBeTruthy();
+    expect(screen.getByTestId("undo-slot")).toBeTruthy();
+  };
+
+  expectSlots(); // idle
+
+  fireEvent.press(screen.getByText("Start pairing"));
+  await act(() => jest.runAllTimersAsync());
+  expectSlots(); // choosing (no Undo button, but its slot holds the space)
+  expect(screen.queryByText("Undo")).toBeNull();
+
+  fireEvent.press(screen.getByTestId("spot-0-available"));
+  await act(() => jest.advanceTimersByTimeAsync(0));
+  expectSlots(); // prompting
+
+  await act(() => jest.advanceTimersByTimeAsync(50));
+  expectSlots(); // awaiting confirm
+
+  await act(() => jest.runAllTimersAsync());
+  fireEvent.press(screen.getByTestId("spot-2-available"));
+  await act(() => jest.runAllTimersAsync());
+  // Later binds: keep driving until the round completes.
+  while (screen.queryByText(/Tap the map where target/) !== null) {
+    const next = screen.queryAllByTestId(/spot-\d-available/)[0];
+    if (!next) break;
+    fireEvent.press(next);
+    await act(() => jest.runAllTimersAsync());
+  }
+  expect(screen.getByText(/Paired \d/)).toBeTruthy();
+  expectSlots(); // done — Undo button present inside its slot
+  expect(screen.getByText("Undo")).toBeTruthy();
+});

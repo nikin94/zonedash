@@ -1,20 +1,25 @@
 import { memo, useLayoutEffect, useRef, type ReactNode } from "react";
 import {
+  ActivityIndicator,
   Animated,
   Dimensions,
-  Pressable,
   StyleSheet,
-  Text,
   View,
 } from "react-native";
+
+import { alpha, colors } from "../theme";
+import { AppText } from "./AppText";
+import { CustomPressable } from "./CustomPressable";
+import { CheckIcon } from "./Icons";
 
 /** Visual state of one canonical spot on the map. */
 export type SpotVisual =
   | "off" // faint outline — a potential location, nothing assigned
   | "available" // pairing round waiting for the operator to pick this (or any) spot
-  | "active" // being prompted ("press here")
+  | "active" // being prompted ("press here") — in-progress spinner, not a color
   | "confirm" // candidate tapped once, awaiting the confirm tap
-  | "bound"; // bound (this round / done)
+  | "bound" // bound (this round / done) — green with a check mark
+  | "selected"; // a static pick (e.g. a path step in the drill builder)
 
 /** Human names for the canonical spots, for prompts and screen readers. */
 export const SPOT_NAMES = [
@@ -47,33 +52,38 @@ const SPOT_XY = [
   { x: 0, y: 0.5 },
 ] as const;
 
-// Nearly full-screen width (small side margins), capped for tablets; a half
+// Wide but with breathing room at the sides, capped for tablets; a half
 // court is slightly longer than wide.
-const MAP_W = Math.min(Dimensions.get("window").width - 32, 380);
+const MAP_W = Math.min(Dimensions.get("window").width - 56, 340);
 const MAP_H = Math.round(MAP_W * 1.09);
-const HIT = 48; // pressable hit box; the visible dot is smaller
+const HIT = 52; // pressable hit box; the visible dot is smaller
 const HIT_SLOP = 8; // extra forgiveness around each spot
+const DOT = 38; // visible dot diameter — one size for every state
 
-// Fill + outline per state, as rgba so Animated can interpolate between them.
-// "off" fades to a zero-alpha fill (outline only) instead of snapping away.
+// Fill + outline per state. "off" fades to a zero-alpha fill (outline only)
+// instead of snapping away. "active" is deliberately NOT a color of its own:
+// the in-progress prompt is communicated by the spinner inside the dot, on a
+// neutral dark fill.
 const DOT_STYLE: Record<SpotVisual, { fill: string; ring: string }> = {
-  off: { fill: "rgba(63,63,70,0)", ring: "rgba(63,63,70,1)" },
-  available: { fill: "rgba(82,82,91,1)", ring: "rgba(63,63,70,0)" },
-  active: { fill: "rgba(129,140,248,1)", ring: "rgba(63,63,70,0)" },
-  confirm: { fill: "rgba(251,191,36,1)", ring: "rgba(63,63,70,0)" },
-  bound: { fill: "rgba(52,211,153,1)", ring: "rgba(63,63,70,0)" },
+  off: { fill: alpha(colors.border, 0), ring: colors.border },
+  available: { fill: colors.dim, ring: alpha(colors.border, 0) },
+  active: { fill: colors.surface, ring: colors.border },
+  confirm: { fill: colors.warning, ring: alpha(colors.border, 0) },
+  bound: { fill: colors.success, ring: alpha(colors.border, 0) },
+  selected: { fill: colors.accent, ring: alpha(colors.border, 0) },
 };
 
 const FADE_MS = 200;
 
-// Screen-reader wording per state — the label must carry it, since color is
-// the only visual differentiator between bound/available/confirm.
+// Screen-reader wording per state — the label must carry it, since fill and
+// glyph are the only visual differentiators between the states.
 const A11Y_STATE: Record<SpotVisual, string> = {
   off: "empty",
   available: "available",
   active: "press here",
   confirm: "awaiting confirm",
   bound: "bound",
+  selected: "selected",
 };
 
 /**
@@ -91,11 +101,7 @@ const A11Y_STATE: Record<SpotVisual, string> = {
  * memo: the panel re-renders on every Status event (prompt, confirm,
  * session); a dot re-renders only when ITS visual actually changes.
  */
-const AnimatedDot = memo(function AnimatedDot({
-  visual,
-}: {
-  visual: SpotVisual;
-}) {
+const AnimatedDot = memo(({ visual }: { visual: SpotVisual }) => {
   const fromRef = useRef(visual);
   const toRef = useRef(visual);
   const overlayRef = useRef(new Animated.Value(0));
@@ -140,6 +146,16 @@ const AnimatedDot = memo(function AnimatedDot({
           },
         ]}
       />
+      {/* Glyphs sit above the fade overlay so they appear with the new state:
+          a spinner while the spot is prompted, a check once it is bound. */}
+      {toRef.current === "active" && (
+        <ActivityIndicator testID="dot-spinner" size="small" color={colors.text} />
+      )}
+      {toRef.current === "bound" && (
+        <View testID="dot-check" style={styles.dotGlyph}>
+          <CheckIcon />
+        </View>
+      )}
     </View>
   );
 });
@@ -150,7 +166,7 @@ const AnimatedDot = memo(function AnimatedDot({
  * `children` render centered inside the court — the perimeter is all dots, so
  * the middle is free real estate for the round's status text and action.
  */
-export function CourtMap({
+export const CourtMap = ({
   spots,
   onPressSpot,
   children,
@@ -158,44 +174,44 @@ export function CourtMap({
   spots: SpotVisual[]; // length 8, canonical order
   onPressSpot?: (index: number) => void;
   children?: ReactNode;
-}) {
-  return (
-    <View style={styles.wrap}>
-      <View style={styles.netRow}>
-        <View style={styles.netLine} />
-        <Text style={styles.netLabel}>NET</Text>
-        <View style={styles.netLine} />
-      </View>
-      <View style={styles.court}>
-        {children != null && (
-          // box-none: the centre content is interactive, the empty area around
-          // it stays transparent to touches so the perimeter spots keep working.
-          <View pointerEvents="box-none" style={styles.centre}>
-            {children}
-          </View>
-        )}
-        {SPOT_XY.map((p, i) => (
-          <Pressable
-            key={i}
-            testID={`spot-${i}-${spots[i]}`}
-            accessibilityRole="button"
-            accessibilityLabel={`${SPOT_NAMES[i]} spot, ${A11Y_STATE[spots[i]]}`}
-            accessibilityState={{ selected: spots[i] !== "off" }}
-            disabled={!onPressSpot}
-            onPress={() => onPressSpot?.(i)}
-            hitSlop={HIT_SLOP}
-            style={[
-              styles.hit,
-              { left: p.x * (MAP_W - HIT), top: p.y * (MAP_H - HIT) },
-            ]}
-          >
-            <AnimatedDot visual={spots[i]} />
-          </Pressable>
-        ))}
-      </View>
+}) => (
+  <View style={styles.wrap}>
+    <View style={styles.netRow}>
+      <View style={styles.netLine} />
+      <AppText size={10} color={colors.textMuted} style={styles.netLabel}>
+        NET
+      </AppText>
+      <View style={styles.netLine} />
     </View>
-  );
-}
+    <View style={styles.court}>
+      {children != null && (
+        // box-none: the centre content is interactive, the empty area around
+        // it stays transparent to touches so the perimeter spots keep working.
+        <View pointerEvents="box-none" style={styles.centre}>
+          {children}
+        </View>
+      )}
+      {SPOT_XY.map((p, i) => (
+        <CustomPressable
+          key={i}
+          noFeedback
+          disabled={!onPressSpot}
+          hitSlop={HIT_SLOP}
+          testID={`spot-${i}-${spots[i]}`}
+          accessibilityLabel={`${SPOT_NAMES[i]} spot, ${A11Y_STATE[spots[i]]}`}
+          accessibilityState={{ selected: spots[i] !== "off" }}
+          onPress={() => onPressSpot?.(i)}
+          style={[
+            styles.hit,
+            { left: p.x * (MAP_W - HIT), top: p.y * (MAP_H - HIT) },
+          ]}
+        >
+          <AnimatedDot visual={spots[i]} />
+        </CustomPressable>
+      ))}
+    </View>
+  </View>
+);
 
 const styles = StyleSheet.create({
   wrap: {
@@ -211,18 +227,16 @@ const styles = StyleSheet.create({
   netLine: {
     flex: 1,
     height: 2,
-    backgroundColor: "#3f3f46",
+    backgroundColor: colors.border,
   },
   netLabel: {
-    color: "#71717a",
-    fontSize: 10,
     letterSpacing: 2,
   },
   court: {
     width: MAP_W,
     height: MAP_H,
     borderWidth: 1,
-    borderColor: "#3f3f46",
+    borderColor: colors.border,
     borderRadius: 4,
   },
   centre: {
@@ -233,8 +247,9 @@ const styles = StyleSheet.create({
     right: 0,
     alignItems: "center",
     justifyContent: "center",
-    // Keep the centre content clear of the perimeter dots' hit boxes.
-    padding: HIT + 8,
+    // Keep the centre content well clear of the perimeter dots' hit boxes —
+    // breathing room so the info block never crowds the spots.
+    padding: HIT + 24,
   },
   hit: {
     position: "absolute",
@@ -245,14 +260,23 @@ const styles = StyleSheet.create({
   },
   // One size for every state — the active/confirm emphasis is color, not
   // scale, so idle and bound spots are just as easy to hit. The border is
-  // always present with a per-state color, so "off" cross-fades too.
+  // always present with a per-state color, so "off" cross-fades too. Centers
+  // the state glyph (spinner / check).
   dot: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: DOT,
+    height: DOT,
+    borderRadius: DOT / 2,
     borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  // The old-color layer covers the base including its border (-1 offsets),
+  dotGlyph: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  // The old-color layer covers the base including its border (-1 offsets, so
+  // its diameter is DOT + 2 and its radius must match — a hardcoded radius
+  // here once lagged a dot resize and drew as a rounded square mid-fade),
   // then fades out to reveal the new color underneath.
   dotOverlay: {
     position: "absolute",
@@ -260,7 +284,7 @@ const styles = StyleSheet.create({
     left: -1,
     right: -1,
     bottom: -1,
-    borderRadius: 15,
+    borderRadius: DOT / 2 + 1,
     borderWidth: 1,
   },
 });
