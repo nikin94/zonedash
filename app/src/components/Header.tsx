@@ -28,7 +28,7 @@ const CHIP_LABEL: Record<ConnectionState, string> = {
  */
 export const Header = ({ back, title = "ZoneDash" }: { back?: boolean; title?: string }) => {
   const navigation = useNavigation<Nav>();
-  const { transport, connection } = useAppState();
+  const { transport, connection, pairedSpots } = useAppState();
   const [menuOpen, setMenuOpen] = useState(false);
   const [disconnectAsk, setDisconnectAsk] = useState(false);
 
@@ -48,6 +48,11 @@ export const Header = ({ back, title = "ZoneDash" }: { back?: boolean; title?: s
   const openPairing = () => {
     setMenuOpen(false);
     navigation.navigate("Pairing");
+  };
+
+  const openDrill = () => {
+    setMenuOpen(false);
+    navigation.navigate("Drill");
   };
 
   const askDisconnect = () => {
@@ -117,6 +122,15 @@ export const Header = ({ back, title = "ZoneDash" }: { back?: boolean; title?: s
                 style={styles.menuBackdrop}
               />
               <View testID="chip-menu" style={styles.menu}>
+                {/* Drill needs a paired layout — the item exists only then. */}
+                {pairedSpots.length > 0 && (
+                  <>
+                    <CustomPressable onPress={openDrill} style={styles.menuItem}>
+                      <AppText weight="600">Drill</AppText>
+                    </CustomPressable>
+                    <View style={styles.menuDivider} />
+                  </>
+                )}
                 <CustomPressable onPress={openPairing} style={styles.menuItem}>
                   <AppText weight="600">Pairing</AppText>
                 </CustomPressable>

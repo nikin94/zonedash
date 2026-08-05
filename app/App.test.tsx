@@ -22,8 +22,8 @@ const connect = async () => {
 };
 
 // Pairs two targets (spots 0 and 2) on the Pairing screen — connect() already
-// landed there — then backs out to the home screen.
-const pairTwoAndGoHome = async () => {
+// landed there. A completed round hands straight over to the Drill screen.
+const pairTwo = async () => {
   fireEvent.press(screen.getByTestId("count-pill"));
   const picker = screen.UNSAFE_getByType(WheelPicker);
   act(() => picker.props.onValueChanged({ item: { value: 2, label: "2" } }));
@@ -32,80 +32,86 @@ const pairTwoAndGoHome = async () => {
   fireEvent.press(screen.getByTestId("spot-0-available"));
   await act(() => jest.runAllTimersAsync());
   fireEvent.press(screen.getByTestId("spot-2-available"));
-  await act(() => jest.runAllTimersAsync());
-  expect(screen.getByText("Paired 2 targets")).toBeTruthy();
-  fireEvent.press(screen.getByTestId("header-back"));
   await act(async () => {
     await jest.runAllTimersAsync();
   });
 };
 
-test("renders the exercise home with the disconnected state", async () => {
+test("renders the empty home with the disconnected state", async () => {
   await renderApp();
   expect(screen.getByText("ZoneDash")).toBeTruthy();
   expect(screen.getByText("offline")).toBeTruthy(); // header status chip
-  expect(screen.getByText(/Not connected — tap the status/)).toBeTruthy();
+  // Home carries no content yet — just the header and its settings button.
+  expect(screen.getByTestId("settings-button")).toBeTruthy();
 });
 
-// There is no empty "pair your targets first" screen: an unpaired session has
-// nothing to do at home, so connecting lands straight on the Pairing screen.
+// An unpaired session has nothing to do at home, so connecting lands straight
+// on the Pairing screen.
 test("connecting goes straight to the Pairing screen", async () => {
   await renderApp();
   await connect();
   expect(screen.getByText("mock")).toBeTruthy(); // brief connected label
   expect(screen.getByText("Targets")).toBeTruthy();
   expect(screen.getByText("Start pairing")).toBeTruthy();
-  expect(screen.queryByText(/Pair your targets first/)).toBeNull();
 });
 
-// Before a layout exists there is nowhere to go back TO — home would redirect
-// straight back here, so the back button must not exist at all (a visible
-// button that returns to the same screen reads as broken).
-test("Pairing has no back button until a round completes", async () => {
+// Before a layout exists there is nowhere to go back TO — home redirects
+// straight back to Pairing — so the back button must not exist there. Once the
+// round completes the app hands over to the Drill screen instead.
+test("Pairing has no back button and a finished round hands over to Drill", async () => {
   await renderApp();
   await connect();
-
   expect(screen.queryByTestId("header-back")).toBeNull();
 
-  // Pair two targets — the way back appears once there is a layout.
-  fireEvent.press(screen.getByTestId("count-pill"));
-  const picker = screen.UNSAFE_getByType(WheelPicker);
-  act(() => picker.props.onValueChanged({ item: { value: 2, label: "2" } }));
-  fireEvent.press(screen.getByText("Start pairing"));
-  await act(() => jest.runAllTimersAsync());
-  expect(screen.queryByTestId("header-back")).toBeNull(); // mid-round: still none
-  fireEvent.press(screen.getByTestId("spot-0-available"));
-  await act(() => jest.runAllTimersAsync());
-  fireEvent.press(screen.getByTestId("spot-2-available"));
-  await act(() => jest.runAllTimersAsync());
-  expect(screen.getByText("Paired 2 targets")).toBeTruthy();
-  expect(screen.getByTestId("header-back")).toBeTruthy();
-});
-
-test("after pairing, back lands on the drill home; the chip menu reopens Pairing", async () => {
-  await renderApp();
-  await connect();
-  await pairTwoAndGoHome();
-
-  // Home now offers the drill config over the paired layout — no hint screen.
+  await pairTwo();
+  // Landed on the Drill screen — the config + run, over the paired layout.
+  expect(screen.getByText("Drill")).toBeTruthy(); // header title
   expect(screen.getByText("Random")).toBeTruthy();
   expect(screen.getByText("Start")).toBeTruthy();
+});
 
-  // The chip menu still reaches Pairing (e.g. to re-pair). The screen mounts
-  // fresh — it mirrors the central's events, so it opens idle.
+test("Drill backs out to the empty home; the chip menu reaches both screens", async () => {
+  await renderApp();
+  await connect();
+  await pairTwo();
+
+  // Back off the Drill screen → the empty home (header only, settings button).
+  fireEvent.press(screen.getByTestId("header-back"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+  expect(screen.queryByText("Random")).toBeNull(); // no content at home yet
+  expect(screen.getByTestId("settings-button")).toBeTruthy();
+
+  // With a layout the chip menu offers both Drill and Pairing.
   fireEvent.press(screen.getByTestId("status-chip"));
   expect(screen.getByTestId("chip-menu")).toBeTruthy();
+  fireEvent.press(screen.getByText("Drill"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+  expect(screen.getByText("Random")).toBeTruthy(); // back on the Drill screen
+});
+
+test("re-pairing from the chip menu returns to Drill, layout kept", async () => {
+  await renderApp();
+  await connect();
+  await pairTwo(); // on Drill
+
+  fireEvent.press(screen.getByTestId("status-chip"));
   fireEvent.press(screen.getByText("Pairing"));
   await act(async () => {
     await jest.runAllTimersAsync();
   });
+  // A layout already exists, so the way back is available.
   expect(screen.getByText("Start pairing")).toBeTruthy();
+  expect(screen.getByTestId("header-back")).toBeTruthy();
 
   fireEvent.press(screen.getByTestId("header-back"));
   await act(async () => {
     await jest.runAllTimersAsync();
   });
-  expect(screen.getByText("Random")).toBeTruthy(); // home again, layout kept
+  expect(screen.getByText("Random")).toBeTruthy(); // back on Drill, layout kept
 });
 
 test("an outside tap closes the chip menu without navigating", async () => {
@@ -139,7 +145,6 @@ test("Disconnect lives in the chip menu behind the confirm — No keeps the link
     await jest.runAllTimersAsync();
   });
   expect(screen.getByText("offline")).toBeTruthy();
-  expect(screen.getByText(/Not connected — tap the status/)).toBeTruthy();
 });
 
 // Regression: pairedSpots is an app-side cache of state that lives on the
@@ -148,7 +153,7 @@ test("Disconnect lives in the chip menu behind the confirm — No keeps the link
 test("a disconnect clears the paired layout — reconnect starts at Pairing again", async () => {
   await renderApp();
   await connect();
-  await pairTwoAndGoHome();
+  await pairTwo(); // on Drill, over a real layout
   expect(screen.getByText("Random")).toBeTruthy();
 
   // Disconnect, then reconnect — the fresh session never paired anything.
@@ -160,8 +165,8 @@ test("a disconnect clears the paired layout — reconnect starts at Pairing agai
   });
   await connect();
 
-  // The stale layout must be gone — no phantom builder; the app is back on
-  // the Pairing screen with a clean map.
+  // The stale layout must be gone — no phantom Drill config; the app is back
+  // on the Pairing screen with a clean map.
   expect(screen.getByText("Start pairing")).toBeTruthy();
   expect(screen.queryByText("Random")).toBeNull();
   expect(screen.queryAllByTestId(/spot-\d-bound/)).toHaveLength(0);
@@ -170,8 +175,13 @@ test("a disconnect clears the paired layout — reconnect starts at Pairing agai
 test("the settings button opens the Settings screen — no timeout setting exists", async () => {
   await renderApp();
   await connect();
-  await pairTwoAndGoHome(); // the settings button lives on the home header
+  await pairTwo();
 
+  // Settings lives behind the gear on the home header — back off Drill first.
+  fireEvent.press(screen.getByTestId("header-back"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
   fireEvent.press(screen.getByTestId("settings-button"));
   await act(async () => {
     await jest.runAllTimersAsync();
@@ -180,10 +190,4 @@ test("the settings button opens the Settings screen — no timeout setting exist
   expect(screen.getByText("Delay between targets")).toBeTruthy();
   expect(screen.getByText("Same target twice in a row")).toBeTruthy();
   expect(screen.queryByText(/Timeout/)).toBeNull(); // misses don't exist
-
-  fireEvent.press(screen.getByTestId("header-back"));
-  await act(async () => {
-    await jest.runAllTimersAsync();
-  });
-  expect(screen.getByText("mock")).toBeTruthy(); // home again, still connected
 });

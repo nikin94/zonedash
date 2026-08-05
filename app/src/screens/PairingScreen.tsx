@@ -356,6 +356,21 @@ export const PairingScreen = () => {
     navigation.setOptions({ gestureEnabled: paired });
   }, [navigation, paired]);
 
+  // A successful round hands straight over to the Drill screen. Reset instead
+  // of push so the stack is Home → Drill no matter how Pairing was reached
+  // (fresh connect, or a re-pair opened from the chip menu on Drill).
+  useEffect(() => {
+    const unsub = transport.onStatus((e) => {
+      if (e.kind === "pairing" && e.progress.done) {
+        navigation.reset({
+          index: 1,
+          routes: [{ name: "Home" }, { name: "Drill" }],
+        });
+      }
+    });
+    return unsub;
+  }, [transport, navigation]);
+
   return (
     <View style={styles.screen}>
       <Header back={paired} title="Pairing" />

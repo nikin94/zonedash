@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import { MockCentralTransport } from "../ble/mock";
 import type { DrillConfig } from "../ble/transport";
 import { DEFAULT_SETTINGS, type DrillSettings } from "../state/AppState";
-import { ExercisePanel } from "./ExerciseScreen";
+import { DrillPanel } from "./DrillScreen";
 
 // Left-side layout from a pairing round: slot 0 = net left (0),
 // slot 1 = mid left (7), slot 2 = back left (6).
@@ -25,7 +25,7 @@ const connectedTransport = async () => {
 };
 
 const panel = (t: MockCentralTransport, paired = PAIRED, settings = SETTINGS) =>
-  render(<ExercisePanel transport={t} pairedSpots={paired} settings={settings} />);
+  render(<DrillPanel transport={t} pairedSpots={paired} settings={settings} />);
 
 beforeEach(() => jest.useFakeTimers());
 afterEach(() => jest.useRealTimers());
@@ -141,7 +141,7 @@ test("a re-pair filters the authored path — nothing translates to -1", async (
   const t = await connectedTransport();
   const load = jest.spyOn(t, "loadDrill");
   const { rerender } = render(
-    <ExercisePanel transport={t} pairedSpots={PAIRED} settings={SETTINGS} />,
+    <DrillPanel transport={t} pairedSpots={PAIRED} settings={SETTINGS} />,
   );
 
   fireEvent.press(screen.getByText("Path"));
@@ -149,7 +149,7 @@ test("a re-pair filters the authored path — nothing translates to -1", async (
   fireEvent.press(screen.getByTestId("spot-0-available"));
 
   // Re-pair drops spot 6 (kept 0 and 7) — the stale step must vanish.
-  rerender(<ExercisePanel transport={t} pairedSpots={[0, 7]} settings={SETTINGS} />);
+  rerender(<DrillPanel transport={t} pairedSpots={[0, 7]} settings={SETTINGS} />);
   expect(screen.getByTestId("path-sequence")).toHaveTextContent(/^net left$/);
 
   fireEvent.press(screen.getByText("Start"));

@@ -47,7 +47,8 @@ const MODES: { key: UiMode; label: string }[] = [
 ];
 
 /**
- * The exercise screen — the app's home. One court map does double duty: while
+ * The drill screen — reached once a layout is paired. One court map does
+ * double duty: while
  * idle it authors the drill (Path steps are tapped right on it), while running
  * it mirrors the central unit's Status events — `progress` arms a spot
  * (spinner), `resolved` flashes it green, and the `done` session state pulls
@@ -61,7 +62,7 @@ const MODES: { key: UiMode; label: string }[] = [
  * translates to `indexOf` on the way out and `pairedSpots[position]` translates
  * events back onto the map.
  */
-export const ExercisePanel = ({
+export const DrillPanel = ({
   transport,
   pairedSpots,
   settings,
@@ -396,43 +397,32 @@ export const ExercisePanel = ({
   );
 };
 
-/** The app's home screen: Header + the exercise panel, gated on the link and
- *  the paired layout (a drill runs on the layout the pairing round bound). */
-export const ExerciseScreen = () => {
+/** The Drill screen: Header + the drill panel, gated on the link and the
+ *  paired layout (a drill runs on the layout the pairing round bound). */
+export const DrillScreen = () => {
   const navigation = useNavigation<Nav>();
-  const { transport, connection, connectionError, pairedSpots, settings } =
-    useAppState();
+  const { transport, connection, pairedSpots, settings } = useAppState();
   const connected = connection === "connected";
-  const busy = connection === "connecting";
   const paired = pairedSpots.length > 0;
 
-  // Home is useless without a paired layout, so it never shows an empty hint
-  // screen: whenever it has focus while the link is up and nothing is paired
-  // (a fresh connect, or backing out of Pairing early), it hands straight
-  // over to the Pairing screen.
+  // A drill only makes sense over a live link and a paired layout. Losing
+  // either (link drop, layout cleared) sends the operator back home, where
+  // the unpaired redirect takes over if the link is still up.
   useFocusEffect(
     useCallback(() => {
-      if (connected && !paired) navigation.navigate("Pairing");
+      if (!connected || !paired) navigation.popToTop();
     }, [connected, paired, navigation]),
   );
 
   return (
     <View style={styles.screen}>
-      <Header />
-      {connected && paired ? (
-        <ExercisePanel
+      <Header back title="Drill" />
+      {connected && paired && (
+        <DrillPanel
           transport={transport}
           pairedSpots={pairedSpots}
           settings={settings}
         />
-      ) : connected ? null : ( // unpaired: the focus effect is already navigating
-        <AppText center size={13} color={colors.textMuted} style={styles.screenHint}>
-          {busy
-            ? "Connecting to the central unit…"
-            : connection === "error"
-              ? `${connectionError ?? "Connection failed"} — tap the status in the header to retry`
-              : "Not connected — tap the status in the header to connect"}
-        </AppText>
       )}
     </View>
   );
@@ -443,10 +433,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
     paddingTop: 56, // clears the status bar without a safe-area dependency
-  },
-  screenHint: {
-    marginTop: 48,
-    paddingHorizontal: 32,
   },
   panel: {
     marginTop: 16,

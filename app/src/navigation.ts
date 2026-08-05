@@ -1,9 +1,11 @@
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
-/** The app's native stack: Exercise is home; the rest push on top of it. */
+/** The app's native stack: Home is a deliberately empty landing (content
+ *  comes later) — the functionality lives on its own screens. */
 export type RootStackParamList = {
-  Exercise: undefined;
+  Home: undefined;
   Pairing: undefined;
+  Drill: undefined;
   Settings: undefined;
 };
 

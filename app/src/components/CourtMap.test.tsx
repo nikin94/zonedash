@@ -102,7 +102,7 @@ test("active shows a spinner, bound shows a check, selected shows neither", () =
   expect(screen.getByTestId("spot-2-selected")).toBeTruthy();
 });
 
-// Exercise-run flash: a hit flash is green with a check (same glyph as
+// Drill-run flash: a hit flash is green with a check (same glyph as
 // bound). Misses don't exist in the app — no timeout ever goes on the wire.
 test("hit flashes with a check", () => {
   const spots = [...allOff];

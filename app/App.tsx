@@ -3,7 +3,8 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { StatusBar } from "expo-status-bar";
 
 import type { RootStackParamList } from "./src/navigation";
-import { ExerciseScreen } from "./src/screens/ExerciseScreen";
+import { DrillScreen } from "./src/screens/DrillScreen";
+import { HomeScreen } from "./src/screens/HomeScreen";
 import { PairingScreen } from "./src/screens/PairingScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { AppStateProvider } from "./src/state/AppState";
@@ -25,11 +26,11 @@ const theme = {
 
 /**
  * ZoneDash operator app. A native stack over the CentralTransport seam
- * (currently the in-app mock): Exercise is home — the court, the run and the
- * drill config in one place; Pairing (from the header's central-unit menu) and
- * Settings (from the header's settings button) push on top of it. Screens draw
- * their own header, so headerShown is off; the native stack still provides
- * real transitions and swipe-back.
+ * (currently the in-app mock). Functionality is split per screen: Home is an
+ * empty landing (content comes later), Pairing binds the layout (a finished
+ * round hands over to Drill), Drill authors and runs the drill, Settings holds
+ * the session-wide params. Screens draw their own header, so headerShown is
+ * off; the native stack still provides real transitions and swipe-back.
  */
 const App = () => (
   <AppStateProvider>
@@ -40,8 +41,9 @@ const App = () => (
           contentStyle: { backgroundColor: colors.background },
         }}
       >
-        <Stack.Screen name="Exercise" component={ExerciseScreen} />
+        <Stack.Screen name="Home" component={HomeScreen} />
         <Stack.Screen name="Pairing" component={PairingScreen} />
+        <Stack.Screen name="Drill" component={DrillScreen} />
         <Stack.Screen name="Settings" component={SettingsScreen} />
       </Stack.Navigator>
     </NavigationContainer>
