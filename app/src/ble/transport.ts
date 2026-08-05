@@ -51,6 +51,10 @@ export interface CentralTransport {
   /** ControlOp.SelectPairSpot — the operator's map tap: prompt this canonical
    *  spot (0..7) for the next bind. The LED panel lights the same spot. */
   selectPairingSpot(spot: number): Promise<void>;
+  // DEFERRED (next PR): undo() — unbind the last slot and re-prompt it. The
+  // firmware core (PairingRound::undo_last) and serial `undo` already exist;
+  // the phone affordance + a ControlOp land together in a follow-up.
+
   /** ControlOp.LoadDrill. */
   loadDrill(config: DrillConfig): Promise<void>;
   /** ControlOp.StartSession. */

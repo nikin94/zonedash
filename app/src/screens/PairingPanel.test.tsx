@@ -121,17 +121,16 @@ test("a bound spot cannot be picked again", async () => {
 });
 
 test("startPairing rejection surfaces as an error, not a crash", async () => {
+  // Realistic composition: still CONNECTED (App only mounts the panel then),
+  // but the write itself fails — how a real BLE Control write rejects.
   const t = await connectedTransport();
+  t.startPairing = jest.fn().mockRejectedValue(new Error("write failed"));
   render(<PairingPanel transport={t} />);
 
-  // Force the command to reject the way a real BLE write can.
-  await act(async () => {
-    await t.disconnect();
-  });
   fireEvent.press(screen.getByText("Start pairing"));
   await act(() => jest.runAllTimersAsync());
 
-  expect(screen.getByText("not connected")).toBeTruthy();
+  expect(screen.getByText("write failed")).toBeTruthy();
   expect(screen.getByText("Start pairing")).toBeTruthy(); // back to idle
 });
 
@@ -153,18 +152,28 @@ test("cancel during a round returns to idle and stops further prompts", async ()
   expect(screen.queryAllByTestId(/spot-\d-off/)).toHaveLength(8); // map reset
 });
 
-test("a dropped link mid-round surfaces a message instead of vanishing", async () => {
+// No link-loss test here on purpose: App unmounts the panel the moment the
+// connection drops (it mounts the panel only while connected), so a panel-local
+// handler could never render — App's status row owns and shows the reason.
+
+test("idle spots stay 'available' through the whole bind cycle — no re-blink", async () => {
   const t = await connectedTransport();
   render(<PairingPanel transport={t} />);
 
   fireEvent.press(screen.getByText("Start pairing"));
-  await act(() => jest.runAllTimersAsync());
+  await act(() => jest.runAllTimersAsync()); // choosing: all spots available
 
-  await act(async () => {
-    await t.disconnect(); // link drops mid-round
-  });
-  expect(screen.getByText("connection lost")).toBeTruthy();
-  expect(screen.getByText("Start pairing")).toBeTruthy();
+  fireEvent.press(screen.getByTestId("spot-0-available"));
+  await act(() => jest.advanceTimersByTimeAsync(0)); // prompt phase
+  expect(screen.getByTestId("spot-0-active")).toBeTruthy();
+  // The other 7 spots must NOT dip to "off" while the prompt is up — that dip
+  // is exactly what read as a double blink per bind.
+  expect(screen.queryAllByTestId(/spot-\d-available/)).toHaveLength(7);
+
+  await act(() => jest.advanceTimersByTimeAsync(50)); // confirm phase
+  expect(screen.getByTestId("spot-0-confirm")).toBeTruthy();
+  expect(screen.queryAllByTestId(/spot-\d-available/)).toHaveLength(7);
+  expect(screen.queryAllByTestId(/spot-\d-off/)).toHaveLength(0);
 });
 
 // Pairs 2 targets to completion (spots 0 and 2) so "done" state is reached.

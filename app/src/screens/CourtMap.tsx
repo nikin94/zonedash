@@ -66,6 +66,16 @@ const DOT_STYLE: Record<SpotVisual, { fill: string; ring: string }> = {
 
 const FADE_MS = 200;
 
+// Screen-reader wording per state — the label must carry it, since color is
+// the only visual differentiator between bound/available/confirm.
+const A11Y_STATE: Record<SpotVisual, string> = {
+  off: "empty",
+  available: "available",
+  active: "press here",
+  confirm: "awaiting confirm",
+  bound: "bound",
+};
+
 /**
  * One court dot, cross-fading its fill/outline on every state change instead
  * of snapping. Plain Animated (JS driver) on purpose: a 200 ms color fade
@@ -167,7 +177,7 @@ export function CourtMap({
             key={i}
             testID={`spot-${i}-${spots[i]}`}
             accessibilityRole="button"
-            accessibilityLabel={`${SPOT_NAMES[i]} spot`}
+            accessibilityLabel={`${SPOT_NAMES[i]} spot, ${A11Y_STATE[spots[i]]}`}
             accessibilityState={{ selected: spots[i] !== "off" }}
             disabled={!onPressSpot}
             onPress={() => onPressSpot?.(i)}

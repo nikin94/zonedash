@@ -40,19 +40,14 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Link loss is deliberately NOT handled here: App only mounts this panel
+  // while connected, so on a drop the whole panel unmounts in the same commit
+  // and App's status row shows the reason — a local handler could never paint.
   useEffect(() => {
     const unsub = transport.onStatus((e) => {
       if (e.kind === "pairing") {
         setProgress(e.progress);
         if (e.progress.done) setRunning(false);
-      }
-      // A lost/failed link mid-round must end with a message, not a silent
-      // vanish — real BLE drops routinely.
-      if (e.kind === "connection" && e.state !== "connected") {
-        setRunning((was) => {
-          if (was) setError(e.reason ?? "connection lost");
-          return false;
-        });
       }
     });
     return unsub;
@@ -60,6 +55,9 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
 
   const done = progress !== null && progress.done;
 
+  // onValueChanged fires only when the scroll SETTLES (the lib emits
+  // onValueChanging for intermediate passes) — so a fling 8→4 lands on 4,
+  // not on the first value crossed.
   const onWheelValue = (value: number) => {
     if (value === total) return; // settling on the unchanged value keeps it open
     setWheelOpen(false);
@@ -116,7 +114,10 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
     if (progress.currentSpot === i) {
       return progress.awaitingConfirm ? "confirm" : "active";
     }
-    return choosing ? "available" : "off";
+    // Idle spots stay dim for the WHOLE round (not just the choosing phase):
+    // dipping them to "off" while a prompt is up made every bind read as a
+    // double blink and dropped the spatial context mid-prompt.
+    return running && !done ? "available" : "off";
   });
 
   const boundCount = progress?.boundSpots.length ?? 0;
