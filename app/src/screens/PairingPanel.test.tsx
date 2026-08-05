@@ -269,6 +269,58 @@ test("before any pairing, a count change needs no confirmation", async () => {
   expect(screen.getByTestId("count-pill")).toHaveTextContent("4");
 });
 
+test("Undo appears between binds and reopens the last bound spot", async () => {
+  const t = await connectedTransport();
+  render(<PairingPanel transport={t} />);
+
+  fireEvent.press(screen.getByTestId("count-pill"));
+  const picker = screen.UNSAFE_getByType(WheelPicker);
+  act(() => picker.props.onValueChanged({ item: { value: 2, label: "2" } }));
+  fireEvent.press(screen.getByText("Start pairing"));
+  await act(() => jest.runAllTimersAsync());
+
+  // First pick in flight: no Undo while a prompt is up.
+  fireEvent.press(screen.getByTestId("spot-0-available"));
+  await act(() => jest.advanceTimersByTimeAsync(0));
+  expect(screen.queryByText("Undo")).toBeNull();
+
+  await act(() => jest.runAllTimersAsync()); // spot 0 bound, choosing again
+  expect(screen.getByText("Undo")).toBeTruthy();
+
+  fireEvent.press(screen.getByText("Undo"));
+  await act(() => jest.runAllTimersAsync());
+  // Bind rolled back: spot 0 is offered again, still target 1 of 2.
+  expect(screen.getByText("Tap the map where target 1 of 2 stands")).toBeTruthy();
+  expect(screen.getByTestId("spot-0-available")).toBeTruthy();
+});
+
+test("Undo from a completed round resumes it with the last spot reopened", async () => {
+  const t = await connectedTransport();
+  render(<PairingPanel transport={t} />);
+  await pairTwo(); // spots 0 and 2 bound, "Paired 2 targets"
+
+  fireEvent.press(screen.getByText("Undo"));
+  await act(() => jest.runAllTimersAsync());
+
+  expect(screen.getByText("Tap the map where target 2 of 2 stands")).toBeTruthy();
+  expect(screen.getByTestId("spot-0-bound")).toBeTruthy(); // first bind kept
+  expect(screen.getByTestId("spot-2-available")).toBeTruthy(); // rolled back
+
+  fireEvent.press(screen.getByTestId("spot-6-available")); // rebind elsewhere
+  await act(() => jest.runAllTimersAsync());
+  expect(screen.getByText("Paired 2 targets")).toBeTruthy();
+  expect(screen.getByTestId("spot-6-bound")).toBeTruthy();
+});
+
+test("no Undo before anything is bound", async () => {
+  const t = await connectedTransport();
+  render(<PairingPanel transport={t} />);
+
+  fireEvent.press(screen.getByText("Start pairing"));
+  await act(() => jest.runAllTimersAsync()); // choosing, zero binds
+  expect(screen.queryByText("Undo")).toBeNull();
+});
+
 test("shows the net side for orientation", async () => {
   const t = await connectedTransport();
   render(<PairingPanel transport={t} />);

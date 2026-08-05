@@ -305,7 +305,7 @@ swaps the transport later.
 | `pair N` | Open a pairing round for N targets; each bind then waits for a `spot` pick | Control: StartPairing (N byte) |
 | `spot S` | Pairing: pick canonical court spot S (0..7) for the next bind — the panel lights it, a two-tap confirm binds → `MAC→position` map | Control: SelectPairSpot (spot byte) |
 | `extend N` | Pairing: grow the round to N total, keeping every bound target (`PairingRound::extend()`); the round resumes waiting for a `spot` pick | Control: ExtendPairing (N byte) |
-| `undo` | Pairing: unbind the last bound slot and re-prompt it (`PairingRound::undo_last()`) | (dev-only for now) |
+| `undo` | Pairing: unbind the last bound slot and re-prompt it (`PairingRound::undo_last()`); refused mid-prompt | Control: UndoPairBind (no payload) |
 | `nodes` | List paired targets: `position, MAC, fw, batt_mv, last_rssi` | Status read |
 | `drill N seq…` | Load a drill: N active targets + sequence (e.g. `drill 4 rand` or `drill 6 0,3,5,1,…`) + params | Control: config |
 | `start` | Run the loaded drill (SYNC broadcast → ARM first target → loop) | Control: start |

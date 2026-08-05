@@ -104,6 +104,18 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
     });
   };
 
+  // Correction path: unbind the most recent target and reopen its pick. From
+  // a completed round this resumes it, so the map/flow states keep flowing
+  // from the central's events — the panel owns nothing.
+  const undo = () => {
+    setError(null);
+    setRunning(true);
+    transport.undoPairing().catch((err: unknown) => {
+      setRunning(false);
+      setError(err instanceof Error ? err.message : "undo failed");
+    });
+  };
+
   // Escape hatch for a round that never progresses (a real BLE write can be
   // acked while Status notifications never arrive) — never trap the operator.
   const cancel = () => {
@@ -271,25 +283,39 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
 
             {error !== null && <Text style={styles.error}>{error}</Text>}
 
-            {running ? (
-              <Pressable
-                accessibilityRole="button"
-                onPress={cancel}
-                style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-              >
-                <Text style={styles.buttonLabel}>Cancel</Text>
-              </Pressable>
-            ) : (
-              <Pressable
-                accessibilityRole="button"
-                onPress={start}
-                style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-              >
-                <Text style={styles.buttonLabel}>
-                  {done ? "Re-pair" : "Start pairing"}
-                </Text>
-              </Pressable>
-            )}
+            <View style={styles.actionRow}>
+              {/* Undo is only offered between binds (choosing) or after done —
+                  never mid-prompt, matching the central's refusal. */}
+              {(choosing || done) && boundCount > 0 && (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Undo last bind"
+                  onPress={undo}
+                  style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+                >
+                  <Text style={styles.buttonLabel}>Undo</Text>
+                </Pressable>
+              )}
+              {running ? (
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={cancel}
+                  style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+                >
+                  <Text style={styles.buttonLabel}>Cancel</Text>
+                </Pressable>
+              ) : (
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={start}
+                  style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+                >
+                  <Text style={styles.buttonLabel}>
+                    {done ? "Re-pair" : "Start pairing"}
+                  </Text>
+                </Pressable>
+              )}
+            </View>
           </>
         )}
       </CourtMap>
@@ -308,6 +334,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     zIndex: 10, // the wheel dropdown must overlay the map below
+  },
+  actionRow: {
+    flexDirection: "row",
+    gap: 10,
   },
   heading: {
     color: "#a1a1aa",
