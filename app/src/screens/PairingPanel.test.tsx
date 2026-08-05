@@ -16,43 +16,13 @@ const connectedTransport = async () => {
 beforeEach(() => jest.useFakeTimers());
 afterEach(() => jest.useRealTimers());
 
-test("map taps toggle spots and the count pill tracks the selection", async () => {
+test("count wheel opens over the pill and only sets the count — no map spots light", async () => {
   const t = await connectedTransport();
   render(<PairingPanel transport={t} />);
 
-  // Default: all 8 canonical spots selected, none off.
+  // Idle: every spot is a faint outline; picking a count must not change that.
   expect(screen.getByTestId("count-pill")).toHaveTextContent("8");
-  expect(screen.queryAllByTestId(/spot-\d-selected/)).toHaveLength(8);
-
-  // Deselect two spots on the map.
-  fireEvent.press(screen.getByTestId("spot-1-selected"));
-  fireEvent.press(screen.getByTestId("spot-5-selected"));
-  expect(screen.getByTestId("count-pill")).toHaveTextContent("6");
-  expect(screen.getByTestId("spot-1-off")).toBeTruthy();
-
-  // Tapping an off spot re-selects it.
-  fireEvent.press(screen.getByTestId("spot-1-off"));
-  expect(screen.getByTestId("count-pill")).toHaveTextContent("7");
-});
-
-test("the last selected spot cannot be removed (layout keeps at least 1)", async () => {
-  const t = await connectedTransport();
-  render(<PairingPanel transport={t} />);
-
-  // Turn everything off except spot 0…
-  for (const i of [1, 2, 3, 4, 5, 6, 7]) {
-    fireEvent.press(screen.getByTestId(`spot-${i}-selected`));
-  }
-  expect(screen.getByTestId("count-pill")).toHaveTextContent("1");
-  // …then the remaining spot refuses to toggle off.
-  fireEvent.press(screen.getByTestId("spot-0-selected"));
-  expect(screen.getByTestId("count-pill")).toHaveTextContent("1");
-  expect(screen.getByTestId("spot-0-selected")).toBeTruthy();
-});
-
-test("count pill opens the wheel; picking N applies the corners-first preset", async () => {
-  const t = await connectedTransport();
-  render(<PairingPanel transport={t} />);
+  expect(screen.queryAllByTestId(/spot-\d-off/)).toHaveLength(8);
 
   expect(screen.queryByTestId("count-wheel")).toBeNull();
   fireEvent.press(screen.getByTestId("count-pill"));
@@ -60,51 +30,72 @@ test("count pill opens the wheel; picking N applies the corners-first preset", a
 
   // Drive the wheel the way a scroll settle would.
   const picker = screen.UNSAFE_getByType(WheelPicker);
-  act(() => picker.props.onValueChanged({ item: { value: 4, label: "4" } }));
+  act(() => picker.props.onValueChanged({ item: { value: 3, label: "3" } }));
 
-  expect(screen.getByTestId("count-pill")).toHaveTextContent("4");
-  // N=4 preset = the four corners (0, 2, 4, 6).
-  for (const i of [0, 2, 4, 6]) {
-    expect(screen.getByTestId(`spot-${i}-selected`)).toBeTruthy();
-  }
-  for (const i of [1, 3, 5, 7]) {
-    expect(screen.getByTestId(`spot-${i}-off`)).toBeTruthy();
-  }
+  expect(screen.getByTestId("count-pill")).toHaveTextContent("3");
+  expect(screen.queryAllByTestId(/spot-\d-off/)).toHaveLength(8); // still nothing lit
 });
 
-test("the round lights spots on the map with a confirm phase and finishes", async () => {
+test("spots are picked during the round — free-form, e.g. all on the left", async () => {
   const t = await connectedTransport();
   render(<PairingPanel transport={t} />);
 
-  // Pick the 3-spot preset: corners 0, 2 + back-right 4.
   fireEvent.press(screen.getByTestId("count-pill"));
   const picker = screen.UNSAFE_getByType(WheelPicker);
   act(() => picker.props.onValueChanged({ item: { value: 3, label: "3" } }));
 
   fireEvent.press(screen.getByText("Start pairing"));
+  await act(() => jest.runAllTimersAsync()); // round opens, waiting for a pick
 
-  // First prompt: canonical spot 0 is active on the map, named in the text.
+  // Choose phase: the operator taps the map; every unbound spot is offered.
+  expect(screen.getByText("Tap the map where target 1 of 3 stands")).toBeTruthy();
+  expect(screen.queryAllByTestId(/spot-\d-available/)).toHaveLength(8);
+
+  // Left side only: net left (0) → mid left (7) → back left (6).
+  fireEvent.press(screen.getByTestId("spot-0-available"));
   await act(() => jest.advanceTimersByTimeAsync(0));
   expect(screen.getByText("Press the net left target (1/3)")).toBeTruthy();
   expect(screen.getByTestId("spot-0-active")).toBeTruthy();
-  expect(screen.getByTestId("spot-2-pending")).toBeTruthy();
 
-  // Confirm phase: same spot switches to the confirm state.
+  // Two-tap confirm on the physical target.
   await act(() => jest.advanceTimersByTimeAsync(50));
   expect(screen.getByText("Press again to confirm")).toBeTruthy();
   expect(screen.getByTestId("spot-0-confirm")).toBeTruthy();
 
-  // Next prompt: spot 0 bound, spot 2 active.
+  // Bound → back to choosing the next spot.
   await act(() => jest.advanceTimersByTimeAsync(50));
-  expect(screen.getByText("Press the net right target (2/3)")).toBeTruthy();
+  expect(screen.getByText("Tap the map where target 2 of 3 stands")).toBeTruthy();
   expect(screen.getByTestId("spot-0-bound")).toBeTruthy();
-  expect(screen.getByTestId("spot-2-active")).toBeTruthy();
 
-  // Round completes → all round spots bound, re-pair affordance back.
+  fireEvent.press(screen.getByTestId("spot-7-available"));
   await act(() => jest.runAllTimersAsync());
+  fireEvent.press(screen.getByTestId("spot-6-available"));
+  await act(() => jest.runAllTimersAsync());
+
   expect(screen.getByText("Paired 3 targets")).toBeTruthy();
-  expect(screen.getByTestId("spot-4-bound")).toBeTruthy();
+  for (const i of [0, 7, 6]) {
+    expect(screen.getByTestId(`spot-${i}-bound`)).toBeTruthy();
+  }
   expect(screen.getByText("Re-pair")).toBeTruthy();
+});
+
+test("a bound spot cannot be picked again", async () => {
+  const t = await connectedTransport();
+  render(<PairingPanel transport={t} />);
+
+  fireEvent.press(screen.getByTestId("count-pill"));
+  const picker = screen.UNSAFE_getByType(WheelPicker);
+  act(() => picker.props.onValueChanged({ item: { value: 2, label: "2" } }));
+
+  fireEvent.press(screen.getByText("Start pairing"));
+  await act(() => jest.runAllTimersAsync());
+
+  fireEvent.press(screen.getByTestId("spot-4-available"));
+  await act(() => jest.runAllTimersAsync()); // spot 4 bound
+
+  fireEvent.press(screen.getByTestId("spot-4-bound")); // no-op
+  await act(() => jest.runAllTimersAsync());
+  expect(screen.getByText("Tap the map where target 2 of 2 stands")).toBeTruthy();
 });
 
 test("startPairing rejection surfaces as an error, not a crash", async () => {
@@ -127,7 +118,9 @@ test("cancel during a round returns to idle and stops further prompts", async ()
   render(<PairingPanel transport={t} />);
 
   fireEvent.press(screen.getByText("Start pairing"));
-  await act(() => jest.advanceTimersByTimeAsync(0)); // first prompt is up
+  await act(() => jest.runAllTimersAsync());
+  fireEvent.press(screen.getByTestId("spot-0-available"));
+  await act(() => jest.advanceTimersByTimeAsync(0)); // prompt is up
   expect(screen.getByTestId("spot-0-active")).toBeTruthy();
 
   fireEvent.press(screen.getByText("Cancel"));
@@ -135,7 +128,7 @@ test("cancel during a round returns to idle and stops further prompts", async ()
 
   expect(screen.getByText("Start pairing")).toBeTruthy(); // back to idle
   expect(screen.queryByText(/Press the/)).toBeNull();
-  expect(screen.getByTestId("spot-0-selected")).toBeTruthy(); // map back to selection
+  expect(screen.queryAllByTestId(/spot-\d-off/)).toHaveLength(8); // map reset
 });
 
 test("a dropped link mid-round surfaces a message instead of vanishing", async () => {
@@ -143,25 +136,13 @@ test("a dropped link mid-round surfaces a message instead of vanishing", async (
   render(<PairingPanel transport={t} />);
 
   fireEvent.press(screen.getByText("Start pairing"));
-  await act(() => jest.advanceTimersByTimeAsync(0));
+  await act(() => jest.runAllTimersAsync());
 
   await act(async () => {
     await t.disconnect(); // link drops mid-round
   });
   expect(screen.getByText("connection lost")).toBeTruthy();
   expect(screen.getByText("Start pairing")).toBeTruthy();
-});
-
-test("changing the layout clears the stale 'Paired N' text", async () => {
-  const t = await connectedTransport();
-  render(<PairingPanel transport={t} />);
-
-  fireEvent.press(screen.getByText("Start pairing"));
-  await act(() => jest.runAllTimersAsync());
-  expect(screen.getByText("Paired 8 targets")).toBeTruthy();
-
-  fireEvent.press(screen.getByTestId("spot-3-bound")); // toggle a spot post-round
-  expect(screen.queryByText(/Paired/)).toBeNull();
 });
 
 test("shows the net side for orientation", async () => {

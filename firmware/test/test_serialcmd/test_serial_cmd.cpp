@@ -33,17 +33,18 @@ static void test_pair() {
   ZD_CHECK(!parse_command("pair 0").ok()); // N too small
   ZD_CHECK(!parse_command("pair 9").ok()); // N too big (> MAX_TARGETS)
   ZD_CHECK(!parse_command("pair x").ok()); // not a number
-  // Spot-list form mirrors the BLE StartPairing bitmask.
-  auto s = parse_command("pair 0,3,5");
-  ZD_CHECK(s.ok());
-  ZD_EQ(s.num_positions, 3);
-  ZD_EQ(s.spots.size(), 3);
-  ZD_EQ(s.spots[0], 0);
-  ZD_EQ(s.spots[1], 3);
-  ZD_EQ(s.spots[2], 5);
-  ZD_CHECK(parse_command("pair 8").spots.empty());  // N form carries no list
-  ZD_CHECK(!parse_command("pair 0,8").ok());        // spot out of range
-  ZD_CHECK(!parse_command("pair 0,0,1").ok());      // duplicate spot
+}
+
+// `spot S` picks the court spot for the next bind (BLE: SelectPairSpot).
+static void test_spot() {
+  auto c = parse_command("spot 5");
+  ZD_CHECK(c.type == CmdType::Spot);
+  ZD_CHECK(c.ok());
+  ZD_EQ(c.spot, 5);
+  ZD_CHECK(parse_command("SPOT 0").ok()); // case-insensitive, 0 is valid
+  ZD_CHECK(!parse_command("spot").ok());   // missing S
+  ZD_CHECK(!parse_command("spot 8").ok()); // >= MAX_TARGETS
+  ZD_CHECK(!parse_command("spot x").ok()); // not a number
 }
 
 static void test_case_and_whitespace_tolerant() {
@@ -140,6 +141,7 @@ int main() {
   ZD_RUN(test_empty_and_whitespace);
   ZD_RUN(test_simple_verbs);
   ZD_RUN(test_pair);
+  ZD_RUN(test_spot);
   ZD_RUN(test_case_and_whitespace_tolerant);
   ZD_RUN(test_unknown);
   ZD_RUN(test_drill_random_defaults);

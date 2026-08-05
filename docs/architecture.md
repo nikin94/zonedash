@@ -160,21 +160,23 @@ not a hardcoded 8-slot court grid. `N` is picked when the drill/session is set u
 positions are just labels/order in that set, with the geometric meaning ("far-left
 corner") supplied by the pairing prompts, not baked into firmware.
 
-**How the map is built — pairing round (chosen).** The operator picks the
-**canonical court spots** in play — passed explicitly, never inferred. On the
-phone the selector *is* a half-court map (net at the top): the operator taps
-the spots where targets physically stand, or spins a count wheel for a
-corners-first preset; the app sends the set as a **1-bitmask-byte
-`StartPairing` payload** (bit i = canonical spot i). On the bench: serial
-`pair N` (first N spots) or `pair 0,3,5` (exact list). The central unit then
-walks the active spots in order, prompting each on its own copy of the **same
-canonical map** — phone and HUB75 panel light the same dot — with "Press
-here"; the person taps that physical target, and after a confirming second tap
-the unit binds that MAC to the spot → "next." Self-calibrating: it doesn't
-matter which physical unit went where, or the order in the case, or how many
-are used. (Rejected: fixed numbered stickers — simpler code but demands
-placement discipline and breaks on a swapped corner; RSSI/range
-auto-localization — unreliable indoors.)
+**How the map is built — interactive pairing round (chosen).** The operator
+starts a round with just a **count**: how many targets get bound (BLE
+`StartPairing`, 1-byte N; serial `pair N`). WHERE each one stands is chosen
+**during the round, one bind at a time**: the phone shows a half-court map (net
+at the top) and the operator taps the spot where the next target physically
+stands (BLE `SelectPairSpot`, 1 byte canonical spot 0..7; serial `spot S`). The
+central unit prompts that spot on its own copy of the **same canonical map** —
+phone and HUB75 panel light the same dot — with "Press here"; the person taps
+that physical target, and after a confirming second tap the unit binds that MAC
+to the spot → back to "pick the next spot" until N are bound. Spot choice is
+**free-form**: nothing forces a preset arrangement — e.g. 3 targets can all
+stand on the left side of the court. Self-calibrating: it doesn't matter which
+physical unit went where, or the order in the case, or how many are used.
+(Rejected: fixed numbered stickers — simpler code but demands placement
+discipline and breaks on a swapped corner; RSSI/range auto-localization —
+unreliable indoors; pre-declared spot sets — they forced the layout choice
+before the round instead of at the moment each target is placed.)
 
 **Two-tap confirm (robustness).** A bind takes **two consecutive taps from the
 same MAC**: the first makes it the slot's candidate ("press again to confirm"),
@@ -187,11 +189,14 @@ re-prompts the most recent slot for operator correction.
 The round's logic is the hardware-free `lib/pairing/` core (`PairingRound` +
 `TargetMap`): it prompts slots in order, confirm-binds the tapping MAC, ignores
 stray re-taps of already-bound nodes, and yields the `MAC → position` map (with a
-bounds-checked `mac_at`). Board firmware just feeds it `Pressed` MACs and renders
-the current prompt; progress is surfaced to the app as `PairingProgress`
-(`currentPrompt`, `total`, `awaitingConfirm`) on the Status characteristic —
-`awaitingConfirm` mirrors the two-tap confirm phase (`Tap::Await`), so the phone
-can render "press again to confirm" like the panel does.
+bounds-checked `mac_at`). Board firmware feeds it `Pressed` MACs, keeps the
+slot-index → court-spot association from the operator's `SelectPairSpot` picks,
+and renders the current prompt; progress is surfaced to the app as
+`PairingProgress` (`total`, `boundSpots`, `currentSpot`, `awaitingConfirm`,
+`done`) on the Status characteristic — `currentSpot` is null while the round
+waits for the operator's next pick, and `awaitingConfirm` mirrors the two-tap
+confirm phase (`Tap::Await`), so the phone renders "press again to confirm"
+like the panel does.
 
 **Drills operate on positions, not MACs.** The operator authors "corner → mid →
 corner…" in position terms; the central unit translates to MACs via the map. So a
@@ -223,7 +228,7 @@ Minimal custom GATT service:
 | Characteristic | Dir | Payload |
 |----------------|-----|---------|
 | **Control** | write | start/stop, select drill, drill config (sequence, timing, mode) |
-| **Status** | notify | session state, connected-target count, live progress, pairing progress (`currentPrompt`, `total`, `awaitingConfirm`) |
+| **Status** | notify | session state, connected-target count, live progress, pairing progress (`total`, `boundSpots`, `currentSpot`, `awaitingConfirm`, `done`) |
 | **Results** | notify / read | buffered per-hit records (chunked if large) |
 
 Data model (app side):
@@ -289,7 +294,8 @@ swaps the transport later.
 
 | Command | Does | BLE equivalent |
 |---------|------|----------------|
-| `pair N` / `pair s0,s1,…` | Enter pairing round for the first N canonical spots, or an exact spot list: prompt each spot, confirm-bind the MAC that presses twice → `MAC→position` map | Control: StartPairing (spot bitmask byte) |
+| `pair N` | Open a pairing round for N targets; each bind then waits for a `spot` pick | Control: StartPairing (N byte) |
+| `spot S` | Pairing: pick canonical court spot S (0..7) for the next bind — the panel lights it, a two-tap confirm binds → `MAC→position` map | Control: SelectPairSpot (spot byte) |
 | `undo` | Pairing: unbind the last bound slot and re-prompt it (`PairingRound::undo_last()`) | (dev-only for now) |
 | `nodes` | List paired targets: `position, MAC, fw, batt_mv, last_rssi` | Status read |
 | `drill N seq…` | Load a drill: N active targets + sequence (e.g. `drill 4 rand` or `drill 6 0,3,5,1,…`) + params | Control: config |

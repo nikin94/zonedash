@@ -45,10 +45,12 @@ export interface CentralTransport {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
 
-  /** ControlOp.StartPairing. `spots` are canonical court-spot indices (0..7);
-   *  on the wire this is 1 bitmask byte. The round walks them in the given
-   *  order; PairingProgress.currentPrompt indexes into that order. */
-  startPairing(spots: number[]): Promise<void>;
+  /** ControlOp.StartPairing (payload: 1 byte N). Opens an interactive round:
+   *  each bind's court spot is then picked with selectPairingSpot. */
+  startPairing(numTargets: number): Promise<void>;
+  /** ControlOp.SelectPairSpot — the operator's map tap: prompt this canonical
+   *  spot (0..7) for the next bind. The LED panel lights the same spot. */
+  selectPairingSpot(spot: number): Promise<void>;
   /** ControlOp.LoadDrill. */
   loadDrill(config: DrillConfig): Promise<void>;
   /** ControlOp.StartSession. */

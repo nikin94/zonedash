@@ -2,9 +2,8 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 /** Visual state of one canonical spot on the map. */
 export type SpotVisual =
-  | "off" // not part of the layout
-  | "selected" // in the layout, idle
-  | "pending" // in the current round, not yet prompted
+  | "off" // faint outline — a potential location, nothing assigned
+  | "available" // pairing round waiting for the operator to pick this (or any) spot
   | "active" // being prompted ("press here")
   | "confirm" // candidate tapped once, awaiting the confirm tap
   | "bound"; // bound (this round / done)
@@ -46,8 +45,7 @@ const HIT = 34; // pressable hit box; the visible dot is smaller
 
 const DOT_COLOR: Record<SpotVisual, string> = {
   off: "transparent",
-  selected: "#a1a1aa",
-  pending: "#52525b",
+  available: "#52525b",
   active: "#818cf8",
   confirm: "#fbbf24",
   bound: "#34d399",

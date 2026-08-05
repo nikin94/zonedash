@@ -6,33 +6,29 @@ import type { PairingProgress } from "../ble/contract";
 import type { CentralTransport } from "../ble/transport";
 import { CourtMap, SPOT_NAMES, type SpotVisual } from "./CourtMap";
 
-/** Wheel choices for the quick "how many targets" pick. */
+/** Wheel choices for "how many targets". */
 const WHEEL_DATA = Array.from({ length: 8 }, (_, i) => ({
   value: i + 1,
   label: String(i + 1),
 }));
 
-/** Which canonical spots a count pick activates, in priority order: the four
- *  corners first (footwork priority), then net/back centres (6 = the v0
- *  layout), mid-sides last. Tapping the map overrides any preset. */
-const COUNT_PRESETS = [0, 2, 4, 6, 1, 5, 7, 3];
-const spotsForCount = (n: number) =>
-  COUNT_PRESETS.slice(0, n).sort((a, b) => a - b);
+const WHEEL_ITEM_H = 36;
+const WHEEL_VISIBLE = 3;
+const WHEEL_H = WHEEL_ITEM_H * WHEEL_VISIBLE;
+const PILL_H = 28;
 
 /**
- * Pairing round UI (display-ui.md screen 2, phone side). The court map is the
- * selector: the operator taps the spots where targets physically stand (or
- * spins the count wheel for a quick preset), starts the round, and both this
- * map and the HUB75 panel light the same canonical spot until every one is
- * bound. No pairing state is owned here — the central unit drives the round;
- * this only mirrors its Status events.
+ * Pairing round UI (display-ui.md screen 2, phone side). The count wheel only
+ * sets HOW MANY targets get bound; WHERE each one stands is chosen during the
+ * round — the operator taps a court spot on the map, the central unit lights
+ * that same spot on the LED panel, and a two-tap confirm on the physical
+ * target binds it. Spots are free-form (e.g. 3 targets all on the left side).
+ * No pairing state is owned here — the central unit drives the round; this
+ * only mirrors its Status events.
  */
 export function PairingPanel({ transport }: { transport: CentralTransport }) {
-  const [selected, setSelected] = useState<number[]>(spotsForCount(8));
+  const [total, setTotal] = useState(8);
   const [wheelOpen, setWheelOpen] = useState(false);
-  // The spot set the running round was started with — maps the transport's
-  // round index (currentPrompt) back to a canonical spot.
-  const [roundSpots, setRoundSpots] = useState<number[]>([]);
   const [progress, setProgress] = useState<PairingProgress | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +37,7 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
     const unsub = transport.onStatus((e) => {
       if (e.kind === "pairing") {
         setProgress(e.progress);
-        if (e.progress.currentPrompt < 0) setRunning(false);
+        if (e.progress.done) setRunning(false);
       }
       // A lost/failed link mid-round must end with a message, not a silent
       // vanish — real BLE drops routinely.
@@ -55,29 +51,12 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
     return unsub;
   }, [transport]);
 
-  const toggleSpot = (i: number) => {
-    if (running) return;
-    setProgress(null); // stale "Paired N" must not outlive a layout change
-    setSelected((prev) => {
-      if (prev.includes(i)) {
-        return prev.length > 1 ? prev.filter((s) => s !== i) : prev; // keep ≥1
-      }
-      return [...prev, i].sort((a, b) => a - b);
-    });
-  };
-
-  const pickCount = (n: number) => {
-    setProgress(null);
-    setSelected(spotsForCount(n));
-  };
-
   const start = () => {
     setError(null);
     setProgress(null);
     setWheelOpen(false);
-    setRoundSpots(selected);
     setRunning(true);
-    transport.startPairing(selected).catch((err: unknown) => {
+    transport.startPairing(total).catch((err: unknown) => {
       setRunning(false);
       setError(err instanceof Error ? err.message : "pairing failed");
     });
@@ -91,68 +70,76 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
     transport.stopSession().catch(() => {});
   };
 
-  const done = !running && progress !== null && progress.currentPrompt < 0;
-  const prompting = running && progress !== null && progress.currentPrompt >= 0;
-  const activeSpot = prompting ? roundSpots[progress.currentPrompt] : -1;
+  const done = progress !== null && progress.done;
+  // Round phases: "choosing" — waiting for the operator's map tap;
+  // "prompting" — a spot is lit, waiting for the physical target's taps.
+  const choosing = running && progress !== null && !done && progress.currentSpot === null;
+  const prompting = running && progress !== null && !done && progress.currentSpot !== null;
+
+  const pickSpot = (i: number) => {
+    if (!choosing || progress === null || progress.boundSpots.includes(i)) return;
+    transport.selectPairingSpot(i).catch(() => {}); // a stale tap is a no-op
+  };
 
   const visuals: SpotVisual[] = Array.from({ length: 8 }, (_, i) => {
-    if (prompting) {
-      const idx = roundSpots.indexOf(i);
-      if (idx < 0) return "off";
-      if (idx < progress.currentPrompt) return "bound";
-      if (idx === progress.currentPrompt) {
-        return progress.awaitingConfirm ? "confirm" : "active";
-      }
-      return "pending";
+    if (progress === null) return "off";
+    if (progress.boundSpots.includes(i)) return "bound";
+    if (progress.currentSpot === i) {
+      return progress.awaitingConfirm ? "confirm" : "active";
     }
-    if (done) return roundSpots.includes(i) ? "bound" : "off";
-    return selected.includes(i) ? "selected" : "off";
+    return choosing ? "available" : "off";
   });
+
+  const boundCount = progress?.boundSpots.length ?? 0;
 
   return (
     <View style={styles.panel}>
       <View style={styles.headerRow}>
         <Text style={styles.heading}>Targets</Text>
-        <Pressable
-          testID="count-pill"
-          accessibilityRole="button"
-          accessibilityLabel={`${selected.length} targets, tap to change`}
-          disabled={running}
-          onPress={() => setWheelOpen((v) => !v)}
-          style={[styles.pill, wheelOpen && styles.pillActive]}
-        >
-          <Text style={[styles.pillLabel, wheelOpen && styles.pillLabelActive]}>
-            {selected.length}
-          </Text>
-        </Pressable>
+        {/* The wheel drops down as an absolute overlay anchored on the pill, so
+            the selected item sits exactly where the pill is. */}
+        <View style={styles.pillAnchor}>
+          <Pressable
+            testID="count-pill"
+            accessibilityRole="button"
+            accessibilityLabel={`${total} targets, tap to change`}
+            disabled={running}
+            onPress={() => setWheelOpen((v) => !v)}
+            style={[styles.pill, wheelOpen && styles.pillActive]}
+          >
+            <Text style={[styles.pillLabel, wheelOpen && styles.pillLabelActive]}>
+              {total}
+            </Text>
+          </Pressable>
+          {wheelOpen && !running && (
+            <View testID="count-wheel" style={styles.wheelDropdown}>
+              <WheelPicker
+                data={WHEEL_DATA}
+                value={total}
+                onValueChanged={({ item }) => setTotal(item.value)}
+                itemHeight={WHEEL_ITEM_H}
+                visibleItemCount={WHEEL_VISIBLE}
+                width={72}
+                itemTextStyle={styles.wheelText}
+                overlayItemStyle={styles.wheelOverlay}
+              />
+            </View>
+          )}
+        </View>
       </View>
 
-      {wheelOpen && !running && (
-        <View testID="count-wheel">
-          <WheelPicker
-            data={WHEEL_DATA}
-            value={selected.length}
-            onValueChanged={({ item }) => pickCount(item.value)}
-            itemHeight={36}
-            visibleItemCount={3}
-            width={96}
-            itemTextStyle={styles.wheelText}
-            overlayItemStyle={styles.wheelOverlay}
-          />
-        </View>
-      )}
+      <CourtMap spots={visuals} onPressSpot={choosing ? pickSpot : undefined} />
 
-      <CourtMap
-        spots={visuals}
-        onPressSpot={running ? undefined : toggleSpot}
-      />
-
-      {prompting ? (
+      {choosing ? (
+        <Text style={styles.prompt}>
+          Tap the map where target {boundCount + 1} of {progress.total} stands
+        </Text>
+      ) : prompting ? (
         <Text style={styles.prompt}>
           {progress.awaitingConfirm
             ? "Press again to confirm"
-            : `Press the ${SPOT_NAMES[activeSpot]} target (${
-                progress.currentPrompt + 1
+            : `Press the ${SPOT_NAMES[progress.currentSpot!]} target (${
+                boundCount + 1
               }/${progress.total})`}
         </Text>
       ) : running ? (
@@ -162,7 +149,9 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
           Paired {progress.total} {progress.total === 1 ? "target" : "targets"}
         </Text>
       ) : (
-        <Text style={styles.hint}>Tap the map where your targets stand</Text>
+        <Text style={styles.hint}>
+          Pick a count, then place each target during pairing
+        </Text>
       )}
 
       {error !== null && <Text style={styles.error}>{error}</Text>}
@@ -198,6 +187,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+    zIndex: 10, // the wheel dropdown must overlay the map below
   },
   heading: {
     color: "#a1a1aa",
@@ -205,14 +195,19 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     textTransform: "uppercase",
   },
+  pillAnchor: {
+    // Anchor for the absolute dropdown; matches the pill's footprint.
+    width: 44,
+    height: PILL_H,
+  },
   pill: {
+    height: PILL_H,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "#3f3f46",
     paddingHorizontal: 12,
-    paddingVertical: 4,
-    minWidth: 36,
     alignItems: "center",
+    justifyContent: "center",
   },
   pillActive: {
     borderColor: "#818cf8",
@@ -225,6 +220,23 @@ const styles = StyleSheet.create({
   },
   pillLabelActive: {
     color: "#e0e7ff",
+  },
+  wheelDropdown: {
+    // Centered on the pill so the selected wheel item lands where the pill is.
+    position: "absolute",
+    top: -(WHEEL_H - PILL_H) / 2,
+    left: "50%",
+    marginLeft: -36, // half the wheel width
+    backgroundColor: "#18181b",
+    borderWidth: 1,
+    borderColor: "#3f3f46",
+    borderRadius: 12,
+    overflow: "hidden",
+    elevation: 8, // Android stacking
+    shadowColor: "#000",
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
   },
   wheelText: {
     color: "#fafafa",
