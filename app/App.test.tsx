@@ -58,16 +58,28 @@ test("connecting goes straight to the Pairing screen", async () => {
   expect(screen.queryByText(/Pair your targets first/)).toBeNull();
 });
 
-test("backing out of Pairing before anything is paired bounces back", async () => {
+// Before a layout exists there is nowhere to go back TO — home would redirect
+// straight back here, so the back button must not exist at all (a visible
+// button that returns to the same screen reads as broken).
+test("Pairing has no back button until a round completes", async () => {
   await renderApp();
   await connect();
 
-  fireEvent.press(screen.getByTestId("header-back"));
-  await act(async () => {
-    await jest.runAllTimersAsync();
-  });
-  // Home regained focus unpaired → it handed control right back to Pairing.
-  expect(screen.getByText("Start pairing")).toBeTruthy();
+  expect(screen.queryByTestId("header-back")).toBeNull();
+
+  // Pair two targets — the way back appears once there is a layout.
+  fireEvent.press(screen.getByTestId("count-pill"));
+  const picker = screen.UNSAFE_getByType(WheelPicker);
+  act(() => picker.props.onValueChanged({ item: { value: 2, label: "2" } }));
+  fireEvent.press(screen.getByText("Start pairing"));
+  await act(() => jest.runAllTimersAsync());
+  expect(screen.queryByTestId("header-back")).toBeNull(); // mid-round: still none
+  fireEvent.press(screen.getByTestId("spot-0-available"));
+  await act(() => jest.runAllTimersAsync());
+  fireEvent.press(screen.getByTestId("spot-2-available"));
+  await act(() => jest.runAllTimersAsync());
+  expect(screen.getByText("Paired 2 targets")).toBeTruthy();
+  expect(screen.getByTestId("header-back")).toBeTruthy();
 });
 
 test("after pairing, back lands on the drill home; the chip menu reopens Pairing", async () => {

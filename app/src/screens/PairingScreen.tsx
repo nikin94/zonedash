@@ -1,4 +1,5 @@
 import WheelPicker from "@quidone/react-native-wheel-picker";
+import { useNavigation } from "@react-navigation/native";
 import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
@@ -9,6 +10,7 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import { CustomPressable } from "../components/CustomPressable";
 import { CourtMap, SPOT_NAMES, type SpotVisual } from "../components/CourtMap";
 import { Header } from "../components/Header";
+import type { Nav } from "../navigation";
 import { useAppState } from "../state/AppState";
 import { colors, glowShadow } from "../theme";
 
@@ -342,10 +344,21 @@ export const PairingPanel = ({ transport }: { transport: CentralTransport }) => 
  * renders while connected.
  */
 export const PairingScreen = () => {
-  const { transport, connection } = useAppState();
+  const navigation = useNavigation<Nav>();
+  const { transport, connection, pairedSpots } = useAppState();
+  const paired = pairedSpots.length > 0;
+
+  // Without a layout there is nowhere to go back TO: home immediately
+  // redirects right back here, so a back affordance would only loop. Hide the
+  // button AND the iOS swipe-back gesture until a round completes; both appear
+  // once there is a layout to return to.
+  useEffect(() => {
+    navigation.setOptions({ gestureEnabled: paired });
+  }, [navigation, paired]);
+
   return (
     <View style={styles.screen}>
-      <Header back title="Pairing" />
+      <Header back={paired} title="Pairing" />
       {connection === "connected" ? (
         <PairingPanel transport={transport} />
       ) : (

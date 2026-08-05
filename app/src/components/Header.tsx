@@ -62,7 +62,9 @@ export const Header = ({ back, title = "ZoneDash" }: { back?: boolean; title?: s
     // the redirect would bounce right back here.
     transport.disconnect().catch(() => {});
     // A drop invalidates any pushed screen's context — land back on home.
-    if (back) navigation.popToTop();
+    // Keyed on the stack, not the back prop: a pushed screen may hide its
+    // back button (Pairing before a layout exists) yet still need the pop.
+    if (navigation.canGoBack()) navigation.popToTop();
   };
 
   return (
