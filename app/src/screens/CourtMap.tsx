@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { memo, useLayoutEffect, useRef, type ReactNode } from "react";
 import {
   Animated,
   Dimensions,
@@ -64,34 +64,50 @@ const DOT_STYLE: Record<SpotVisual, { fill: string; ring: string }> = {
   bound: { fill: "rgba(52,211,153,1)", ring: "rgba(63,63,70,0)" },
 };
 
-const FADE_MS = 250;
+const FADE_MS = 200;
 
 /**
  * One court dot, cross-fading its fill/outline on every state change instead
- * of snapping. Plain Animated (JS driver) on purpose: a 250 ms color fade
+ * of snapping. Plain Animated (JS driver) on purpose: a 200 ms color fade
  * needs no Reanimated dependency, and color interpolation can't use the
  * native driver anyway.
+ *
+ * memo: the panel re-renders on every Status event (prompt, confirm, session),
+ * and a re-render used to recreate this dot's interpolation nodes while a fade
+ * was in flight — each event read as an extra blink on dots whose state hadn't
+ * changed. With memo, a dot re-renders only when ITS visual actually changes.
  */
-function AnimatedDot({ visual }: { visual: SpotVisual }) {
+const AnimatedDot = memo(function AnimatedDot({
+  visual,
+}: {
+  visual: SpotVisual;
+}) {
   const anim = useRef(new Animated.Value(1)).current;
   const fromRef = useRef(visual);
   const toRef = useRef(visual);
 
-  // Detect the change during render so the very first frame already
-  // interpolates from the previous color (no one-frame snap).
+  // Swap the interpolation range during render so this commit already maps
+  // from the previous color; the value reset lives in the layout effect below,
+  // which runs before the frame paints (no one-frame snap).
   if (visual !== toRef.current) {
     fromRef.current = toRef.current;
     toRef.current = visual;
-    anim.setValue(0);
   }
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (fromRef.current === toRef.current) return;
+    // A superseded fade must not keep writing frames over the new one — that
+    // races the reset below and reads as repeated blinking.
+    anim.stopAnimation();
+    anim.setValue(0);
     Animated.timing(anim, {
       toValue: 1,
       duration: FADE_MS,
       useNativeDriver: false, // color interpolation is JS-driver only
-    }).start();
+    }).start(({ finished }) => {
+      // Settle so a later unrelated effect run can't replay this fade.
+      if (finished) fromRef.current = toRef.current;
+    });
   }, [visual, anim]);
 
   const from = DOT_STYLE[fromRef.current];
@@ -114,7 +130,7 @@ function AnimatedDot({ visual }: { visual: SpotVisual }) {
       ]}
     />
   );
-}
+});
 
 /**
  * Half-court map. Pure renderer: the parent supplies each canonical spot's
