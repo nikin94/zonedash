@@ -4,24 +4,32 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { MockCentralTransport } from "./src/ble/mock";
 import type { ConnectionState } from "./src/ble/transport";
+import { DrillPanel } from "./src/screens/DrillPanel";
 import { PairingPanel } from "./src/screens/PairingPanel";
 
 /**
  * ZoneDash operator app. Talks to the central unit through the CentralTransport
  * seam — currently the in-app mock, later the real BLE implementation. This
- * screen owns the connection and shows the pairing panel once connected;
- * drill/session screens come next.
+ * screen owns the connection, the Pair/Drill section switch, and the paired
+ * layout (lifted from pairing events — the drill builder needs the slot→spot
+ * order to author positions); the live-session screen comes next.
  */
 export default function App() {
   const transport = useMemo(() => new MockCentralTransport(), []);
   const [connection, setConnection] = useState<ConnectionState>("disconnected");
   const [error, setError] = useState<string | null>(null);
+  const [section, setSection] = useState<"pair" | "drill">("pair");
+  // Canonical spots bound by the last completed round, in bind (slot) order.
+  const [pairedSpots, setPairedSpots] = useState<number[]>([]);
 
   useEffect(() => {
     const unsub = transport.onStatus((e) => {
       if (e.kind === "connection") {
         setConnection(e.state);
         setError(e.state === "error" ? (e.reason ?? "connection failed") : null);
+      }
+      if (e.kind === "pairing" && e.progress.done) {
+        setPairedSpots(e.progress.boundSpots);
       }
     });
     return () => {
@@ -75,7 +83,38 @@ export default function App() {
         </Text>
       </Pressable>
 
-      {connected && <PairingPanel transport={transport} />}
+      {connected && (
+        <>
+          <View style={styles.sectionRow}>
+            {(["pair", "drill"] as const).map((s) => (
+              <Pressable
+                key={s}
+                accessibilityRole="button"
+                accessibilityState={{ selected: section === s }}
+                onPress={() => setSection(s)}
+                style={[styles.section, section === s && styles.sectionActive]}
+              >
+                <Text
+                  style={[
+                    styles.sectionLabel,
+                    section === s && styles.sectionLabelActive,
+                  ]}
+                >
+                  {s === "pair" ? "Pairing" : "Drill"}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          {/* Both panels stay mounted — switching sections hides, not resets:
+              a pairing round or a half-built drill must survive a tab flip. */}
+          <View style={section === "pair" ? null : styles.hidden}>
+            <PairingPanel transport={transport} />
+          </View>
+          <View style={section === "drill" ? null : styles.hidden}>
+            <DrillPanel transport={transport} pairedSpots={pairedSpots} />
+          </View>
+        </>
+      )}
 
       <StatusBar style="light" />
     </View>
@@ -137,5 +176,29 @@ const styles = StyleSheet.create({
     color: "#fafafa",
     fontSize: 15,
     fontWeight: "600",
+  },
+  sectionRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 20,
+  },
+  section: {
+    borderRadius: 999,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+  },
+  sectionActive: {
+    backgroundColor: "#18181b",
+  },
+  sectionLabel: {
+    color: "#71717a",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  sectionLabelActive: {
+    color: "#fafafa",
+  },
+  hidden: {
+    display: "none",
   },
 });
