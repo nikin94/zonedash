@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
 
 import type { CentralTransport, DrillConfig } from "../ble/transport";
@@ -57,6 +57,19 @@ export function DrillPanel({
 
   const paired = pairedSpots.length > 0;
 
+  // A re-pair can drop spots the authored path referenced — without this, a
+  // stale path would translate to position -1 (255 on the wire) and arm a
+  // target that doesn't exist. Filter out vanished spots and invalidate a
+  // previously loaded config so the operator re-checks what remains.
+  useEffect(() => {
+    setPath((prev) => {
+      const kept = prev.filter((s) => pairedSpots.includes(s));
+      if (kept.length === prev.length) return prev; // idempotent on fresh arrays
+      setLoaded(false);
+      return kept;
+    });
+  }, [pairedSpots]);
+
   // Any edit invalidates a previously loaded config.
   const edit = <T,>(set: (v: T) => void) => (v: T) => {
     setLoaded(false);
@@ -71,17 +84,30 @@ export function DrillPanel({
   };
 
   const load = () => {
+    // Only the params this mode actually uses go on the wire — the engine
+    // would ignore the rest, but stale values from a prior mode must not leak
+    // into the config.
+    const shows = SHOWS[mode];
     const config: DrillConfig = {
       mode,
       numPositions: pairedSpots.length,
-      delayMs,
       timeoutMs,
-      allowImmediateRepeat: repeat,
     };
-    if (mode === "random") config.count = count;
-    if (mode === "time") config.durationMs = durationMs;
-    // Positions are slot indices — translate the authored canonical spots.
-    if (mode === "path") config.path = path.map((s) => pairedSpots.indexOf(s));
+    if (shows.delay) config.delayMs = delayMs;
+    if (shows.repeat) config.allowImmediateRepeat = repeat;
+    if (shows.count) config.count = count;
+    if (shows.duration) config.durationMs = durationMs;
+    if (mode === "path") {
+      // Positions are slot indices — translate the authored canonical spots.
+      const positions = path.map((s) => pairedSpots.indexOf(s));
+      // Belt and braces over the re-pair effect above: a -1 here would go out
+      // as position 255 and arm a target that doesn't exist.
+      if (positions.some((p) => p < 0)) {
+        setError("path references unpaired spots — re-author it");
+        return;
+      }
+      config.path = positions;
+    }
 
     setError(null);
     transport.loadDrill(config).then(

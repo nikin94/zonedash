@@ -125,9 +125,44 @@ test("time mode sends a duration window; live mode strips inapplicable params", 
   expect(screen.getByText("Timeout (auto-miss)")).toBeTruthy();
   fireEvent.press(screen.getByText("Load drill"));
   await act(() => jest.runAllTimersAsync());
+  // Inapplicable params must not leak stale values into the wire config.
+  expect(load).toHaveBeenLastCalledWith({
+    mode: "live",
+    numPositions: 3,
+    timeoutMs: 0,
+  } satisfies DrillConfig);
+});
+
+test("a re-pair drops vanished spots from the authored path and invalidates the load", async () => {
+  const t = await connectedTransport();
+  const load = jest.spyOn(t, "loadDrill");
+  const { rerender } = render(<DrillPanel transport={t} pairedSpots={PAIRED} />);
+
+  // Author a path on layout A and load it.
+  fireEvent.press(screen.getByText("Path"));
+  fireEvent.press(screen.getByTestId("spot-6-available"));
+  fireEvent.press(screen.getByTestId("spot-0-available"));
+  fireEvent.press(screen.getByText("Load drill"));
+  await act(() => jest.runAllTimersAsync());
+  expect(screen.getByText("Drill loaded — ready to start")).toBeTruthy();
+
+  // Re-pair onto layout B: spot 6 is gone, spot 0 survives. The stale step
+  // must be filtered out — otherwise it would translate to position -1
+  // (255 on the wire) and arm a target that doesn't exist.
+  rerender(<DrillPanel transport={t} pairedSpots={[0, 1, 2]} />);
+  expect(screen.getByTestId("path-sequence")).toHaveTextContent(/^net left$/);
+  expect(screen.queryByText("Drill loaded — ready to start")).toBeNull();
+
+  fireEvent.press(screen.getByText("Load drill"));
+  await act(() => jest.runAllTimersAsync());
   expect(load).toHaveBeenLastCalledWith(
-    expect.objectContaining({ mode: "live", numPositions: 3 }),
+    expect.objectContaining({ mode: "path", numPositions: 3, path: [0] }),
   );
+
+  // A full layout swap empties the path entirely — back to the authoring hint.
+  rerender(<DrillPanel transport={t} pairedSpots={[1, 2, 3]} />);
+  expect(screen.queryByTestId("path-sequence")).toBeNull();
+  expect(screen.getByText(/Tap paired spots in the order/)).toBeTruthy();
 });
 
 test("editing after a load invalidates the loaded state", async () => {
