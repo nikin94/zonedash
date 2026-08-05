@@ -1,18 +1,20 @@
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 
 import { MockCentralTransport } from "./src/ble/mock";
 import type { ConnectionState } from "./src/ble/transport";
-import { ConfirmDialog } from "./src/screens/ConfirmDialog";
+import { AppText } from "./src/components/AppText";
+import { ConfirmDialog } from "./src/components/ConfirmDialog";
+import { CloseIcon, SlidersIcon } from "./src/components/Icons";
 import { DrillPanel } from "./src/screens/DrillPanel";
-import { CloseIcon, SlidersIcon } from "./src/screens/Icons";
 import { PairingPanel } from "./src/screens/PairingPanel";
 import {
   DEFAULT_SETTINGS,
   SettingsPanel,
   type DrillSettings,
 } from "./src/screens/SettingsPanel";
+import { colors, glowShadow } from "./src/theme";
 
 /** Brief status-chip label per connection state. */
 const CHIP_LABEL: Record<ConnectionState, string> = {
@@ -29,7 +31,7 @@ const CHIP_LABEL: Record<ConnectionState, string> = {
  * connection, the Pair/Drill section switch, the drill settings, and the
  * paired layout lifted from pairing events; the live-session screen comes next.
  */
-export default function App() {
+const App = () => {
   const transport = useMemo(() => new MockCentralTransport(), []);
   const [connection, setConnection] = useState<ConnectionState>("disconnected");
   const [error, setError] = useState<string | null>(null);
@@ -82,7 +84,7 @@ export default function App() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>ZoneDash</Text>
+        <AppText style={styles.headerTitle}>ZoneDash</AppText>
         <View style={styles.headerRight}>
           <Pressable
             testID="status-chip"
@@ -102,7 +104,7 @@ export default function App() {
                 connection === "error" && styles.dotError,
               ]}
             />
-            <Text style={styles.chipLabel}>{CHIP_LABEL[connection]}</Text>
+            <AppText style={styles.chipLabel}>{CHIP_LABEL[connection]}</AppText>
           </Pressable>
           <Pressable
             testID="settings-button"
@@ -160,14 +162,14 @@ export default function App() {
                   onPress={() => setSection(s)}
                   style={[styles.section, section === s && styles.sectionActive]}
                 >
-                  <Text
+                  <AppText
                     style={[
                       styles.sectionLabel,
                       section === s && styles.sectionLabelActive,
                     ]}
                   >
                     {s === "pair" ? "Pairing" : "Drill"}
-                  </Text>
+                  </AppText>
                 </Pressable>
               ))}
             </View>
@@ -185,25 +187,27 @@ export default function App() {
             </View>
           </>
         ) : (
-          <Text style={styles.hint}>
+          <AppText style={styles.hint}>
             {busy
               ? "Connecting to the central unit…"
               : connection === "error"
                 ? `${error ?? "Connection failed"} — tap the status in the header to retry`
                 : "Not connected — tap the status in the header to connect"}
-          </Text>
+          </AppText>
         )}
       </View>
 
       <StatusBar style="light" />
     </View>
   );
-}
+};
+
+export default App;
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0a0a0a",
+    backgroundColor: colors.background,
     paddingTop: 56, // clears the status bar without a safe-area dependency
   },
   header: {
@@ -216,7 +220,6 @@ const styles = StyleSheet.create({
     zIndex: 20, // the disconnect dialog overlays the content below
   },
   headerTitle: {
-    color: "#fafafa",
     fontSize: 20,
     fontWeight: "700",
     letterSpacing: 1,
@@ -233,11 +236,11 @@ const styles = StyleSheet.create({
     height: 44, // fingertip-sized like the other header controls
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: "#3f3f46",
+    borderColor: colors.border,
     paddingHorizontal: 14,
   },
   chipLabel: {
-    color: "#a1a1aa",
+    color: colors.textSecondary,
     fontSize: 13,
     fontWeight: "600",
   },
@@ -245,26 +248,26 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#71717a",
+    backgroundColor: colors.textMuted,
   },
   dotConnected: {
-    backgroundColor: "#34d399",
+    backgroundColor: colors.success,
   },
   dotError: {
-    backgroundColor: "#f87171",
+    backgroundColor: colors.danger,
   },
   headerButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: "#3f3f46",
+    borderColor: colors.border,
     alignItems: "center",
     justifyContent: "center",
   },
   headerButtonActive: {
-    borderColor: "#818cf8",
-    backgroundColor: "#1e1b4b",
+    borderColor: colors.accent,
+    backgroundColor: colors.accentSurface,
   },
   confirmBackdrop: {
     position: "absolute",
@@ -281,17 +284,13 @@ const styles = StyleSheet.create({
     top: 112,
     alignSelf: "center",
     zIndex: 30,
-    backgroundColor: "#0a0a0a",
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: "#3f3f46",
+    borderColor: colors.border,
     borderRadius: 20,
     paddingHorizontal: 24,
     paddingVertical: 20,
-    elevation: 8,
-    shadowColor: "#fff",
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 0 },
+    ...glowShadow,
   },
   content: {
     flex: 1,
@@ -300,13 +299,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   hint: {
-    color: "#71717a",
+    color: colors.textMuted,
     fontSize: 13,
     textAlign: "center",
     paddingHorizontal: 32,
   },
   buttonPressed: {
-    backgroundColor: "#18181b",
+    backgroundColor: colors.surface,
   },
   sectionRow: {
     flexDirection: "row",
@@ -319,15 +318,15 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   sectionActive: {
-    backgroundColor: "#18181b",
+    backgroundColor: colors.surface,
   },
   sectionLabel: {
-    color: "#71717a",
+    color: colors.textMuted,
     fontSize: 14,
     fontWeight: "600",
   },
   sectionLabelActive: {
-    color: "#fafafa",
+    color: colors.text,
   },
   hidden: {
     display: "none",

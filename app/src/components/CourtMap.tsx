@@ -5,10 +5,11 @@ import {
   Dimensions,
   Pressable,
   StyleSheet,
-  Text,
   View,
 } from "react-native";
 
+import { alpha, colors } from "../theme";
+import { AppText } from "./AppText";
 import { CheckIcon } from "./Icons";
 
 /** Visual state of one canonical spot on the map. */
@@ -59,17 +60,17 @@ const HIT = 52; // pressable hit box; the visible dot is smaller
 const HIT_SLOP = 8; // extra forgiveness around each spot
 const DOT = 38; // visible dot diameter — one size for every state
 
-// Fill + outline per state, as rgba so Animated can interpolate between them.
-// "off" fades to a zero-alpha fill (outline only) instead of snapping away.
-// "active" is deliberately NOT a color of its own: the in-progress prompt is
-// communicated by the spinner inside the dot, on a neutral dark fill.
+// Fill + outline per state. "off" fades to a zero-alpha fill (outline only)
+// instead of snapping away. "active" is deliberately NOT a color of its own:
+// the in-progress prompt is communicated by the spinner inside the dot, on a
+// neutral dark fill.
 const DOT_STYLE: Record<SpotVisual, { fill: string; ring: string }> = {
-  off: { fill: "rgba(63,63,70,0)", ring: "rgba(63,63,70,1)" },
-  available: { fill: "rgba(82,82,91,1)", ring: "rgba(63,63,70,0)" },
-  active: { fill: "rgba(24,24,27,1)", ring: "rgba(63,63,70,1)" },
-  confirm: { fill: "rgba(251,191,36,1)", ring: "rgba(63,63,70,0)" },
-  bound: { fill: "rgba(52,211,153,1)", ring: "rgba(63,63,70,0)" },
-  selected: { fill: "rgba(129,140,248,1)", ring: "rgba(63,63,70,0)" },
+  off: { fill: alpha(colors.border, 0), ring: colors.border },
+  available: { fill: colors.dim, ring: alpha(colors.border, 0) },
+  active: { fill: colors.surface, ring: colors.border },
+  confirm: { fill: colors.warning, ring: alpha(colors.border, 0) },
+  bound: { fill: colors.success, ring: alpha(colors.border, 0) },
+  selected: { fill: colors.accent, ring: alpha(colors.border, 0) },
 };
 
 const FADE_MS = 200;
@@ -100,11 +101,7 @@ const A11Y_STATE: Record<SpotVisual, string> = {
  * memo: the panel re-renders on every Status event (prompt, confirm,
  * session); a dot re-renders only when ITS visual actually changes.
  */
-const AnimatedDot = memo(function AnimatedDot({
-  visual,
-}: {
-  visual: SpotVisual;
-}) {
+const AnimatedDot = memo(({ visual }: { visual: SpotVisual }) => {
   const fromRef = useRef(visual);
   const toRef = useRef(visual);
   const overlayRef = useRef(new Animated.Value(0));
@@ -152,7 +149,7 @@ const AnimatedDot = memo(function AnimatedDot({
       {/* Glyphs sit above the fade overlay so they appear with the new state:
           a spinner while the spot is prompted, a check once it is bound. */}
       {toRef.current === "active" && (
-        <ActivityIndicator testID="dot-spinner" size="small" color="#fafafa" />
+        <ActivityIndicator testID="dot-spinner" size="small" color={colors.text} />
       )}
       {toRef.current === "bound" && (
         <View testID="dot-check" style={styles.dotGlyph}>
@@ -169,7 +166,7 @@ const AnimatedDot = memo(function AnimatedDot({
  * `children` render centered inside the court — the perimeter is all dots, so
  * the middle is free real estate for the round's status text and action.
  */
-export function CourtMap({
+export const CourtMap = ({
   spots,
   onPressSpot,
   children,
@@ -177,44 +174,42 @@ export function CourtMap({
   spots: SpotVisual[]; // length 8, canonical order
   onPressSpot?: (index: number) => void;
   children?: ReactNode;
-}) {
-  return (
-    <View style={styles.wrap}>
-      <View style={styles.netRow}>
-        <View style={styles.netLine} />
-        <Text style={styles.netLabel}>NET</Text>
-        <View style={styles.netLine} />
-      </View>
-      <View style={styles.court}>
-        {children != null && (
-          // box-none: the centre content is interactive, the empty area around
-          // it stays transparent to touches so the perimeter spots keep working.
-          <View pointerEvents="box-none" style={styles.centre}>
-            {children}
-          </View>
-        )}
-        {SPOT_XY.map((p, i) => (
-          <Pressable
-            key={i}
-            testID={`spot-${i}-${spots[i]}`}
-            accessibilityRole="button"
-            accessibilityLabel={`${SPOT_NAMES[i]} spot, ${A11Y_STATE[spots[i]]}`}
-            accessibilityState={{ selected: spots[i] !== "off" }}
-            disabled={!onPressSpot}
-            onPress={() => onPressSpot?.(i)}
-            hitSlop={HIT_SLOP}
-            style={[
-              styles.hit,
-              { left: p.x * (MAP_W - HIT), top: p.y * (MAP_H - HIT) },
-            ]}
-          >
-            <AnimatedDot visual={spots[i]} />
-          </Pressable>
-        ))}
-      </View>
+}) => (
+  <View style={styles.wrap}>
+    <View style={styles.netRow}>
+      <View style={styles.netLine} />
+      <AppText style={styles.netLabel}>NET</AppText>
+      <View style={styles.netLine} />
     </View>
-  );
-}
+    <View style={styles.court}>
+      {children != null && (
+        // box-none: the centre content is interactive, the empty area around
+        // it stays transparent to touches so the perimeter spots keep working.
+        <View pointerEvents="box-none" style={styles.centre}>
+          {children}
+        </View>
+      )}
+      {SPOT_XY.map((p, i) => (
+        <Pressable
+          key={i}
+          testID={`spot-${i}-${spots[i]}`}
+          accessibilityRole="button"
+          accessibilityLabel={`${SPOT_NAMES[i]} spot, ${A11Y_STATE[spots[i]]}`}
+          accessibilityState={{ selected: spots[i] !== "off" }}
+          disabled={!onPressSpot}
+          onPress={() => onPressSpot?.(i)}
+          hitSlop={HIT_SLOP}
+          style={[
+            styles.hit,
+            { left: p.x * (MAP_W - HIT), top: p.y * (MAP_H - HIT) },
+          ]}
+        >
+          <AnimatedDot visual={spots[i]} />
+        </Pressable>
+      ))}
+    </View>
+  </View>
+);
 
 const styles = StyleSheet.create({
   wrap: {
@@ -230,10 +225,10 @@ const styles = StyleSheet.create({
   netLine: {
     flex: 1,
     height: 2,
-    backgroundColor: "#3f3f46",
+    backgroundColor: colors.border,
   },
   netLabel: {
-    color: "#71717a",
+    color: colors.textMuted,
     fontSize: 10,
     letterSpacing: 2,
   },
@@ -241,7 +236,7 @@ const styles = StyleSheet.create({
     width: MAP_W,
     height: MAP_H,
     borderWidth: 1,
-    borderColor: "#3f3f46",
+    borderColor: colors.border,
     borderRadius: 4,
   },
   centre: {

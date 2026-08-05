@@ -1,6 +1,9 @@
 import WheelPicker from "@quidone/react-native-wheel-picker";
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
+
+import { colors, glowShadow } from "../theme";
+import { AppText } from "./AppText";
 
 export interface WheelOption {
   value: number;
@@ -43,7 +46,7 @@ const PILL_H = 36;
  * pill sits); a new settled value applies and closes it, any outside tap
  * dismisses it.
  */
-export function WheelField({
+export const WheelField = ({
   label,
   value,
   options,
@@ -57,13 +60,13 @@ export function WheelField({
   onChange: (v: number) => void;
   testID: string;
   width?: number;
-}) {
+}) => {
   const [open, setOpen] = useState(false);
   const display = options.find((o) => o.value === value)?.label ?? String(value);
 
   return (
     <View style={[styles.row, open && styles.rowOpen]}>
-      <Text style={styles.label}>{label}</Text>
+      <AppText style={styles.label}>{label}</AppText>
       <View style={[styles.anchor, { width }]}>
         <Pressable
           testID={testID}
@@ -72,7 +75,7 @@ export function WheelField({
           onPress={() => setOpen((v) => !v)}
           style={[styles.pill, open && styles.pillActive]}
         >
-          <Text style={styles.pillLabel}>{display}</Text>
+          <AppText style={styles.pillLabel}>{display}</AppText>
         </Pressable>
         {open && (
           <>
@@ -108,7 +111,7 @@ export function WheelField({
       </View>
     </View>
   );
-}
+};
 
 const styles = StyleSheet.create({
   row: {
@@ -122,7 +125,7 @@ const styles = StyleSheet.create({
     zIndex: 10, // the dropdown must overlay the rows below
   },
   label: {
-    color: "#a1a1aa",
+    color: colors.textSecondary,
     fontSize: 14,
     flexShrink: 1,
   },
@@ -133,17 +136,16 @@ const styles = StyleSheet.create({
     height: PILL_H,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#3f3f46",
+    borderColor: colors.border,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 10,
   },
   pillActive: {
-    borderColor: "#818cf8",
-    backgroundColor: "#1e1b4b",
+    borderColor: colors.accent,
+    backgroundColor: colors.accentSurface,
   },
   pillLabel: {
-    color: "#fafafa",
     fontSize: 14,
     fontWeight: "600",
   },
@@ -162,23 +164,19 @@ const styles = StyleSheet.create({
     paddingVertical: PAD_V,
     // Button-matched chrome: black fill, same border and rounding, soft white
     // glow so the values separate from the dark background.
-    backgroundColor: "#0a0a0a",
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: "#3f3f46",
+    borderColor: colors.border,
     borderRadius: 999,
     overflow: "hidden",
-    elevation: 8,
-    shadowColor: "#fff",
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 0 },
+    ...glowShadow,
   },
   wheelText: {
-    color: "#fafafa",
+    color: colors.text,
     fontSize: 16,
   },
   wheelOverlay: {
-    backgroundColor: "#27272a",
+    backgroundColor: colors.surfaceAlt,
     borderRadius: 8,
   },
 });

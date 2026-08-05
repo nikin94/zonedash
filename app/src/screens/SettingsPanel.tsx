@@ -1,6 +1,8 @@
-import { StyleSheet, Switch, Text, View } from "react-native";
+import { StyleSheet, Switch, View } from "react-native";
 
-import { msOptions, WheelField } from "./WheelField";
+import { AppText } from "../components/AppText";
+import { msOptions, WheelField } from "../components/WheelField";
+import { colors } from "../theme";
 
 /**
  * Session-wide drill settings, lifted out of the drill builder so they live
@@ -24,43 +26,41 @@ export const DEFAULT_SETTINGS: DrillSettings = {
 const DELAY_OPTIONS = msOptions(0, 5000, 100, "none");
 const TIMEOUT_OPTIONS = msOptions(0, 10000, 100, "off");
 
-export function SettingsPanel({
+export const SettingsPanel = ({
   settings,
   onChange,
 }: {
   settings: DrillSettings;
   onChange: (next: DrillSettings) => void;
-}) {
-  return (
-    <View style={styles.panel}>
-      <Text style={styles.heading}>Drill settings</Text>
-      <WheelField
-        label="Delay between targets"
-        testID="setting-delay"
-        value={settings.delayMs}
-        options={DELAY_OPTIONS}
-        onChange={(delayMs) => onChange({ ...settings, delayMs })}
+}) => (
+  <View style={styles.panel}>
+    <AppText style={styles.heading}>Drill settings</AppText>
+    <WheelField
+      label="Delay between targets"
+      testID="setting-delay"
+      value={settings.delayMs}
+      options={DELAY_OPTIONS}
+      onChange={(delayMs) => onChange({ ...settings, delayMs })}
+    />
+    <WheelField
+      label="Timeout (auto-miss)"
+      testID="setting-timeout"
+      value={settings.timeoutMs}
+      options={TIMEOUT_OPTIONS}
+      onChange={(timeoutMs) => onChange({ ...settings, timeoutMs })}
+    />
+    <View style={styles.paramRow}>
+      <AppText style={styles.paramLabel}>Same target twice in a row</AppText>
+      <Switch
+        accessibilityLabel="Allow immediate repeat"
+        value={settings.allowImmediateRepeat}
+        onValueChange={(allowImmediateRepeat) =>
+          onChange({ ...settings, allowImmediateRepeat })
+        }
       />
-      <WheelField
-        label="Timeout (auto-miss)"
-        testID="setting-timeout"
-        value={settings.timeoutMs}
-        options={TIMEOUT_OPTIONS}
-        onChange={(timeoutMs) => onChange({ ...settings, timeoutMs })}
-      />
-      <View style={styles.paramRow}>
-        <Text style={styles.paramLabel}>Same target twice in a row</Text>
-        <Switch
-          accessibilityLabel="Allow immediate repeat"
-          value={settings.allowImmediateRepeat}
-          onValueChange={(allowImmediateRepeat) =>
-            onChange({ ...settings, allowImmediateRepeat })
-          }
-        />
-      </View>
     </View>
-  );
-}
+  </View>
+);
 
 const styles = StyleSheet.create({
   panel: {
@@ -70,7 +70,7 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   heading: {
-    color: "#a1a1aa",
+    color: colors.textSecondary,
     fontSize: 12,
     letterSpacing: 2,
     textTransform: "uppercase",
@@ -83,7 +83,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   paramLabel: {
-    color: "#a1a1aa",
+    color: colors.textSecondary,
     fontSize: 14,
     flexShrink: 1,
   },

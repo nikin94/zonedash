@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 
 import type { CentralTransport, DrillConfig } from "../ble/transport";
-import { CourtMap, SPOT_NAMES, type SpotVisual } from "./CourtMap";
+import { AppText } from "../components/AppText";
+import { CourtMap, SPOT_NAMES, type SpotVisual } from "../components/CourtMap";
+import { msOptions, WheelField } from "../components/WheelField";
+import { colors } from "../theme";
 import type { DrillSettings } from "./SettingsPanel";
-import { msOptions, WheelField } from "./WheelField";
 
 const COUNT_OPTIONS = Array.from({ length: 99 }, (_, i) => ({
   value: i + 1,
@@ -39,7 +41,7 @@ const MODES: { key: UiMode; label: string }[] = [
  * map tap on spot s translates to position pairedSpots.indexOf(s). The wire
  * config therefore matches the firmware DrillConfig unchanged.
  */
-export function DrillPanel({
+export const DrillPanel = ({
   transport,
   pairedSpots,
   settings,
@@ -47,7 +49,7 @@ export function DrillPanel({
   transport: CentralTransport;
   pairedSpots: number[]; // canonical spots in bind order (slot order)
   settings: DrillSettings;
-}) {
+}) => {
   const [uiMode, setUiMode] = useState<UiMode>("random");
   const [stopBy, setStopBy] = useState<StopBy>("count");
   const [count, setCount] = useState(10);
@@ -139,7 +141,9 @@ export function DrillPanel({
   if (!paired) {
     return (
       <View style={styles.panel}>
-        <Text style={styles.hint}>Pair your targets first — drills run on the paired layout</Text>
+        <AppText style={styles.hint}>
+          Pair your targets first — drills run on the paired layout
+        </AppText>
       </View>
     );
   }
@@ -157,11 +161,11 @@ export function DrillPanel({
             onPress={() => pickMode(m.key)}
             style={[styles.modeChip, uiMode === m.key && styles.modeChipActive]}
           >
-            <Text
+            <AppText
               style={[styles.modeLabel, uiMode === m.key && styles.modeLabelActive]}
             >
               {m.label}
-            </Text>
+            </AppText>
           </Pressable>
         ))}
       </View>
@@ -169,7 +173,7 @@ export function DrillPanel({
       {uiMode === "random" && (
         <>
           <View style={styles.stopRow}>
-            <Text style={styles.paramLabel}>Stop after</Text>
+            <AppText style={styles.paramLabel}>Stop after</AppText>
             <View style={styles.stopChips}>
               {(
                 [
@@ -184,14 +188,14 @@ export function DrillPanel({
                   onPress={() => edit(setStopBy)(s.key)}
                   style={[styles.stopChip, stopBy === s.key && styles.modeChipActive]}
                 >
-                  <Text
+                  <AppText
                     style={[
                       styles.modeLabel,
                       stopBy === s.key && styles.modeLabelActive,
                     ]}
                   >
                     {s.label}
-                  </Text>
+                  </AppText>
                 </Pressable>
               ))}
             </View>
@@ -221,40 +225,42 @@ export function DrillPanel({
           <CourtMap spots={visuals} onPressSpot={appendPathSpot} />
           {path.length > 0 ? (
             <>
-              <Text style={styles.pathText} testID="path-sequence">
+              <AppText style={styles.pathText} testID="path-sequence">
                 {path.map((s) => SPOT_NAMES[s]).join(" → ")}
-              </Text>
+              </AppText>
               <View style={styles.pathActions}>
                 <Pressable
                   accessibilityRole="button"
                   onPress={() => edit(setPath)(path.slice(0, -1))}
                   style={({ pressed }) => [styles.smallButton, pressed && styles.buttonPressed]}
                 >
-                  <Text style={styles.buttonLabel}>Undo</Text>
+                  <AppText style={styles.buttonLabel}>Undo</AppText>
                 </Pressable>
                 <Pressable
                   accessibilityRole="button"
                   onPress={() => edit(setPath)([])}
                   style={({ pressed }) => [styles.smallButton, pressed && styles.buttonPressed]}
                 >
-                  <Text style={styles.buttonLabel}>Clear</Text>
+                  <AppText style={styles.buttonLabel}>Clear</AppText>
                 </Pressable>
               </View>
             </>
           ) : (
-            <Text style={styles.hint}>Tap paired spots in the order to run</Text>
+            <AppText style={styles.hint}>Tap paired spots in the order to run</AppText>
           )}
         </>
       )}
 
       {uiMode === "live" && (
-        <Text style={styles.hint}>You pick each next target during the session</Text>
+        <AppText style={styles.hint}>
+          You pick each next target during the session
+        </AppText>
       )}
 
-      {error !== null && <Text style={styles.error}>{error}</Text>}
+      {error !== null && <AppText style={styles.error}>{error}</AppText>}
 
       {loaded ? (
-        <Text style={styles.doneText}>Drill loaded — ready to start</Text>
+        <AppText style={styles.doneText}>Drill loaded — ready to start</AppText>
       ) : (
         <Pressable
           accessibilityRole="button"
@@ -266,12 +272,12 @@ export function DrillPanel({
             pressed && styles.buttonPressed,
           ]}
         >
-          <Text style={styles.buttonLabel}>Load drill</Text>
+          <AppText style={styles.buttonLabel}>Load drill</AppText>
         </Pressable>
       )}
     </View>
   );
-}
+};
 
 const styles = StyleSheet.create({
   panel: {
@@ -288,21 +294,21 @@ const styles = StyleSheet.create({
   modeChip: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#3f3f46",
+    borderColor: colors.border,
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
   modeChipActive: {
-    borderColor: "#818cf8",
-    backgroundColor: "#1e1b4b",
+    borderColor: colors.accent,
+    backgroundColor: colors.accentSurface,
   },
   modeLabel: {
-    color: "#a1a1aa",
+    color: colors.textSecondary,
     fontSize: 14,
     fontWeight: "600",
   },
   modeLabelActive: {
-    color: "#e0e7ff",
+    color: colors.accentText,
   },
   stopRow: {
     alignSelf: "stretch",
@@ -318,17 +324,17 @@ const styles = StyleSheet.create({
   stopChip: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#3f3f46",
+    borderColor: colors.border,
     paddingHorizontal: 16,
     paddingVertical: 10,
   },
   paramLabel: {
-    color: "#a1a1aa",
+    color: colors.textSecondary,
     fontSize: 14,
     flexShrink: 1,
   },
   pathText: {
-    color: "#e0e7ff",
+    color: colors.accentText,
     fontSize: 13,
     textAlign: "center",
   },
@@ -339,28 +345,28 @@ const styles = StyleSheet.create({
   smallButton: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#3f3f46",
+    borderColor: colors.border,
     paddingHorizontal: 18,
     paddingVertical: 10,
   },
   hint: {
-    color: "#71717a",
+    color: colors.textMuted,
     fontSize: 13,
     textAlign: "center",
   },
   error: {
-    color: "#f87171",
+    color: colors.danger,
     fontSize: 13,
   },
   doneText: {
-    color: "#34d399",
+    color: colors.success,
     fontSize: 15,
     fontWeight: "600",
   },
   button: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#3f3f46",
+    borderColor: colors.border,
     paddingHorizontal: 28,
     paddingVertical: 14,
   },
@@ -368,10 +374,9 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   buttonPressed: {
-    backgroundColor: "#18181b",
+    backgroundColor: colors.surface,
   },
   buttonLabel: {
-    color: "#fafafa",
     fontSize: 15,
     fontWeight: "600",
   },

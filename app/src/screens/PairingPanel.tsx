@@ -1,11 +1,13 @@
 import WheelPicker from "@quidone/react-native-wheel-picker";
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 
 import type { PairingProgress } from "../ble/contract";
 import type { CentralTransport } from "../ble/transport";
-import { ConfirmDialog } from "./ConfirmDialog";
-import { CourtMap, SPOT_NAMES, type SpotVisual } from "./CourtMap";
+import { AppText } from "../components/AppText";
+import { ConfirmDialog } from "../components/ConfirmDialog";
+import { CourtMap, SPOT_NAMES, type SpotVisual } from "../components/CourtMap";
+import { colors, glowShadow } from "../theme";
 
 /** Wheel choices for "how many targets". */
 const WHEEL_DATA = Array.from({ length: 8 }, (_, i) => ({
@@ -38,7 +40,7 @@ const BUTTON_H = 48; // fingertip-sized; explicit so hidden slots match exactly
  * No pairing state is owned here — the central unit drives the round; this
  * only mirrors its Status events.
  */
-export function PairingPanel({ transport }: { transport: CentralTransport }) {
+export const PairingPanel = ({ transport }: { transport: CentralTransport }) => {
   const [total, setTotal] = useState(8);
   const [wheelOpen, setWheelOpen] = useState(false);
   // A new count picked AFTER a completed round — held until the operator
@@ -160,7 +162,7 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
   return (
     <View style={styles.panel}>
       <View style={styles.headerRow}>
-        <Text style={styles.heading}>Targets</Text>
+        <AppText style={styles.heading}>Targets</AppText>
         {/* The wheel drops down as an absolute overlay anchored on the pill, so
             the selected item sits exactly where the pill is. */}
         <View style={styles.pillAnchor}>
@@ -172,9 +174,9 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
             onPress={() => setWheelOpen((v) => !v)}
             style={[styles.pill, wheelOpen && styles.pillActive]}
           >
-            <Text style={[styles.pillLabel, wheelOpen && styles.pillLabelActive]}>
+            <AppText style={[styles.pillLabel, wheelOpen && styles.pillLabelActive]}>
               {total}
-            </Text>
+            </AppText>
           </Pressable>
           {wheelOpen && !running && (
             <>
@@ -240,35 +242,35 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
                 round phases, so nothing shifts as states change. */}
             <View testID="status-slot" style={styles.textSlot}>
               {choosing ? (
-                <Text style={styles.prompt}>
+                <AppText style={styles.prompt}>
                   Tap the map where target {boundCount + 1} of {progress.total} stands
-                </Text>
+                </AppText>
               ) : prompting ? (
-                <Text style={styles.prompt}>
+                <AppText style={styles.prompt}>
                   {progress.awaitingConfirm
                     ? "Press again to confirm"
                     : `Press the ${SPOT_NAMES[progress.currentSpot!]} target (${
                         boundCount + 1
                       }/${progress.total})`}
-                </Text>
+                </AppText>
               ) : running ? (
-                <Text style={styles.prompt}>Starting pairing…</Text>
+                <AppText style={styles.prompt}>Starting pairing…</AppText>
               ) : done ? (
-                <Text style={styles.doneText}>
+                <AppText style={styles.doneText}>
                   Paired {progress.total} {progress.total === 1 ? "target" : "targets"}
-                </Text>
+                </AppText>
               ) : (
-                <Text style={styles.hint}>
+                <AppText style={styles.hint}>
                   Pick a count, then place each target during pairing
-                </Text>
+                </AppText>
               )}
             </View>
 
             <View testID="error-slot" style={styles.errorSlot}>
               {error !== null && (
-                <Text style={styles.error} numberOfLines={1}>
+                <AppText style={styles.error} numberOfLines={1}>
                   {error}
-                </Text>
+                </AppText>
               )}
             </View>
 
@@ -281,7 +283,7 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
                   onPress={cancel}
                   style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
                 >
-                  <Text style={styles.buttonLabel}>Cancel</Text>
+                  <AppText style={styles.buttonLabel}>Cancel</AppText>
                 </Pressable>
               ) : (
                 <Pressable
@@ -289,9 +291,9 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
                   onPress={start}
                   style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
                 >
-                  <Text style={styles.buttonLabel}>
+                  <AppText style={styles.buttonLabel}>
                     {done ? "Re-pair" : "Start pairing"}
-                  </Text>
+                  </AppText>
                 </Pressable>
               )}
               {/* Undo is only offered between binds (choosing) or after done —
@@ -305,7 +307,7 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
                     onPress={undo}
                     style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
                   >
-                    <Text style={styles.buttonLabel}>Undo</Text>
+                    <AppText style={styles.buttonLabel}>Undo</AppText>
                   </Pressable>
                 )}
               </View>
@@ -315,7 +317,7 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
       </CourtMap>
     </View>
   );
-}
+};
 
 const styles = StyleSheet.create({
   panel: {
@@ -335,7 +337,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   heading: {
-    color: "#a1a1aa",
+    color: colors.textSecondary,
     fontSize: 12,
     letterSpacing: 2,
     textTransform: "uppercase",
@@ -349,22 +351,21 @@ const styles = StyleSheet.create({
     height: PILL_H,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#3f3f46",
+    borderColor: colors.border,
     paddingHorizontal: 12,
     alignItems: "center",
     justifyContent: "center",
   },
   pillActive: {
-    borderColor: "#818cf8",
-    backgroundColor: "#1e1b4b",
+    borderColor: colors.accent,
+    backgroundColor: colors.accentSurface,
   },
   pillLabel: {
-    color: "#fafafa",
     fontSize: 14,
     fontWeight: "600",
   },
   pillLabelActive: {
-    color: "#e0e7ff",
+    color: colors.accentText,
   },
   wheelBackdrop: {
     // Far-oversized invisible catcher — the panel doesn't clip, so this covers
@@ -385,23 +386,19 @@ const styles = StyleSheet.create({
     paddingVertical: WHEEL_PAD_V,
     // Button-matched chrome: black fill, same border and full rounding, with a
     // soft white glow so the digits separate from the dark background.
-    backgroundColor: "#0a0a0a",
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: "#3f3f46",
+    borderColor: colors.border,
     borderRadius: 999,
     overflow: "hidden",
-    elevation: 8, // Android stacking
-    shadowColor: "#fff",
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 0 },
+    ...glowShadow,
   },
   wheelText: {
-    color: "#fafafa",
+    color: colors.text,
     fontSize: 18,
   },
   wheelOverlay: {
-    backgroundColor: "#27272a",
+    backgroundColor: colors.surfaceAlt,
     borderRadius: 8,
   },
   // Fixed-height slots: their size never depends on which child (if any) is
@@ -422,27 +419,26 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
   },
   prompt: {
-    color: "#fafafa",
     fontSize: 16,
     lineHeight: 20,
     fontWeight: "600",
     textAlign: "center",
   },
   hint: {
-    color: "#71717a",
+    color: colors.textMuted,
     fontSize: 13,
     lineHeight: 20,
     textAlign: "center",
   },
   doneText: {
-    color: "#34d399",
+    color: colors.success,
     fontSize: 15,
     lineHeight: 20,
     fontWeight: "600",
     textAlign: "center",
   },
   error: {
-    color: "#f87171",
+    color: colors.danger,
     fontSize: 13,
     textAlign: "center",
   },
@@ -450,17 +446,16 @@ const styles = StyleSheet.create({
     height: BUTTON_H,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#3f3f46",
-    backgroundColor: "#0a0a0a",
+    borderColor: colors.border,
+    backgroundColor: colors.background,
     paddingHorizontal: 32,
     alignItems: "center",
     justifyContent: "center",
   },
   buttonPressed: {
-    backgroundColor: "#18181b",
+    backgroundColor: colors.surface,
   },
   buttonLabel: {
-    color: "#fafafa",
     fontSize: 16,
     fontWeight: "600",
     textAlign: "center",
