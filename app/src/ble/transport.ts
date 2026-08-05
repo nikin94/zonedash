@@ -51,6 +51,12 @@ export interface CentralTransport {
   /** ControlOp.SelectPairSpot — the operator's map tap: prompt this canonical
    *  spot (0..7) for the next bind. The LED panel lights the same spot. */
   selectPairingSpot(spot: number): Promise<void>;
+  /** ControlOp.ExtendPairing (payload: 1 byte new total). Grows a round —
+   *  including a completed one — WITHOUT discarding bound targets; the map is
+   *  append-only, so adding targets never invalidates existing binds. The
+   *  round resumes waiting for the next selectPairingSpot. Shrinking is not a
+   *  thing: which bound target would go? That path is a full re-pair. */
+  extendPairing(numTargets: number): Promise<void>;
   // DEFERRED (next PR): undo() — unbind the last slot and re-prompt it. The
   // firmware core (PairingRound::undo_last) and serial `undo` already exist;
   // the phone affordance + a ControlOp land together in a follow-up.

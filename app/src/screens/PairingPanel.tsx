@@ -78,6 +78,21 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
     setError(null);
   };
 
+  // Growing a completed map doesn't have to reset it: ExtendPairing keeps the
+  // bound targets and resumes the round for the extra ones.
+  const extendRound = () => {
+    if (pendingTotal === null) return;
+    const target = pendingTotal;
+    setPendingTotal(null);
+    setError(null);
+    setTotal(target);
+    setRunning(true);
+    transport.extendPairing(target).catch((err: unknown) => {
+      setRunning(false);
+      setError(err instanceof Error ? err.message : "extend failed");
+    });
+  };
+
   const start = () => {
     setError(null);
     setProgress(null);
@@ -170,32 +185,64 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
 
       <CourtMap spots={visuals} onPressSpot={choosing ? pickSpot : undefined}>
         {confirming ? (
-          <View testID="count-confirm" style={styles.confirmBox}>
-            <Text style={styles.confirmTitle}>
-              Change target count to {pendingTotal}?
-            </Text>
-            <Text style={styles.confirmBody}>This resets the pairing</Text>
-            <View style={styles.confirmRow}>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => setPendingTotal(null)}
-                style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-              >
-                <Text style={styles.buttonLabel}>No</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                onPress={confirmCountChange}
-                style={({ pressed }) => [
-                  styles.button,
-                  styles.buttonDanger,
-                  pressed && styles.buttonPressed,
-                ]}
-              >
-                <Text style={styles.buttonLabel}>Yes</Text>
-              </Pressable>
+          pendingTotal! > (progress?.total ?? 0) ? (
+            // Growing keeps every bound target — no destructive reset needed.
+            <View testID="count-extend" style={styles.confirmBox}>
+              <Text style={styles.confirmTitle}>
+                Add {pendingTotal! - (progress?.total ?? 0)} more{" "}
+                {pendingTotal! - (progress?.total ?? 0) === 1
+                  ? "target"
+                  : "targets"}
+                ?
+              </Text>
+              <Text style={styles.confirmBody}>
+                The {progress?.total} paired {progress?.total === 1 ? "target stays" : "targets stay"}
+              </Text>
+              <View style={styles.confirmRow}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setPendingTotal(null)}
+                  style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+                >
+                  <Text style={styles.buttonLabel}>No</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={extendRound}
+                  style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+                >
+                  <Text style={styles.buttonLabel}>Add</Text>
+                </Pressable>
+              </View>
             </View>
-          </View>
+          ) : (
+            <View testID="count-confirm" style={styles.confirmBox}>
+              <Text style={styles.confirmTitle}>
+                Change target count to {pendingTotal}?
+              </Text>
+              <Text style={styles.confirmBody}>This resets the pairing</Text>
+              <View style={styles.confirmRow}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setPendingTotal(null)}
+                  style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+                >
+                  <Text style={styles.buttonLabel}>No</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={confirmCountChange}
+                  style={({ pressed }) => [
+                    styles.button,
+                    styles.buttonDanger,
+                    pressed && styles.buttonPressed,
+                  ]}
+                >
+                  <Text style={styles.buttonLabel}>Yes</Text>
+                </Pressable>
+              </View>
+            </View>
+          )
         ) : (
           <>
             {choosing ? (

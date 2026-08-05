@@ -16,6 +16,7 @@ namespace zd {
 enum class CmdType : uint8_t {
   Empty,   // blank / whitespace-only line — no-op
   Pair,    // open a pairing round for N targets
+  Extend,  // pairing: grow the round to N targets, keeping existing binds
   Spot,    // pairing: pick the court spot (0..7) for the next bind
   Undo,    // pairing: unbind the last slot and re-prompt it
   Nodes,   // list paired targets
@@ -33,7 +34,7 @@ struct ParsedCommand {
   std::string error;           // non-empty => malformed; human-readable reason
   DrillConfig drill;           // valid when type == Drill && ok()
   Sensor sensor = Sensor::ToF; // valid when type == Sensor && ok()
-  uint8_t num_positions = 0;   // targets to bind; valid when type == Pair && ok()
+  uint8_t num_positions = 0;   // targets to bind; valid when type == Pair/Extend && ok()
   uint8_t spot = 0;            // canonical court spot; valid when type == Spot && ok()
 
   bool ok() const { return error.empty(); }

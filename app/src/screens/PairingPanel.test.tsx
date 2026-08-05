@@ -190,7 +190,7 @@ const pairTwo = async () => {
   expect(screen.getByText("Paired 2 targets")).toBeTruthy();
 };
 
-test("changing the count after a completed round asks for confirmation; No keeps everything", async () => {
+test("increasing the count after a completed round offers Add (no reset); No keeps everything", async () => {
   const t = await connectedTransport();
   render(<PairingPanel transport={t} />);
   await pairTwo();
@@ -199,29 +199,59 @@ test("changing the count after a completed round asks for confirmation; No keeps
   const picker = screen.UNSAFE_getByType(WheelPicker);
   act(() => picker.props.onValueChanged({ item: { value: 5, label: "5" } }));
 
-  // The value is NOT committed — the dialog holds it hostage.
-  expect(screen.getByTestId("count-confirm")).toBeTruthy();
-  expect(screen.getByText("Change target count to 5?")).toBeTruthy();
-  expect(screen.getByTestId("count-pill")).toHaveTextContent("2");
+  // Growing is non-destructive — the Add dialog, not the reset one.
+  expect(screen.getByTestId("count-extend")).toBeTruthy();
+  expect(screen.queryByTestId("count-confirm")).toBeNull();
+  expect(screen.getByText("Add 3 more targets?")).toBeTruthy();
+  expect(screen.getByTestId("count-pill")).toHaveTextContent("2"); // not committed
 
   fireEvent.press(screen.getByText("No"));
-  expect(screen.queryByTestId("count-confirm")).toBeNull();
+  expect(screen.queryByTestId("count-extend")).toBeNull();
   expect(screen.getByTestId("count-pill")).toHaveTextContent("2"); // reverted
   expect(screen.getByText("Paired 2 targets")).toBeTruthy(); // map intact
   expect(screen.getByTestId("spot-0-bound")).toBeTruthy();
 });
 
-test("confirming the count change resets pairing to idle (no auto-start)", async () => {
+test("Add resumes the round: bound spots stay, the extra target is placed and bound", async () => {
   const t = await connectedTransport();
   render(<PairingPanel transport={t} />);
   await pairTwo();
 
   fireEvent.press(screen.getByTestId("count-pill"));
   const picker = screen.UNSAFE_getByType(WheelPicker);
-  act(() => picker.props.onValueChanged({ item: { value: 5, label: "5" } }));
-  fireEvent.press(screen.getByText("Yes"));
+  act(() => picker.props.onValueChanged({ item: { value: 3, label: "3" } }));
+  fireEvent.press(screen.getByText("Add"));
+  await act(() => jest.runAllTimersAsync()); // round resumes, waiting for a pick
 
-  expect(screen.getByTestId("count-pill")).toHaveTextContent("5"); // committed
+  expect(screen.getByTestId("count-pill")).toHaveTextContent("3"); // committed
+  expect(screen.getByText("Tap the map where target 3 of 3 stands")).toBeTruthy();
+  // The two previously bound spots survived the extend.
+  expect(screen.getByTestId("spot-0-bound")).toBeTruthy();
+  expect(screen.getByTestId("spot-2-bound")).toBeTruthy();
+
+  fireEvent.press(screen.getByTestId("spot-6-available"));
+  await act(() => jest.runAllTimersAsync());
+  expect(screen.getByText("Paired 3 targets")).toBeTruthy();
+  for (const i of [0, 2, 6]) {
+    expect(screen.getByTestId(`spot-${i}-bound`)).toBeTruthy();
+  }
+});
+
+test("decreasing the count still requires the destructive reset confirm", async () => {
+  const t = await connectedTransport();
+  render(<PairingPanel transport={t} />);
+  await pairTwo();
+
+  fireEvent.press(screen.getByTestId("count-pill"));
+  const picker = screen.UNSAFE_getByType(WheelPicker);
+  act(() => picker.props.onValueChanged({ item: { value: 1, label: "1" } }));
+
+  // Shrinking can't keep the map (which bound target would go?) — reset dialog.
+  expect(screen.getByTestId("count-confirm")).toBeTruthy();
+  expect(screen.getByText("Change target count to 1?")).toBeTruthy();
+
+  fireEvent.press(screen.getByText("Yes"));
+  expect(screen.getByTestId("count-pill")).toHaveTextContent("1"); // committed
   expect(screen.queryByText(/Paired/)).toBeNull(); // done state discarded
   expect(screen.queryAllByTestId(/spot-\d-off/)).toHaveLength(8); // map back to idle
   expect(screen.getByText("Start pairing")).toBeTruthy(); // operator restarts

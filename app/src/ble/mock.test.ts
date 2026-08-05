@@ -72,6 +72,60 @@ test("interactive pairing: each bind is prompted at the operator-picked spot", a
   expect(lastSession).toMatchObject({ state: "idle", targetsOnline: 2 });
 });
 
+test("extendPairing grows a completed round keeping the bound spots", async () => {
+  const t = make();
+  const events = record(t);
+  const p = t.connect();
+  await jest.runAllTimersAsync();
+  await p;
+
+  await t.startPairing(2);
+  await jest.runAllTimersAsync();
+  await t.selectPairingSpot(0);
+  await jest.runAllTimersAsync();
+  await t.selectPairingSpot(2);
+  await jest.runAllTimersAsync(); // round done, session idle
+
+  await t.extendPairing(3); // one more target, binds kept
+  await jest.runAllTimersAsync();
+
+  // The round resumed: not done, waiting for a pick, old binds intact.
+  let last = events.filter((e) => e.kind === "pairing").pop() as Extract<
+    StatusEvent,
+    { kind: "pairing" }
+  >;
+  expect(last.progress).toMatchObject({
+    total: 3,
+    boundSpots: [0, 2],
+    currentSpot: null,
+    done: false,
+  });
+
+  await t.selectPairingSpot(6);
+  await jest.runAllTimersAsync();
+  last = events.filter((e) => e.kind === "pairing").pop() as Extract<
+    StatusEvent,
+    { kind: "pairing" }
+  >;
+  expect(last.progress).toMatchObject({ boundSpots: [0, 2, 6], done: true });
+  const lastSession = events.filter((e) => e.kind === "session").pop();
+  expect(lastSession).toMatchObject({ state: "idle", targetsOnline: 3 });
+});
+
+test("extendPairing refuses shrink/no-op and a never-paired state", async () => {
+  const t = make();
+  const p = t.connect();
+  await jest.runAllTimersAsync();
+  await p;
+
+  await expect(t.extendPairing(4)).rejects.toThrow("no pairing round");
+
+  await t.startPairing(3);
+  await jest.runAllTimersAsync();
+  await expect(t.extendPairing(3)).rejects.toThrow("grow");
+  await expect(t.extendPairing(2)).rejects.toThrow("grow");
+});
+
 test("selectPairingSpot rejects/ignores invalid picks like the central would", async () => {
   const t = make();
   const events = record(t);
