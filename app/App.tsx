@@ -6,19 +6,27 @@ import { MockCentralTransport } from "./src/ble/mock";
 import type { ConnectionState } from "./src/ble/transport";
 import { DrillPanel } from "./src/screens/DrillPanel";
 import { PairingPanel } from "./src/screens/PairingPanel";
+import {
+  DEFAULT_SETTINGS,
+  SettingsPanel,
+  type DrillSettings,
+} from "./src/screens/SettingsPanel";
 
 /**
  * ZoneDash operator app. Talks to the central unit through the CentralTransport
  * seam — currently the in-app mock, later the real BLE implementation. This
- * screen owns the connection, the Pair/Drill section switch, and the paired
- * layout (lifted from pairing events — the drill builder needs the slot→spot
- * order to author positions); the live-session screen comes next.
+ * screen owns the header (title + settings), the connection, the Pair/Drill
+ * section switch, the drill settings (edited on the settings screen, consumed
+ * by the drill builder), and the paired layout lifted from pairing events;
+ * the live-session screen comes next.
  */
 export default function App() {
   const transport = useMemo(() => new MockCentralTransport(), []);
   const [connection, setConnection] = useState<ConnectionState>("disconnected");
   const [error, setError] = useState<string | null>(null);
   const [section, setSection] = useState<"pair" | "drill">("pair");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settings, setSettings] = useState<DrillSettings>(DEFAULT_SETTINGS);
   // Canonical spots bound by the last completed round, in bind (slot) order.
   const [pairedSpots, setPairedSpots] = useState<number[]>([]);
 
@@ -50,71 +58,97 @@ export default function App() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>ZoneDash</Text>
-      <Text style={styles.subtitle}>Court reaction trainer</Text>
-
-      <View style={styles.statusRow}>
-        <View
-          style={[
-            styles.dot,
-            connected && styles.dotConnected,
-            connection === "error" && styles.dotError,
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>ZoneDash</Text>
+        <Pressable
+          testID="settings-button"
+          accessibilityRole="button"
+          accessibilityLabel={settingsOpen ? "Close settings" : "Open settings"}
+          onPress={() => setSettingsOpen((v) => !v)}
+          style={({ pressed }) => [
+            styles.headerButton,
+            settingsOpen && styles.headerButtonActive,
+            pressed && styles.buttonPressed,
           ]}
-        />
-        <Text style={styles.status}>
-          {connected
-            ? "Central unit: connected (mock)"
-            : busy
-              ? "Central unit: connecting…"
-              : connection === "error"
-                ? `Central unit: ${error ?? "connection failed"}`
-                : "Central unit: not connected"}
-        </Text>
+        >
+          <Text style={styles.headerGlyph}>{settingsOpen ? "✕" : "⚙"}</Text>
+        </Pressable>
       </View>
 
-      <Pressable
-        accessibilityRole="button"
-        disabled={busy}
-        onPress={toggle}
-        style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-      >
-        <Text style={styles.buttonLabel}>
-          {connected ? "Disconnect" : "Connect"}
-        </Text>
-      </Pressable>
-
-      {connected && (
-        <>
-          <View style={styles.sectionRow}>
-            {(["pair", "drill"] as const).map((s) => (
-              <Pressable
-                key={s}
-                accessibilityRole="button"
-                accessibilityState={{ selected: section === s }}
-                onPress={() => setSection(s)}
-                style={[styles.section, section === s && styles.sectionActive]}
-              >
-                <Text
-                  style={[
-                    styles.sectionLabel,
-                    section === s && styles.sectionLabelActive,
-                  ]}
-                >
-                  {s === "pair" ? "Pairing" : "Drill"}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-          {/* Both panels stay mounted — switching sections hides, not resets:
-              a pairing round or a half-built drill must survive a tab flip. */}
-          <View style={section === "pair" ? null : styles.hidden}>
-            <PairingPanel transport={transport} />
-          </View>
-          <View style={section === "drill" ? null : styles.hidden}>
-            <DrillPanel transport={transport} pairedSpots={pairedSpots} />
-          </View>
-        </>
+      {settingsOpen && (
+        <SettingsPanel settings={settings} onChange={setSettings} />
       )}
+
+      {/* The main content stays mounted under an open settings screen — a
+          pairing round or a half-built drill must survive the visit. */}
+      <View style={settingsOpen ? styles.hidden : styles.content}>
+        <View style={styles.statusRow}>
+          <View
+            style={[
+              styles.dot,
+              connected && styles.dotConnected,
+              connection === "error" && styles.dotError,
+            ]}
+          />
+          <Text style={styles.status}>
+            {connected
+              ? "Central unit: connected (mock)"
+              : busy
+                ? "Central unit: connecting…"
+                : connection === "error"
+                  ? `Central unit: ${error ?? "connection failed"}`
+                  : "Central unit: not connected"}
+          </Text>
+        </View>
+
+        <Pressable
+          accessibilityRole="button"
+          disabled={busy}
+          onPress={toggle}
+          style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+        >
+          <Text style={styles.buttonLabel}>
+            {connected ? "Disconnect" : "Connect"}
+          </Text>
+        </Pressable>
+
+        {connected && (
+          <>
+            <View style={styles.sectionRow}>
+              {(["pair", "drill"] as const).map((s) => (
+                <Pressable
+                  key={s}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: section === s }}
+                  onPress={() => setSection(s)}
+                  style={[styles.section, section === s && styles.sectionActive]}
+                >
+                  <Text
+                    style={[
+                      styles.sectionLabel,
+                      section === s && styles.sectionLabelActive,
+                    ]}
+                  >
+                    {s === "pair" ? "Pairing" : "Drill"}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            {/* Both panels stay mounted — switching sections hides, not resets:
+                a pairing round or a half-built drill must survive a tab flip. */}
+            <View style={section === "pair" ? null : styles.hidden}>
+              <PairingPanel transport={transport} />
+            </View>
+            <View style={section === "drill" ? null : styles.hidden}>
+              <DrillPanel
+                transport={transport}
+                pairedSpots={pairedSpots}
+                settings={settings}
+              />
+            </View>
+          </>
+        )}
+      </View>
 
       <StatusBar style="light" />
     </View>
@@ -125,25 +159,49 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#0a0a0a",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
+    paddingTop: 56, // clears the status bar without a safe-area dependency
   },
-  title: {
+  header: {
+    alignSelf: "stretch",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+  },
+  headerTitle: {
     color: "#fafafa",
-    fontSize: 40,
+    fontSize: 20,
     fontWeight: "700",
     letterSpacing: 1,
   },
-  subtitle: {
-    color: "#a1a1aa",
-    fontSize: 16,
+  headerButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#3f3f46",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerButtonActive: {
+    borderColor: "#818cf8",
+    backgroundColor: "#1e1b4b",
+  },
+  headerGlyph: {
+    color: "#fafafa",
+    fontSize: 18,
+  },
+  content: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
   },
   statusRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    marginTop: 24,
   },
   dot: {
     width: 8,
@@ -162,7 +220,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   button: {
-    marginTop: 24,
+    marginTop: 16,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "#3f3f46",
@@ -180,7 +238,7 @@ const styles = StyleSheet.create({
   sectionRow: {
     flexDirection: "row",
     gap: 8,
-    marginTop: 20,
+    marginTop: 16,
   },
   section: {
     borderRadius: 999,

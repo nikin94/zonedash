@@ -47,11 +47,11 @@ const SPOT_XY = [
   { x: 0, y: 0.5 },
 ] as const;
 
-// Nearly full-screen width (small side margins), capped for tablets; a half
+// Wide but with breathing room at the sides, capped for tablets; a half
 // court is slightly longer than wide.
-const MAP_W = Math.min(Dimensions.get("window").width - 32, 380);
+const MAP_W = Math.min(Dimensions.get("window").width - 56, 340);
 const MAP_H = Math.round(MAP_W * 1.09);
-const HIT = 48; // pressable hit box; the visible dot is smaller
+const HIT = 52; // pressable hit box; the visible dot is smaller
 const HIT_SLOP = 8; // extra forgiveness around each spot
 
 // Fill + outline per state, as rgba so Animated can interpolate between them.
@@ -247,9 +247,9 @@ const styles = StyleSheet.create({
   // scale, so idle and bound spots are just as easy to hit. The border is
   // always present with a per-state color, so "off" cross-fades too.
   dot: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     borderWidth: 1,
   },
   // The old-color layer covers the base including its border (-1 offsets),
