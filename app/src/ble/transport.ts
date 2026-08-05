@@ -57,9 +57,13 @@ export interface CentralTransport {
    *  round resumes waiting for the next selectPairingSpot. Shrinking is not a
    *  thing: which bound target would go? That path is a full re-pair. */
   extendPairing(numTargets: number): Promise<void>;
-  // DEFERRED (next PR): undo() — unbind the last slot and re-prompt it. The
-  // firmware core (PairingRound::undo_last) and serial `undo` already exist;
-  // the phone affordance + a ControlOp land together in a follow-up.
+  /** ControlOp.UndoPairBind (no payload). Unbinds the most recent target and
+   *  reopens its pick — the operator's correction path when the wrong physical
+   *  unit got confirmed. Works on a completed round too (it resumes). Only
+   *  valid between binds: while a spot is prompted the central refuses an
+   *  undo — there is no per-prompt cancel, so let the bind resolve and undo
+   *  it right after (resolve-then-undo). */
+  undoPairing(): Promise<void>;
 
   /** ControlOp.LoadDrill. */
   loadDrill(config: DrillConfig): Promise<void>;

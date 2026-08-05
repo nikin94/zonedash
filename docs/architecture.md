@@ -184,7 +184,12 @@ the second binds. This rejects a stray single trigger — a ball bounce, a ToF
 ghost, piezo cross-talk from an unbound node — that would otherwise silently
 mis-bind the wrong target and corrupt the whole session's map. A different unbound
 MAC just replaces the candidate; an already-bound MAC is ignored. `undo_last()`
-re-prompts the most recent slot for operator correction.
+re-prompts the most recent slot for operator correction. **The mid-prompt
+refusal of undo is the brain's job, not the core's:** `undo_last()` cannot see
+board state ("a spot is prompted, no tap yet") and, called mid-prompt, would
+cancel the pick *and* pop the previous confirmed bind. The brain's receive path
+must reject `UndoPairBind` / serial `undo` while a prompt is active — the
+transport mock already encodes this refusal.
 
 The round's logic is the hardware-free `lib/pairing/` core (`PairingRound` +
 `TargetMap`): it prompts slots in order, confirm-binds the tapping MAC, ignores
@@ -305,7 +310,7 @@ swaps the transport later.
 | `pair N` | Open a pairing round for N targets; each bind then waits for a `spot` pick | Control: StartPairing (N byte) |
 | `spot S` | Pairing: pick canonical court spot S (0..7) for the next bind — the panel lights it, a two-tap confirm binds → `MAC→position` map | Control: SelectPairSpot (spot byte) |
 | `extend N` | Pairing: grow the round to N total, keeping every bound target (`PairingRound::extend()`); the round resumes waiting for a `spot` pick | Control: ExtendPairing (N byte) |
-| `undo` | Pairing: unbind the last bound slot and re-prompt it (`PairingRound::undo_last()`) | (dev-only for now) |
+| `undo` | Pairing: unbind the last bound slot and re-prompt it (`PairingRound::undo_last()`); refused mid-prompt | Control: UndoPairBind (no payload) |
 | `nodes` | List paired targets: `position, MAC, fw, batt_mv, last_rssi` | Status read |
 | `drill N seq…` | Load a drill: N active targets + sequence (e.g. `drill 4 rand` or `drill 6 0,3,5,1,…`) + params | Control: config |
 | `start` | Run the loaded drill (SYNC broadcast → ARM first target → loop) | Control: start |

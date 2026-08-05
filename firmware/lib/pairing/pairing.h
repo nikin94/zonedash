@@ -48,6 +48,14 @@ class PairingRound {
 
   // Operator correction: unbind the most recent slot and re-prompt it. No-op if
   // nothing is bound. Returns the slot now prompted, or -1 if idle.
+  //
+  // CONTRACT — the brain gates this, not the core. "Which spot is currently
+  // prompted on court" is board state this core never sees (a candidate only
+  // exists after the first physical tap), so undo_last() cannot refuse an undo
+  // that arrives mid-prompt: called then, it would cancel the in-flight pick
+  // AND pop the previous confirmed bind — a double rollback. The brain's
+  // receive path MUST reject UndoPairBind / serial `undo` while a spot prompt
+  // is active (the transport mock encodes this exact refusal).
   int undo_last();
 
   // Grow a round to `num_positions` slots WITHOUT discarding existing binds —
