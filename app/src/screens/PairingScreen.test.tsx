@@ -2,7 +2,7 @@ import WheelPicker from "@quidone/react-native-wheel-picker";
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 
 import { MockCentralTransport } from "../ble/mock";
-import { PairingPanel } from "./PairingPanel";
+import { PairingPanel } from "./PairingScreen";
 
 // Zero latency + fake timers so pairing steps are advanced explicitly.
 const connectedTransport = async () => {

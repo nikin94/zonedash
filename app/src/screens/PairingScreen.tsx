@@ -8,6 +8,8 @@ import { AppText } from "../components/AppText";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { CustomPressable } from "../components/CustomPressable";
 import { CourtMap, SPOT_NAMES, type SpotVisual } from "../components/CourtMap";
+import { Header } from "../components/Header";
+import { useAppState } from "../state/AppState";
 import { colors, glowShadow } from "../theme";
 
 /** Wheel choices for "how many targets". */
@@ -334,7 +336,37 @@ export const PairingPanel = ({ transport }: { transport: CentralTransport }) => 
   );
 };
 
+/**
+ * Pairing as its own screen, pushed from the header's central-unit menu. A
+ * link drop pops the stack back home (Header handles that), so the panel only
+ * renders while connected.
+ */
+export const PairingScreen = () => {
+  const { transport, connection } = useAppState();
+  return (
+    <View style={styles.screen}>
+      <Header back title="Pairing" />
+      {connection === "connected" ? (
+        <PairingPanel transport={transport} />
+      ) : (
+        <AppText center size={13} color={colors.textMuted} style={styles.screenHint}>
+          Not connected — tap the status in the header to connect
+        </AppText>
+      )}
+    </View>
+  );
+};
+
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: colors.background,
+    paddingTop: 56, // clears the status bar without a safe-area dependency
+  },
+  screenHint: {
+    marginTop: 48,
+    paddingHorizontal: 32,
+  },
   panel: {
     marginTop: 32,
     alignItems: "center",

@@ -29,20 +29,19 @@ export const CloseIcon = () => (
   </View>
 );
 
+/** A ‹ chevron built from two rotated bars — the header back affordance. */
+export const BackIcon = () => (
+  <View style={styles.backBox} accessible={false}>
+    <View style={[styles.backBar, styles.backBarA]} />
+    <View style={[styles.backBar, styles.backBarB]} />
+  </View>
+);
+
 /** A ✓ built from two rotated bars — sized for the 38 px court dots. */
 export const CheckIcon = () => (
   <View style={styles.checkBox} accessible={false}>
     <View style={[styles.checkBar, styles.checkBarShort]} />
     <View style={[styles.checkBar, styles.checkBarLong]} />
-  </View>
-);
-
-/** A ✕ sized for the 38 px court dots (the miss flash) — dark on the fill,
- *  like CheckIcon; CloseIcon is the bigger header variant. */
-export const CrossIcon = () => (
-  <View style={styles.crossBox} accessible={false}>
-    <View style={[styles.crossBar, styles.crossBarA]} />
-    <View style={[styles.crossBar, styles.crossBarB]} />
   </View>
 );
 
@@ -88,6 +87,28 @@ const styles = StyleSheet.create({
   closeBarB: {
     transform: [{ rotate: "-45deg" }],
   },
+  backBox: {
+    width: W,
+    height: W,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  backBar: {
+    position: "absolute",
+    width: 11,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: colors.text,
+    left: 3,
+  },
+  backBarA: {
+    top: 5,
+    transform: [{ rotate: "-45deg" }],
+  },
+  backBarB: {
+    bottom: 5,
+    transform: [{ rotate: "45deg" }],
+  },
   checkBox: {
     width: 16,
     height: 16,
@@ -108,25 +129,6 @@ const styles = StyleSheet.create({
     width: 12,
     left: 4,
     top: 7.5,
-    transform: [{ rotate: "-45deg" }],
-  },
-  crossBox: {
-    width: 12,
-    height: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  crossBar: {
-    position: "absolute",
-    width: 12,
-    height: 2.5,
-    borderRadius: 1.25,
-    backgroundColor: colors.background, // dark on the danger miss fill
-  },
-  crossBarA: {
-    transform: [{ rotate: "45deg" }],
-  },
-  crossBarB: {
     transform: [{ rotate: "-45deg" }],
   },
 });

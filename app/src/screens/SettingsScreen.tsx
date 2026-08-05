@@ -1,31 +1,18 @@
 import { StyleSheet, Switch, View } from "react-native";
 
 import { AppText } from "../components/AppText";
+import { Header } from "../components/Header";
 import { msOptions, WheelField } from "../components/WheelField";
+import { useAppState, type DrillSettings } from "../state/AppState";
 import { colors } from "../theme";
-
-/**
- * Session-wide drill settings, lifted out of the drill builder so they live
- * behind the header's settings screen. The builder reads them when composing
- * the LoadDrill config; which of them actually go on the wire still depends on
- * the drill mode (the engine ignores e.g. delay in Live).
- */
-export interface DrillSettings {
-  delayMs: number;
-  timeoutMs: number; // 0 = no auto-miss
-  allowImmediateRepeat: boolean;
-}
-
-export const DEFAULT_SETTINGS: DrillSettings = {
-  delayMs: 0,
-  timeoutMs: 0,
-  allowImmediateRepeat: false,
-};
 
 // 0.1 s resolution for fine-tuning; 0 keeps its named meaning.
 const DELAY_OPTIONS = msOptions(0, 5000, 100, "none");
-const TIMEOUT_OPTIONS = msOptions(0, 10000, 100, "off");
 
+/**
+ * Drill settings panel (pushed from the header's settings button). No timeout
+ * setting on purpose — the app never arms auto-miss, so a run counts hits only.
+ */
 export const SettingsPanel = ({
   settings,
   onChange,
@@ -44,13 +31,6 @@ export const SettingsPanel = ({
       options={DELAY_OPTIONS}
       onChange={(delayMs) => onChange({ ...settings, delayMs })}
     />
-    <WheelField
-      value={settings.timeoutMs}
-      label="Timeout (auto-miss)"
-      testID="setting-timeout"
-      options={TIMEOUT_OPTIONS}
-      onChange={(timeoutMs) => onChange({ ...settings, timeoutMs })}
-    />
     <View style={styles.paramRow}>
       <AppText color={colors.textSecondary} style={styles.paramLabel}>
         Same target twice in a row
@@ -66,7 +46,22 @@ export const SettingsPanel = ({
   </View>
 );
 
+export const SettingsScreen = () => {
+  const { settings, setSettings } = useAppState();
+  return (
+    <View style={styles.screen}>
+      <Header back title="Settings" />
+      <SettingsPanel settings={settings} onChange={setSettings} />
+    </View>
+  );
+};
+
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: colors.background,
+    paddingTop: 56, // clears the status bar without a safe-area dependency
+  },
   panel: {
     alignSelf: "stretch",
     paddingHorizontal: 24,
