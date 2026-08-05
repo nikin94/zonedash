@@ -105,8 +105,6 @@ export function CourtMap({
                 styles.dot,
                 { backgroundColor: DOT_COLOR[spots[i]] },
                 spots[i] === "off" && styles.dotOff,
-                (spots[i] === "active" || spots[i] === "confirm") &&
-                  styles.dotEmphasis,
               ]}
             />
           </Pressable>
@@ -162,18 +160,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  // One size for every state — the active/confirm emphasis is color, not
+  // scale, so idle and bound spots are just as easy to hit.
   dot: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
   },
   dotOff: {
     borderWidth: 1,
     borderColor: "#3f3f46",
-  },
-  dotEmphasis: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
   },
 });
