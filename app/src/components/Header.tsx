@@ -7,7 +7,7 @@ import type { Nav } from "../navigation";
 import { useAppState } from "../state/AppState";
 import { colors, glowShadow } from "../theme";
 import { AppText } from "./AppText";
-import { ConfirmDialog } from "./ConfirmDialog";
+import { ConfirmModal } from "./ConfirmModal";
 import { CustomPressable } from "./CustomPressable";
 import { BackIcon, SlidersIcon } from "./Icons";
 
@@ -26,7 +26,15 @@ const CHIP_LABEL: Record<ConnectionState, string> = {
  * Pairing (its own screen) and Disconnect (behind the confirm); while
  * disconnected a chip tap just connects (non-destructive, no menu needed).
  */
-export const Header = ({ back, title = "ZoneDash" }: { back?: boolean; title?: string }) => {
+export const Header = ({
+  back,
+  title = "ZoneDash",
+  hideChip,
+}: {
+  back?: boolean;
+  title?: string;
+  hideChip?: boolean; // Settings is config-only — no connection controls there.
+}) => {
   const navigation = useNavigation<Nav>();
   const { transport, connection, pairedSpots } = useAppState();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -91,60 +99,62 @@ export const Header = ({ back, title = "ZoneDash" }: { back?: boolean; title?: s
       </View>
 
       <View style={styles.headerRight}>
-        <View>
-          <CustomPressable
-            disabled={busy}
-            testID="status-chip"
-            accessibilityLabel={`Central unit: ${CHIP_LABEL[connection]}`}
-            onPress={onChipPress}
-            style={[styles.chip, menuOpen && styles.chipActive]}
-          >
-            <View
-              style={[
-                styles.dot,
-                connected && styles.dotConnected,
-                busy && styles.dotConnecting,
-                connection === "error" && styles.dotError,
-              ]}
-            />
-            <AppText size={13} weight="600" color={colors.textSecondary}>
-              {CHIP_LABEL[connection]}
-            </AppText>
-          </CustomPressable>
-
-          {menuOpen && (
-            <>
-              {/* Oversized invisible catcher: any tap outside dismisses. */}
-              <CustomPressable
-                noFeedback
-                testID="chip-menu-backdrop"
-                accessibilityLabel="Close central unit menu"
-                onPress={() => setMenuOpen(false)}
-                style={styles.menuBackdrop}
+        {!hideChip && (
+          <View>
+            <CustomPressable
+              disabled={busy}
+              testID="status-chip"
+              accessibilityLabel={`Central unit: ${CHIP_LABEL[connection]}`}
+              onPress={onChipPress}
+              style={[styles.chip, menuOpen && styles.chipActive]}
+            >
+              <View
+                style={[
+                  styles.dot,
+                  connected && styles.dotConnected,
+                  busy && styles.dotConnecting,
+                  connection === "error" && styles.dotError,
+                ]}
               />
-              <View testID="chip-menu" style={styles.menu}>
-                {/* Drill needs a paired layout — the item exists only then. */}
-                {pairedSpots.length > 0 && (
-                  <>
-                    <CustomPressable onPress={openDrill} style={styles.menuItem}>
-                      <AppText weight="600">Drill</AppText>
-                    </CustomPressable>
-                    <View style={styles.menuDivider} />
-                  </>
-                )}
-                <CustomPressable onPress={openPairing} style={styles.menuItem}>
-                  <AppText weight="600">Pairing</AppText>
-                </CustomPressable>
-                <View style={styles.menuDivider} />
-                <CustomPressable onPress={askDisconnect} style={styles.menuItem}>
-                  <AppText weight="600" color={colors.danger}>
-                    Disconnect
-                  </AppText>
-                </CustomPressable>
-              </View>
-            </>
-          )}
-        </View>
+              <AppText size={13} weight="600" color={colors.textSecondary}>
+                {CHIP_LABEL[connection]}
+              </AppText>
+            </CustomPressable>
+
+            {menuOpen && (
+              <>
+                {/* Oversized invisible catcher: any tap outside dismisses. */}
+                <CustomPressable
+                  noFeedback
+                  testID="chip-menu-backdrop"
+                  accessibilityLabel="Close central unit menu"
+                  onPress={() => setMenuOpen(false)}
+                  style={styles.menuBackdrop}
+                />
+                <View testID="chip-menu" style={styles.menu}>
+                  {/* Drill needs a paired layout — the item exists only then. */}
+                  {pairedSpots.length > 0 && (
+                    <>
+                      <CustomPressable onPress={openDrill} style={styles.menuItem}>
+                        <AppText weight="600">Drill</AppText>
+                      </CustomPressable>
+                      <View style={styles.menuDivider} />
+                    </>
+                  )}
+                  <CustomPressable onPress={openPairing} style={styles.menuItem}>
+                    <AppText weight="600">Pairing</AppText>
+                  </CustomPressable>
+                  <View style={styles.menuDivider} />
+                  <CustomPressable onPress={askDisconnect} style={styles.menuItem}>
+                    <AppText weight="600" color={colors.danger}>
+                      Disconnect
+                    </AppText>
+                  </CustomPressable>
+                </View>
+              </>
+            )}
+          </View>
+        )}
 
         {!back && (
           <CustomPressable
@@ -158,30 +168,16 @@ export const Header = ({ back, title = "ZoneDash" }: { back?: boolean; title?: s
         )}
       </View>
 
-      {disconnectAsk && (
-        <>
-          {/* Tap anywhere outside the dialog = No. */}
-          <CustomPressable
-            noFeedback
-            testID="disconnect-backdrop"
-            accessibilityLabel="Dismiss disconnect dialog"
-            onPress={() => setDisconnectAsk(false)}
-            style={styles.confirmBackdrop}
-          />
-          <View pointerEvents="box-none" style={styles.confirmWrap}>
-            <View style={styles.confirmCard}>
-              <ConfirmDialog
-                testID="disconnect-confirm"
-                title="Disconnect from the central unit?"
-                actions={[
-                  { label: "No", onPress: () => setDisconnectAsk(false) },
-                  { label: "Yes", danger: true, onPress: disconnect },
-                ]}
-              />
-            </View>
-          </View>
-        </>
-      )}
+      <ConfirmModal
+        visible={disconnectAsk}
+        onDismiss={() => setDisconnectAsk(false)}
+        testID="disconnect-confirm"
+        title="Disconnect from the central unit?"
+        actions={[
+          { label: "No", onPress: () => setDisconnectAsk(false) },
+          { label: "Yes", danger: true, onPress: disconnect },
+        ]}
+      />
     </View>
   );
 };
@@ -279,30 +275,5 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: colors.border,
     marginHorizontal: 12,
-  },
-  confirmBackdrop: {
-    position: "absolute",
-    top: -1000,
-    bottom: -1000,
-    left: -1000,
-    right: -1000,
-  },
-  confirmWrap: {
-    // Full-width strip under the header, centering the card horizontally —
-    // an absolute child of a row can't center itself with alignSelf.
-    position: "absolute",
-    top: 56,
-    left: 0,
-    right: 0,
-    alignItems: "center",
-  },
-  confirmCard: {
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 20,
-    paddingHorizontal: 24,
-    paddingVertical: 20,
-    ...glowShadow,
   },
 });

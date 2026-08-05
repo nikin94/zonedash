@@ -50,7 +50,7 @@ export const SettingsScreen = () => {
   const { settings, setSettings } = useAppState();
   return (
     <View style={styles.screen}>
-      <Header back title="Settings" />
+      <Header back hideChip title="Settings" />
       <SettingsPanel settings={settings} onChange={setSettings} />
     </View>
   );

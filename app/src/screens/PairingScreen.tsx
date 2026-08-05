@@ -6,7 +6,7 @@ import { StyleSheet, View } from "react-native";
 import type { PairingProgress } from "../ble/contract";
 import type { CentralTransport } from "../ble/transport";
 import { AppText } from "../components/AppText";
-import { ConfirmDialog } from "../components/ConfirmDialog";
+import { ConfirmModal } from "../components/ConfirmModal";
 import { CustomPressable } from "../components/CustomPressable";
 import { CourtMap, SPOT_NAMES, type SpotVisual } from "../components/CourtMap";
 import { Header } from "../components/Header";
@@ -240,37 +240,7 @@ export const PairingPanel = ({ transport }: { transport: CentralTransport }) => 
       </View>
 
       <CourtMap spots={visuals} onPressSpot={choosing ? pickSpot : undefined}>
-        {confirming ? (
-          pendingTotal! > (progress?.total ?? 0) ? (
-            // Growing keeps every bound target — no destructive reset needed.
-            <ConfirmDialog
-              testID="count-extend"
-              title={`Add ${pendingTotal! - (progress?.total ?? 0)} more ${
-                pendingTotal! - (progress?.total ?? 0) === 1
-                  ? "target"
-                  : "targets"
-              }?`}
-              body={`The ${progress?.total} paired ${
-                progress?.total === 1 ? "target stays" : "targets stay"
-              }`}
-              actions={[
-                { label: "No", onPress: () => setPendingTotal(null) },
-                { label: "Add", onPress: extendRound },
-              ]}
-            />
-          ) : (
-            <ConfirmDialog
-              testID="count-confirm"
-              title={`Change target count to ${pendingTotal}?`}
-              body="This resets the pairing"
-              actions={[
-                { label: "No", onPress: () => setPendingTotal(null) },
-                { label: "Yes", danger: true, onPress: confirmCountChange },
-              ]}
-            />
-          )
-        ) : (
-          <>
+        <>
             {/* Every slot below has a FIXED footprint — the text area, the
                 error line, and both button rows keep their size across all
                 round phases, so nothing shifts as states change. */}
@@ -370,8 +340,40 @@ export const PairingPanel = ({ transport }: { transport: CentralTransport }) => 
               </View>
             </View>
           </>
-        )}
       </CourtMap>
+
+      {/* Count-change confirms — shown centered on screen like every confirm. */}
+      {confirming &&
+        (pendingTotal! > (progress?.total ?? 0) ? (
+          // Growing keeps every bound target — no destructive reset needed.
+          <ConfirmModal
+            visible
+            onDismiss={() => setPendingTotal(null)}
+            testID="count-extend"
+            title={`Add ${pendingTotal! - (progress?.total ?? 0)} more ${
+              pendingTotal! - (progress?.total ?? 0) === 1 ? "target" : "targets"
+            }?`}
+            body={`The ${progress?.total} paired ${
+              progress?.total === 1 ? "target stays" : "targets stay"
+            }`}
+            actions={[
+              { label: "No", onPress: () => setPendingTotal(null) },
+              { label: "Add", onPress: extendRound },
+            ]}
+          />
+        ) : (
+          <ConfirmModal
+            visible
+            onDismiss={() => setPendingTotal(null)}
+            testID="count-confirm"
+            title={`Change target count to ${pendingTotal}?`}
+            body="This resets the pairing"
+            actions={[
+              { label: "No", onPress: () => setPendingTotal(null) },
+              { label: "Yes", danger: true, onPress: confirmCountChange },
+            ]}
+          />
+        ))}
     </View>
   );
 };

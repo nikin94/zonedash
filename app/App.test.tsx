@@ -203,4 +203,6 @@ test("the settings button opens the Settings screen — no timeout setting exist
   expect(screen.getByText("Delay between targets")).toBeTruthy();
   expect(screen.getByText("Same target twice in a row")).toBeTruthy();
   expect(screen.queryByText(/Timeout/)).toBeNull(); // misses don't exist
+  // Settings is config-only — no connection controls (no connect/status chip).
+  expect(screen.queryByTestId("status-chip")).toBeNull();
 });
