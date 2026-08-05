@@ -1,5 +1,12 @@
-import type { ReactNode } from "react";
-import { Dimensions, Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useRef, type ReactNode } from "react";
+import {
+  Animated,
+  Dimensions,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
 /** Visual state of one canonical spot on the map. */
 export type SpotVisual =
@@ -47,13 +54,67 @@ const MAP_H = Math.round(MAP_W * 1.09);
 const HIT = 48; // pressable hit box; the visible dot is smaller
 const HIT_SLOP = 8; // extra forgiveness around each spot
 
-const DOT_COLOR: Record<SpotVisual, string> = {
-  off: "transparent",
-  available: "#52525b",
-  active: "#818cf8",
-  confirm: "#fbbf24",
-  bound: "#34d399",
+// Fill + outline per state, as rgba so Animated can interpolate between them.
+// "off" fades to a zero-alpha fill (outline only) instead of snapping away.
+const DOT_STYLE: Record<SpotVisual, { fill: string; ring: string }> = {
+  off: { fill: "rgba(63,63,70,0)", ring: "rgba(63,63,70,1)" },
+  available: { fill: "rgba(82,82,91,1)", ring: "rgba(63,63,70,0)" },
+  active: { fill: "rgba(129,140,248,1)", ring: "rgba(63,63,70,0)" },
+  confirm: { fill: "rgba(251,191,36,1)", ring: "rgba(63,63,70,0)" },
+  bound: { fill: "rgba(52,211,153,1)", ring: "rgba(63,63,70,0)" },
 };
+
+const FADE_MS = 250;
+
+/**
+ * One court dot, cross-fading its fill/outline on every state change instead
+ * of snapping. Plain Animated (JS driver) on purpose: a 250 ms color fade
+ * needs no Reanimated dependency, and color interpolation can't use the
+ * native driver anyway.
+ */
+function AnimatedDot({ visual }: { visual: SpotVisual }) {
+  const anim = useRef(new Animated.Value(1)).current;
+  const fromRef = useRef(visual);
+  const toRef = useRef(visual);
+
+  // Detect the change during render so the very first frame already
+  // interpolates from the previous color (no one-frame snap).
+  if (visual !== toRef.current) {
+    fromRef.current = toRef.current;
+    toRef.current = visual;
+    anim.setValue(0);
+  }
+
+  useEffect(() => {
+    if (fromRef.current === toRef.current) return;
+    Animated.timing(anim, {
+      toValue: 1,
+      duration: FADE_MS,
+      useNativeDriver: false, // color interpolation is JS-driver only
+    }).start();
+  }, [visual, anim]);
+
+  const from = DOT_STYLE[fromRef.current];
+  const to = DOT_STYLE[toRef.current];
+  const range = { inputRange: [0, 1] };
+  return (
+    <Animated.View
+      style={[
+        styles.dot,
+        {
+          backgroundColor: anim.interpolate({
+            ...range,
+            outputRange: [from.fill, to.fill],
+          }),
+          borderColor: anim.interpolate({
+            ...range,
+            outputRange: [from.ring, to.ring],
+          }),
+        },
+      ]}
+    />
+  );
+}
 
 /**
  * Half-court map. Pure renderer: the parent supplies each canonical spot's
@@ -100,13 +161,7 @@ export function CourtMap({
               { left: p.x * (MAP_W - HIT), top: p.y * (MAP_H - HIT) },
             ]}
           >
-            <View
-              style={[
-                styles.dot,
-                { backgroundColor: DOT_COLOR[spots[i]] },
-                spots[i] === "off" && styles.dotOff,
-              ]}
-            />
+            <AnimatedDot visual={spots[i]} />
           </Pressable>
         ))}
       </View>
@@ -161,14 +216,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   // One size for every state — the active/confirm emphasis is color, not
-  // scale, so idle and bound spots are just as easy to hit.
+  // scale, so idle and bound spots are just as easy to hit. The border is
+  // always present with an animated color, so "off" cross-fades too.
   dot: {
     width: 30,
     height: 30,
     borderRadius: 15,
-  },
-  dotOff: {
     borderWidth: 1,
-    borderColor: "#3f3f46",
   },
 });
