@@ -140,6 +140,25 @@ export class MockCentralTransport implements CentralTransport {
     this.after(this.latencyMs, () => this.emitPairing(false));
   }
 
+  async undoPairing(): Promise<void> {
+    this.assertConnected();
+    const p = this.pairing;
+    if (!p) throw new Error("no pairing round");
+    // Mid-prompt the central refuses — the in-flight bind must resolve or be
+    // cancelled first, otherwise its late events would race the rollback.
+    if (p.current !== null) throw new Error("prompt in flight");
+    if (p.bound.length === 0) throw new Error("nothing to undo");
+    p.bound.pop();
+    // Undoing out of a completed round resumes it (PairingRound::undo_last
+    // reactivates the round the same way: count drops below target).
+    if (this.session !== "pairing") {
+      this.session = "pairing";
+      this.paired = p.bound.length;
+      this.emitSession();
+    }
+    this.emitPairing(false); // back to "pick the next spot"
+  }
+
   async loadDrill(config: DrillConfig): Promise<void> {
     this.assertConnected();
     this.drill = { ...config, numPositions: clampPositions(config.numPositions) };

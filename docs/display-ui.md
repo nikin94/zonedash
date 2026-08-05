@@ -97,9 +97,10 @@ phone map (`SelectPairSpot`); the panel mirrors it. Two-tap confirm per bind.
   (the confirm state from `lib/pairing/` `Tap::Await`).
 - Bound spots turn dim white as they lock in; last bind → brief full-map green
   pulse → Idle (`ready · paired 8`).
-- **Operator correction:** serial `undo` calls `PairingRound::undo_last()` —
-  the last bound slot un-locks (back to pulsing) and is re-prompted. Shown as
-  a dim `UNDO ok` hint line for one beat.
+- **Operator correction:** serial `undo` or the phone's Undo button (BLE
+  `UndoPairBind`) calls `PairingRound::undo_last()` — the last bound slot
+  un-locks and its pick reopens. Refused mid-prompt. Shown as a dim `UNDO ok`
+  hint line for one beat.
 
 ### 3. Countdown
 

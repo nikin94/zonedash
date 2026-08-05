@@ -126,6 +126,62 @@ test("extendPairing refuses shrink/no-op and a never-paired state", async () => 
   await expect(t.extendPairing(2)).rejects.toThrow("grow");
 });
 
+test("undoPairing pops the last bind and reopens the pick — also out of done", async () => {
+  const t = make();
+  const events = record(t);
+  const p = t.connect();
+  await jest.runAllTimersAsync();
+  await p;
+
+  await t.startPairing(2);
+  await jest.runAllTimersAsync();
+  await t.selectPairingSpot(0);
+  await jest.runAllTimersAsync();
+  await t.selectPairingSpot(2);
+  await jest.runAllTimersAsync(); // done, session idle
+
+  await t.undoPairing(); // resumes the completed round
+  let last = events.filter((e) => e.kind === "pairing").pop() as Extract<
+    StatusEvent,
+    { kind: "pairing" }
+  >;
+  expect(last.progress).toMatchObject({
+    total: 2,
+    boundSpots: [0],
+    currentSpot: null,
+    done: false,
+  });
+  const session = events.filter((e) => e.kind === "session").pop();
+  expect(session).toMatchObject({ state: "pairing", targetsOnline: 1 });
+
+  // Rebind somewhere else — the corrected map completes normally.
+  await t.selectPairingSpot(6);
+  await jest.runAllTimersAsync();
+  last = events.filter((e) => e.kind === "pairing").pop() as Extract<
+    StatusEvent,
+    { kind: "pairing" }
+  >;
+  expect(last.progress).toMatchObject({ boundSpots: [0, 6], done: true });
+});
+
+test("undoPairing is refused mid-prompt, with nothing bound, and with no round", async () => {
+  const t = make();
+  const p = t.connect();
+  await jest.runAllTimersAsync();
+  await p;
+
+  await expect(t.undoPairing()).rejects.toThrow("no pairing round");
+
+  await t.startPairing(2);
+  await jest.runAllTimersAsync();
+  await expect(t.undoPairing()).rejects.toThrow("nothing to undo");
+
+  await t.selectPairingSpot(0); // prompt now in flight
+  await expect(t.undoPairing()).rejects.toThrow("prompt in flight");
+  await jest.runAllTimersAsync(); // bind resolves
+  await t.undoPairing(); // between binds — allowed
+});
+
 test("selectPairingSpot rejects/ignores invalid picks like the central would", async () => {
   const t = make();
   const events = record(t);

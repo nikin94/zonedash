@@ -30,6 +30,7 @@ export enum ControlOp {
   LoadDrill = 5, // push a drill config (mode, N, sequence, timing) — "Control: config"
   SelectPairSpot = 6, // pairing: payload 1 byte — canonical court spot (0..7) for the next bind
   ExtendPairing = 7, // grow the round to N total (1 byte), keeping bound targets — PairingRound::extend / serial `extend N`
+  UndoPairBind = 8, // unbind the most recent target and re-prompt its pick — PairingRound::undo_last / serial `undo`; no payload
 }
 
 /**
