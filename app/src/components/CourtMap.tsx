@@ -178,7 +178,9 @@ export const CourtMap = ({
   <View style={styles.wrap}>
     <View style={styles.netRow}>
       <View style={styles.netLine} />
-      <AppText style={styles.netLabel}>NET</AppText>
+      <AppText size={10} color={colors.textMuted} style={styles.netLabel}>
+        NET
+      </AppText>
       <View style={styles.netLine} />
     </View>
     <View style={styles.court}>
@@ -228,8 +230,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
   },
   netLabel: {
-    color: colors.textMuted,
-    fontSize: 10,
     letterSpacing: 2,
   },
   court: {

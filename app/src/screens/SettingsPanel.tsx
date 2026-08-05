@@ -34,7 +34,9 @@ export const SettingsPanel = ({
   onChange: (next: DrillSettings) => void;
 }) => (
   <View style={styles.panel}>
-    <AppText style={styles.heading}>Drill settings</AppText>
+    <AppText size={12} color={colors.textSecondary} style={styles.heading}>
+      Drill settings
+    </AppText>
     <WheelField
       label="Delay between targets"
       testID="setting-delay"
@@ -50,7 +52,9 @@ export const SettingsPanel = ({
       onChange={(timeoutMs) => onChange({ ...settings, timeoutMs })}
     />
     <View style={styles.paramRow}>
-      <AppText style={styles.paramLabel}>Same target twice in a row</AppText>
+      <AppText color={colors.textSecondary} style={styles.paramLabel}>
+        Same target twice in a row
+      </AppText>
       <Switch
         accessibilityLabel="Allow immediate repeat"
         value={settings.allowImmediateRepeat}
@@ -70,8 +74,6 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   heading: {
-    color: colors.textSecondary,
-    fontSize: 12,
     letterSpacing: 2,
     textTransform: "uppercase",
   },
@@ -83,8 +85,6 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   paramLabel: {
-    color: colors.textSecondary,
-    fontSize: 14,
     flexShrink: 1,
   },
 });

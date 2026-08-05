@@ -19,8 +19,14 @@ export const ConfirmDialog = ({
   actions: { label: string; onPress: () => void; danger?: boolean }[];
 }) => (
   <View testID={testID} style={styles.box}>
-    <AppText style={styles.title}>{title}</AppText>
-    {body != null && <AppText style={styles.body}>{body}</AppText>}
+    <AppText size={16} weight="600" center>
+      {title}
+    </AppText>
+    {body != null && (
+      <AppText size={13} center color={colors.textSecondary} style={styles.body}>
+        {body}
+      </AppText>
+    )}
     <View style={styles.row}>
       {actions.map((a) => (
         <Pressable
@@ -33,7 +39,9 @@ export const ConfirmDialog = ({
             pressed && styles.buttonPressed,
           ]}
         >
-          <AppText style={styles.buttonLabel}>{a.label}</AppText>
+          <AppText size={16} weight="600" center>
+            {a.label}
+          </AppText>
         </Pressable>
       ))}
     </View>
@@ -45,15 +53,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
-  title: {
-    fontSize: 16,
-    fontWeight: "600",
-    textAlign: "center",
-  },
   body: {
-    color: colors.textSecondary,
-    fontSize: 13,
-    textAlign: "center",
     marginBottom: 8,
   },
   row: {
@@ -74,10 +74,5 @@ const styles = StyleSheet.create({
   },
   buttonPressed: {
     backgroundColor: colors.surface,
-  },
-  buttonLabel: {
-    fontSize: 16,
-    fontWeight: "600",
-    textAlign: "center",
   },
 });

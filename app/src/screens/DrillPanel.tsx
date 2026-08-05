@@ -141,7 +141,7 @@ export const DrillPanel = ({
   if (!paired) {
     return (
       <View style={styles.panel}>
-        <AppText style={styles.hint}>
+        <AppText size={13} center color={colors.textMuted}>
           Pair your targets first — drills run on the paired layout
         </AppText>
       </View>
@@ -162,7 +162,8 @@ export const DrillPanel = ({
             style={[styles.modeChip, uiMode === m.key && styles.modeChipActive]}
           >
             <AppText
-              style={[styles.modeLabel, uiMode === m.key && styles.modeLabelActive]}
+              weight="600"
+              color={uiMode === m.key ? colors.accentText : colors.textSecondary}
             >
               {m.label}
             </AppText>
@@ -173,7 +174,9 @@ export const DrillPanel = ({
       {uiMode === "random" && (
         <>
           <View style={styles.stopRow}>
-            <AppText style={styles.paramLabel}>Stop after</AppText>
+            <AppText color={colors.textSecondary} style={styles.paramLabel}>
+              Stop after
+            </AppText>
             <View style={styles.stopChips}>
               {(
                 [
@@ -189,10 +192,10 @@ export const DrillPanel = ({
                   style={[styles.stopChip, stopBy === s.key && styles.modeChipActive]}
                 >
                   <AppText
-                    style={[
-                      styles.modeLabel,
-                      stopBy === s.key && styles.modeLabelActive,
-                    ]}
+                    weight="600"
+                    color={
+                      stopBy === s.key ? colors.accentText : colors.textSecondary
+                    }
                   >
                     {s.label}
                   </AppText>
@@ -225,7 +228,12 @@ export const DrillPanel = ({
           <CourtMap spots={visuals} onPressSpot={appendPathSpot} />
           {path.length > 0 ? (
             <>
-              <AppText style={styles.pathText} testID="path-sequence">
+              <AppText
+                size={13}
+                center
+                color={colors.accentText}
+                testID="path-sequence"
+              >
                 {path.map((s) => SPOT_NAMES[s]).join(" → ")}
               </AppText>
               <View style={styles.pathActions}>
@@ -234,33 +242,45 @@ export const DrillPanel = ({
                   onPress={() => edit(setPath)(path.slice(0, -1))}
                   style={({ pressed }) => [styles.smallButton, pressed && styles.buttonPressed]}
                 >
-                  <AppText style={styles.buttonLabel}>Undo</AppText>
+                  <AppText size={15} weight="600">
+                    Undo
+                  </AppText>
                 </Pressable>
                 <Pressable
                   accessibilityRole="button"
                   onPress={() => edit(setPath)([])}
                   style={({ pressed }) => [styles.smallButton, pressed && styles.buttonPressed]}
                 >
-                  <AppText style={styles.buttonLabel}>Clear</AppText>
+                  <AppText size={15} weight="600">
+                    Clear
+                  </AppText>
                 </Pressable>
               </View>
             </>
           ) : (
-            <AppText style={styles.hint}>Tap paired spots in the order to run</AppText>
+            <AppText size={13} center color={colors.textMuted}>
+              Tap paired spots in the order to run
+            </AppText>
           )}
         </>
       )}
 
       {uiMode === "live" && (
-        <AppText style={styles.hint}>
+        <AppText size={13} center color={colors.textMuted}>
           You pick each next target during the session
         </AppText>
       )}
 
-      {error !== null && <AppText style={styles.error}>{error}</AppText>}
+      {error !== null && (
+        <AppText size={13} color={colors.danger}>
+          {error}
+        </AppText>
+      )}
 
       {loaded ? (
-        <AppText style={styles.doneText}>Drill loaded — ready to start</AppText>
+        <AppText size={15} weight="600" color={colors.success}>
+          Drill loaded — ready to start
+        </AppText>
       ) : (
         <Pressable
           accessibilityRole="button"
@@ -272,7 +292,9 @@ export const DrillPanel = ({
             pressed && styles.buttonPressed,
           ]}
         >
-          <AppText style={styles.buttonLabel}>Load drill</AppText>
+          <AppText size={15} weight="600">
+            Load drill
+          </AppText>
         </Pressable>
       )}
     </View>
@@ -302,14 +324,6 @@ const styles = StyleSheet.create({
     borderColor: colors.accent,
     backgroundColor: colors.accentSurface,
   },
-  modeLabel: {
-    color: colors.textSecondary,
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  modeLabelActive: {
-    color: colors.accentText,
-  },
   stopRow: {
     alignSelf: "stretch",
     flexDirection: "row",
@@ -329,14 +343,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   paramLabel: {
-    color: colors.textSecondary,
-    fontSize: 14,
     flexShrink: 1,
-  },
-  pathText: {
-    color: colors.accentText,
-    fontSize: 13,
-    textAlign: "center",
   },
   pathActions: {
     flexDirection: "row",
@@ -348,20 +355,6 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     paddingHorizontal: 18,
     paddingVertical: 10,
-  },
-  hint: {
-    color: colors.textMuted,
-    fontSize: 13,
-    textAlign: "center",
-  },
-  error: {
-    color: colors.danger,
-    fontSize: 13,
-  },
-  doneText: {
-    color: colors.success,
-    fontSize: 15,
-    fontWeight: "600",
   },
   button: {
     borderRadius: 999,
@@ -375,9 +368,5 @@ const styles = StyleSheet.create({
   },
   buttonPressed: {
     backgroundColor: colors.surface,
-  },
-  buttonLabel: {
-    fontSize: 15,
-    fontWeight: "600",
   },
 });

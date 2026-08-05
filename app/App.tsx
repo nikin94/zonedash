@@ -84,7 +84,9 @@ const App = () => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <AppText style={styles.headerTitle}>ZoneDash</AppText>
+        <AppText size={20} weight="700" style={styles.headerTitle}>
+          ZoneDash
+        </AppText>
         <View style={styles.headerRight}>
           <Pressable
             testID="status-chip"
@@ -104,7 +106,9 @@ const App = () => {
                 connection === "error" && styles.dotError,
               ]}
             />
-            <AppText style={styles.chipLabel}>{CHIP_LABEL[connection]}</AppText>
+            <AppText size={13} weight="600" color={colors.textSecondary}>
+              {CHIP_LABEL[connection]}
+            </AppText>
           </Pressable>
           <Pressable
             testID="settings-button"
@@ -163,10 +167,8 @@ const App = () => {
                   style={[styles.section, section === s && styles.sectionActive]}
                 >
                   <AppText
-                    style={[
-                      styles.sectionLabel,
-                      section === s && styles.sectionLabelActive,
-                    ]}
+                    weight="600"
+                    color={section === s ? colors.text : colors.textMuted}
                   >
                     {s === "pair" ? "Pairing" : "Drill"}
                   </AppText>
@@ -187,7 +189,7 @@ const App = () => {
             </View>
           </>
         ) : (
-          <AppText style={styles.hint}>
+          <AppText size={13} center color={colors.textMuted} style={styles.hint}>
             {busy
               ? "Connecting to the central unit…"
               : connection === "error"
@@ -220,8 +222,6 @@ const styles = StyleSheet.create({
     zIndex: 20, // the disconnect dialog overlays the content below
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: "700",
     letterSpacing: 1,
   },
   headerRight: {
@@ -238,11 +238,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     paddingHorizontal: 14,
-  },
-  chipLabel: {
-    color: colors.textSecondary,
-    fontSize: 13,
-    fontWeight: "600",
   },
   dot: {
     width: 8,
@@ -299,9 +294,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   hint: {
-    color: colors.textMuted,
-    fontSize: 13,
-    textAlign: "center",
     paddingHorizontal: 32,
   },
   buttonPressed: {
@@ -319,14 +311,6 @@ const styles = StyleSheet.create({
   },
   sectionActive: {
     backgroundColor: colors.surface,
-  },
-  sectionLabel: {
-    color: colors.textMuted,
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  sectionLabelActive: {
-    color: colors.text,
   },
   hidden: {
     display: "none",

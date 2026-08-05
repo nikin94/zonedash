@@ -66,7 +66,9 @@ export const WheelField = ({
 
   return (
     <View style={[styles.row, open && styles.rowOpen]}>
-      <AppText style={styles.label}>{label}</AppText>
+      <AppText color={colors.textSecondary} style={styles.label}>
+        {label}
+      </AppText>
       <View style={[styles.anchor, { width }]}>
         <Pressable
           testID={testID}
@@ -75,7 +77,7 @@ export const WheelField = ({
           onPress={() => setOpen((v) => !v)}
           style={[styles.pill, open && styles.pillActive]}
         >
-          <AppText style={styles.pillLabel}>{display}</AppText>
+          <AppText weight="600">{display}</AppText>
         </Pressable>
         {open && (
           <>
@@ -125,8 +127,6 @@ const styles = StyleSheet.create({
     zIndex: 10, // the dropdown must overlay the rows below
   },
   label: {
-    color: colors.textSecondary,
-    fontSize: 14,
     flexShrink: 1,
   },
   anchor: {
@@ -144,10 +144,6 @@ const styles = StyleSheet.create({
   pillActive: {
     borderColor: colors.accent,
     backgroundColor: colors.accentSurface,
-  },
-  pillLabel: {
-    fontSize: 14,
-    fontWeight: "600",
   },
   backdrop: {
     position: "absolute",
@@ -171,6 +167,8 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     ...glowShadow,
   },
+  // WheelPicker's itemTextStyle is a third-party style prop — AppText (and its
+  // size/color props) can't reach inside the lib's items.
   wheelText: {
     color: colors.text,
     fontSize: 16,

@@ -162,7 +162,9 @@ export const PairingPanel = ({ transport }: { transport: CentralTransport }) => 
   return (
     <View style={styles.panel}>
       <View style={styles.headerRow}>
-        <AppText style={styles.heading}>Targets</AppText>
+        <AppText size={12} color={colors.textSecondary} style={styles.heading}>
+          Targets
+        </AppText>
         {/* The wheel drops down as an absolute overlay anchored on the pill, so
             the selected item sits exactly where the pill is. */}
         <View style={styles.pillAnchor}>
@@ -174,7 +176,10 @@ export const PairingPanel = ({ transport }: { transport: CentralTransport }) => 
             onPress={() => setWheelOpen((v) => !v)}
             style={[styles.pill, wheelOpen && styles.pillActive]}
           >
-            <AppText style={[styles.pillLabel, wheelOpen && styles.pillLabelActive]}>
+            <AppText
+              weight="600"
+              color={wheelOpen ? colors.accentText : colors.text}
+            >
               {total}
             </AppText>
           </Pressable>
@@ -242,11 +247,11 @@ export const PairingPanel = ({ transport }: { transport: CentralTransport }) => 
                 round phases, so nothing shifts as states change. */}
             <View testID="status-slot" style={styles.textSlot}>
               {choosing ? (
-                <AppText style={styles.prompt}>
+                <AppText size={16} weight="600" center style={styles.slotText}>
                   Tap the map where target {boundCount + 1} of {progress.total} stands
                 </AppText>
               ) : prompting ? (
-                <AppText style={styles.prompt}>
+                <AppText size={16} weight="600" center style={styles.slotText}>
                   {progress.awaitingConfirm
                     ? "Press again to confirm"
                     : `Press the ${SPOT_NAMES[progress.currentSpot!]} target (${
@@ -254,13 +259,26 @@ export const PairingPanel = ({ transport }: { transport: CentralTransport }) => 
                       }/${progress.total})`}
                 </AppText>
               ) : running ? (
-                <AppText style={styles.prompt}>Starting pairing…</AppText>
+                <AppText size={16} weight="600" center style={styles.slotText}>
+                  Starting pairing…
+                </AppText>
               ) : done ? (
-                <AppText style={styles.doneText}>
+                <AppText
+                  size={15}
+                  weight="600"
+                  center
+                  color={colors.success}
+                  style={styles.slotText}
+                >
                   Paired {progress.total} {progress.total === 1 ? "target" : "targets"}
                 </AppText>
               ) : (
-                <AppText style={styles.hint}>
+                <AppText
+                  size={13}
+                  center
+                  color={colors.textMuted}
+                  style={styles.slotText}
+                >
                   Pick a count, then place each target during pairing
                 </AppText>
               )}
@@ -268,7 +286,7 @@ export const PairingPanel = ({ transport }: { transport: CentralTransport }) => 
 
             <View testID="error-slot" style={styles.errorSlot}>
               {error !== null && (
-                <AppText style={styles.error} numberOfLines={1}>
+                <AppText size={13} center color={colors.danger} numberOfLines={1}>
                   {error}
                 </AppText>
               )}
@@ -283,7 +301,9 @@ export const PairingPanel = ({ transport }: { transport: CentralTransport }) => 
                   onPress={cancel}
                   style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
                 >
-                  <AppText style={styles.buttonLabel}>Cancel</AppText>
+                  <AppText size={16} weight="600" center>
+                    Cancel
+                  </AppText>
                 </Pressable>
               ) : (
                 <Pressable
@@ -291,7 +311,7 @@ export const PairingPanel = ({ transport }: { transport: CentralTransport }) => 
                   onPress={start}
                   style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
                 >
-                  <AppText style={styles.buttonLabel}>
+                  <AppText size={16} weight="600" center>
                     {done ? "Re-pair" : "Start pairing"}
                   </AppText>
                 </Pressable>
@@ -307,7 +327,9 @@ export const PairingPanel = ({ transport }: { transport: CentralTransport }) => 
                     onPress={undo}
                     style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
                   >
-                    <AppText style={styles.buttonLabel}>Undo</AppText>
+                    <AppText size={16} weight="600" center>
+                      Undo
+                    </AppText>
                   </Pressable>
                 )}
               </View>
@@ -337,8 +359,6 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   heading: {
-    color: colors.textSecondary,
-    fontSize: 12,
     letterSpacing: 2,
     textTransform: "uppercase",
   },
@@ -359,13 +379,6 @@ const styles = StyleSheet.create({
   pillActive: {
     borderColor: colors.accent,
     backgroundColor: colors.accentSurface,
-  },
-  pillLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  pillLabelActive: {
-    color: colors.accentText,
   },
   wheelBackdrop: {
     // Far-oversized invisible catcher — the panel doesn't clip, so this covers
@@ -393,6 +406,8 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     ...glowShadow,
   },
+  // WheelPicker's itemTextStyle is a third-party style prop — AppText (and its
+  // size/color props) can't reach inside the lib's items.
   wheelText: {
     color: colors.text,
     fontSize: 18,
@@ -418,29 +433,10 @@ const styles = StyleSheet.create({
     height: BUTTON_H,
     alignSelf: "stretch",
   },
-  prompt: {
-    fontSize: 16,
+  // Shared by every status-slot text: the fixed slot height assumes this
+  // lineHeight regardless of which text (and size) is showing.
+  slotText: {
     lineHeight: 20,
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  hint: {
-    color: colors.textMuted,
-    fontSize: 13,
-    lineHeight: 20,
-    textAlign: "center",
-  },
-  doneText: {
-    color: colors.success,
-    fontSize: 15,
-    lineHeight: 20,
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  error: {
-    color: colors.danger,
-    fontSize: 13,
-    textAlign: "center",
   },
   button: {
     height: BUTTON_H,
@@ -454,10 +450,5 @@ const styles = StyleSheet.create({
   },
   buttonPressed: {
     backgroundColor: colors.surface,
-  },
-  buttonLabel: {
-    fontSize: 16,
-    fontWeight: "600",
-    textAlign: "center",
   },
 });
