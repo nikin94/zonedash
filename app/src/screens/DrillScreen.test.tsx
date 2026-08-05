@@ -86,6 +86,38 @@ test("live mode sends exactly mode and positions — no delay or repeat leak", a
   } satisfies DrillConfig);
 });
 
+test("live mode is operator-driven — a court tap arms a target, then it resolves", async () => {
+  // A small fixed tap delay makes the arm/hit beats deterministic (the app
+  // leaves it random, 750–1000 ms).
+  const t = new MockCentralTransport({ latencyMs: 0, stepMs: 100, tapDelayMs: 20 });
+  const p = t.connect();
+  await jest.runAllTimersAsync();
+  await p;
+  const arm = jest.spyOn(t, "armLiveTarget");
+  panel(t, PAIRED, DEFAULT_SETTINGS);
+
+  fireEvent.press(screen.getByText("Live"));
+  fireEvent.press(screen.getByText("Start"));
+  await act(() => jest.advanceTimersByTimeAsync(0));
+
+  // Nothing arms on its own — the mock schedules no steps for live; the
+  // operator drives it, and the map invites the first tap.
+  expect(screen.getByText("Tap a target to arm it")).toBeTruthy();
+  expect(screen.queryAllByTestId(/spot-\d-active/)).toHaveLength(0);
+
+  // Tap net left (canonical 0 → slot 0). The target lights a beat later.
+  fireEvent.press(screen.getByTestId("spot-0-available"));
+  expect(arm).toHaveBeenCalledWith(0);
+  await act(() => jest.advanceTimersByTimeAsync(20));
+  expect(screen.getByTestId("spot-0-active")).toBeTruthy();
+
+  // The athlete's hit resolves it → green flash + reaction time; the map is
+  // ready for the next pick (liveBusy cleared).
+  await act(() => jest.advanceTimersByTimeAsync(20));
+  expect(screen.getByTestId("spot-0-hit")).toBeTruthy();
+  expect(screen.getByText("20 ms")).toBeTruthy();
+});
+
 test("path is authored on the same court map — slot-index wire format", async () => {
   const t = await connectedTransport();
   const load = jest.spyOn(t, "loadDrill");

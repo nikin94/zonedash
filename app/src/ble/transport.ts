@@ -75,6 +75,11 @@ export interface CentralTransport {
   loadDrill(config: DrillConfig): Promise<void>;
   /** ControlOp.StartSession. */
   startSession(): Promise<void>;
+  /** ControlOp.ArmLiveTarget — live mode only: the operator picks the next
+   *  target during a running session. `position` is a slot index
+   *  (0..numPositions-1); the central lights it a beat later and the step
+   *  resolves on the hit. A no-op while a target is already lit. */
+  armLiveTarget(position: number): Promise<void>;
   /** ControlOp.StopSession. */
   stopSession(): Promise<void>;
   /** ControlOp.DumpResults — resolves with the session's hit records. */

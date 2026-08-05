@@ -81,6 +81,9 @@ export const DrillPanel = ({
   const [flashSpot, setFlashSpot] = useState<number | null>(null);
   const [resolvedCount, setResolvedCount] = useState(0);
   const [lastReactionMs, setLastReactionMs] = useState<number | null>(null);
+  // Live mode: a target is armed or in flight after the operator's tap, so
+  // further taps are ignored until it resolves.
+  const [liveBusy, setLiveBusy] = useState(false);
   const [records, setRecords] = useState<HitRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -95,6 +98,7 @@ export const DrillPanel = ({
         setArmedSpot((was) => (was === spot ? null : was));
         setResolvedCount((n) => n + 1);
         setLastReactionMs(e.reactionMs);
+        setLiveBusy(false); // ready for the next live pick
         if (spot != null) {
           setFlashSpot(spot);
           if (flashTimer.current !== null) clearTimeout(flashTimer.current);
@@ -103,6 +107,7 @@ export const DrillPanel = ({
       }
       if (e.kind === "session") {
         setSession(e.state);
+        if (e.state !== "running") setLiveBusy(false);
         if (e.state === "done") {
           setArmedSpot(null);
           // The run is over — pull the buffered hit records for the summary.
@@ -136,6 +141,24 @@ export const DrillPanel = ({
   const appendPathSpot = (spot: number) => {
     if (uiMode !== "path" || !pairedSpots.includes(spot)) return;
     setPath([...path, spot]);
+  };
+
+  const liveRunning = running && uiMode === "live";
+
+  // The court map does double duty: authoring the Path while idle, and — in a
+  // running live session — the operator's control surface. A live tap arms the
+  // picked target; the central lights it a beat later. One at a time.
+  const onCourtTap = (spot: number) => {
+    if (!running) {
+      appendPathSpot(spot);
+      return;
+    }
+    if (liveRunning && !liveBusy && pairedSpots.includes(spot)) {
+      setLiveBusy(true);
+      transport
+        .armLiveTarget(pairedSpots.indexOf(spot))
+        .catch(() => setLiveBusy(false));
+    }
   };
 
   // The engine mode this UI state resolves to on the wire.
@@ -174,6 +197,7 @@ export const DrillPanel = ({
     setResolvedCount(0);
     setLastReactionMs(null);
     setFlashSpot(null);
+    setLiveBusy(false);
     transport
       .loadDrill(config)
       .then(() => transport.startSession())
@@ -207,11 +231,26 @@ export const DrillPanel = ({
       ? Math.min(...records.map((r) => r.reactionMs))
       : null;
 
+  // Secondary status line during a run. Auto modes narrate the athlete's
+  // reaction; live mode narrates the operator's turn: tap → armed → time.
+  const runStatus = liveRunning
+    ? liveBusy
+      ? "React when the target lights up"
+      : lastReactionMs !== null
+        ? `${lastReactionMs} ms`
+        : "Tap a target to arm it"
+    : lastReactionMs === null
+      ? "React when a target lights up"
+      : `${lastReactionMs} ms`;
+  const runStatusHit = !liveBusy && lastReactionMs !== null;
+
   return (
     <ScrollView contentContainerStyle={styles.panel}>
       <CourtMap
         spots={visuals}
-        onPressSpot={!running && uiMode === "path" ? appendPathSpot : undefined}
+        onPressSpot={
+          liveRunning || (!running && uiMode === "path") ? onCourtTap : undefined
+        }
       >
         <View style={styles.textSlot}>
           {running ? (
@@ -222,12 +261,10 @@ export const DrillPanel = ({
               <AppText
                 center
                 size={13}
-                color={lastReactionMs === null ? colors.textMuted : colors.success}
+                color={runStatusHit ? colors.success : colors.textMuted}
                 style={styles.slotText}
               >
-                {lastReactionMs === null
-                  ? "React when a target lights up"
-                  : `${lastReactionMs} ms`}
+                {runStatus}
               </AppText>
             </>
           ) : done && records !== null ? (

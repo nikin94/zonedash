@@ -22,8 +22,11 @@ import type {
 export interface MockOptions {
   /** Simulated link latency for connect and command round-trips. */
   latencyMs?: number;
-  /** Simulated time between pairing taps / drill steps. */
+  /** Simulated time between auto-run drill steps (random/path/time). */
   stepMs?: number;
+  /** Fixed override for the simulated human tap latency (see TAP_MIN/MAX_MS).
+   *  The app leaves it random; tests set a small deterministic value. */
+  tapDelayMs?: number;
   /** Every n-th step of a session is a timeout miss (0 = never). Only takes
    *  effect when the drill has timeoutMs > 0 — matching lib/engine, a drill
    *  without a timeout can never miss. */
@@ -35,11 +38,19 @@ export interface MockOptions {
 
 const clampPositions = (n: number) => Math.max(1, Math.min(8, Math.floor(n) || 1));
 
+// Simulated human tap latency — the gap the mock waits before a "physical"
+// target tap registers: each pairing-confirm tap, and (in live mode) both the
+// arm after the operator's pick and the athlete's hit. Randomised in this
+// range so the flow feels human-paced instead of instant.
+const TAP_MIN_MS = 750;
+const TAP_MAX_MS = 1000;
+
 export class MockCentralTransport implements CentralTransport {
   connectionState: ConnectionState = "disconnected";
 
   private readonly latencyMs: number;
   private readonly stepMs: number;
+  private readonly tapDelayMs?: number;
   private readonly missEvery: number;
   private readonly failConnect: boolean;
 
@@ -51,10 +62,13 @@ export class MockCentralTransport implements CentralTransport {
   private paired = 0; // targets bound by the last pairing round
   private pairing: { total: number; bound: number[]; current: number | null } | null = null;
   private hits: HitRecord[] = [];
+  private liveArmed = false; // a live target is lit or in flight — ignore taps
+  private liveSeq = 0; // step counter for the current live session
 
   constructor(opts: MockOptions = {}) {
     this.latencyMs = opts.latencyMs ?? 150;
     this.stepMs = opts.stepMs ?? 900;
+    this.tapDelayMs = opts.tapDelayMs;
     this.missEvery = opts.missEvery ?? 4;
     this.failConnect = opts.failConnect ?? false;
   }
@@ -107,21 +121,25 @@ export class MockCentralTransport implements CentralTransport {
     if (p.current !== null || p.bound.includes(s)) return;
     p.current = s;
     this.emitPairing(false); // "press here" — the LED panel lights this spot too
-    // Two-tap semantics per lib/pairing: first physical tap makes a candidate
-    // (awaitingConfirm — "again?"), the second binds. A candidate replaced by
-    // another stray MAC re-emits the same confirm state; undo isn't modeled.
-    this.after(this.stepMs / 2, () => this.emitPairing(true));
-    this.after(this.stepMs, () => {
-      p.bound.push(s);
-      p.current = null;
-      if (p.bound.length >= p.total) {
-        this.paired = p.total;
-        this.session = "idle";
-        this.emitPairing(false); // done snapshot
-        this.emitSession();
-      } else {
-        this.emitPairing(false); // back to "pick the next spot"
-      }
+    // Two-tap semantics per lib/pairing: the first physical tap makes a
+    // candidate (awaitingConfirm — "again?"), the second binds. Each tap is
+    // human-paced (tapDelay) and chained, so they land a beat apart rather
+    // than instantly. (A candidate replaced by a stray MAC / undo isn't
+    // modeled; a cancel/disconnect clears these timers.)
+    this.after(this.tapDelay(), () => {
+      this.emitPairing(true); // candidate
+      this.after(this.tapDelay(), () => {
+        p.bound.push(s);
+        p.current = null;
+        if (p.bound.length >= p.total) {
+          this.paired = p.total;
+          this.session = "idle";
+          this.emitPairing(false); // done snapshot
+          this.emitSession();
+        } else {
+          this.emitPairing(false); // back to "pick the next spot"
+        }
+      });
     });
   }
 
@@ -194,7 +212,13 @@ export class MockCentralTransport implements CentralTransport {
     if (this.session === "running") return;
     this.session = "running";
     this.hits = [];
+    this.liveArmed = false;
+    this.liveSeq = 0;
     this.emitSession();
+
+    // Live is operator-driven: the app arms each target with armLiveTarget, so
+    // the mock schedules nothing here — it waits for those calls.
+    if (this.drill.mode === "live") return;
 
     const { mode, path } = this.drill;
     // time mode fills its window ("how many in durationMs"), not a rep count.
@@ -246,6 +270,41 @@ export class MockCentralTransport implements CentralTransport {
         }
       });
     }
+  }
+
+  async armLiveTarget(position: number): Promise<void> {
+    this.assertConnected();
+    if (this.session !== "running" || this.drill.mode !== "live") {
+      throw new Error("no live session");
+    }
+    // One target at a time — an extra tap while one is lit or in flight is a
+    // no-op, like the central would ignore it.
+    if (this.liveArmed) return;
+    const n = clampPositions(this.drill.numPositions);
+    const pos = ((Math.floor(position) % n) + n) % n;
+    const seq = this.liveSeq++;
+    this.liveArmed = true;
+    // The operator picked a target; it lights up a beat later (tap + link
+    // round-trip), then resolves on the athlete's hit a beat after that —
+    // both human-paced.
+    this.after(this.tapDelay(), () => {
+      this.emit({ kind: "progress", seq, position: pos });
+      const reactionMs = this.tapDelay();
+      this.after(reactionMs, () => {
+        this.hits.push({
+          seq,
+          position: pos,
+          tLitUs: 0,
+          tHitUs: reactionMs * 1000,
+          reactionMs,
+          movementMs: 0,
+          sensor: "tof",
+          miss: false,
+        });
+        this.liveArmed = false;
+        this.emit({ kind: "resolved", seq, position: pos, miss: false, reactionMs });
+      });
+    });
   }
 
   async stopSession(): Promise<void> {
@@ -315,6 +374,13 @@ export class MockCentralTransport implements CentralTransport {
 
   private wait(ms: number) {
     return new Promise<void>((resolve) => this.after(ms, resolve));
+  }
+
+  /** Human tap latency: a fixed override when configured (tests), otherwise a
+   *  fresh random draw in [TAP_MIN_MS, TAP_MAX_MS] per tap. */
+  private tapDelay(): number {
+    if (this.tapDelayMs !== undefined) return this.tapDelayMs;
+    return TAP_MIN_MS + Math.round(Math.random() * (TAP_MAX_MS - TAP_MIN_MS));
   }
 
   private after(ms: number, fn: () => void) {

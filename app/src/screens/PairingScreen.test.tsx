@@ -4,9 +4,11 @@ import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import { MockCentralTransport } from "../ble/mock";
 import { PairingPanel } from "./PairingScreen";
 
-// Zero latency + fake timers so pairing steps are advanced explicitly.
+// Zero latency + a fixed, small tap delay so the two-tap confirm lands at
+// deterministic times (candidate at tapDelayMs, bind at 2×) — the app leaves
+// the tap delay random (750–1000 ms).
 const connectedTransport = async () => {
-  const t = new MockCentralTransport({ latencyMs: 0, stepMs: 100 });
+  const t = new MockCentralTransport({ latencyMs: 0, stepMs: 100, tapDelayMs: 50 });
   const p = t.connect();
   await jest.runAllTimersAsync();
   await p;
