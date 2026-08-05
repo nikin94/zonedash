@@ -16,6 +16,7 @@ const WHEEL_ITEM_H = 36;
 const WHEEL_VISIBLE = 3;
 const WHEEL_H = WHEEL_ITEM_H * WHEEL_VISIBLE;
 const WHEEL_W = 48; // barely wider than the pill — single digits need no more
+const WHEEL_PAD_V = 6; // matches the button's small vertical padding
 const PILL_H = 28;
 
 /**
@@ -113,26 +114,36 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
             </Text>
           </Pressable>
           {wheelOpen && !running && (
-            <View testID="count-wheel" style={styles.wheelDropdown}>
-              <WheelPicker
-                data={WHEEL_DATA}
-                value={total}
-                onValueChanged={({ item }) => {
-                  // Close as soon as a NEW value settles into place; a settle
-                  // on the unchanged value keeps the wheel open (tap the pill
-                  // to dismiss).
-                  if (item.value !== total) {
-                    setTotal(item.value);
-                    setWheelOpen(false);
-                  }
-                }}
-                itemHeight={WHEEL_ITEM_H}
-                visibleItemCount={WHEEL_VISIBLE}
-                width={WHEEL_W}
-                itemTextStyle={styles.wheelText}
-                overlayItemStyle={styles.wheelOverlay}
+            <>
+              {/* Oversized invisible backdrop: any tap outside the dropdown
+                  dismisses it, even when the settled value didn't change. */}
+              <Pressable
+                testID="wheel-backdrop"
+                accessibilityLabel="Close count picker"
+                style={styles.wheelBackdrop}
+                onPress={() => setWheelOpen(false)}
               />
-            </View>
+              <View testID="count-wheel" style={styles.wheelDropdown}>
+                <WheelPicker
+                  data={WHEEL_DATA}
+                  value={total}
+                  onValueChanged={({ item }) => {
+                    // Close as soon as a NEW value settles into place; a settle
+                    // on the unchanged value keeps the wheel open (dismissed by
+                    // the pill or the outside-tap backdrop).
+                    if (item.value !== total) {
+                      setTotal(item.value);
+                      setWheelOpen(false);
+                    }
+                  }}
+                  itemHeight={WHEEL_ITEM_H}
+                  visibleItemCount={WHEEL_VISIBLE}
+                  width={WHEEL_W}
+                  itemTextStyle={styles.wheelText}
+                  overlayItemStyle={styles.wheelOverlay}
+                />
+              </View>
+            </>
           )}
         </View>
       </View>
@@ -230,22 +241,35 @@ const styles = StyleSheet.create({
   pillLabelActive: {
     color: "#e0e7ff",
   },
-  wheelDropdown: {
-    // Centered on the pill so the selected wheel item lands where the pill is.
+  wheelBackdrop: {
+    // Far-oversized invisible catcher — the panel doesn't clip, so this covers
+    // the whole screen and closes the wheel on any outside tap.
     position: "absolute",
-    top: -(WHEEL_H - PILL_H) / 2,
+    top: -1000,
+    bottom: -1000,
+    left: -1000,
+    right: -1000,
+  },
+  wheelDropdown: {
+    // Centered on the pill so the selected wheel item lands where the pill is
+    // (offset accounts for the vertical padding + border).
+    position: "absolute",
+    top: -((WHEEL_H - PILL_H) / 2 + WHEEL_PAD_V + 1),
     left: "50%",
     marginLeft: -(WHEEL_W / 2 + 1), // half width + border
-    backgroundColor: "#18181b",
+    paddingVertical: WHEEL_PAD_V,
+    // Button-matched chrome: black fill, same border and full rounding, with a
+    // soft white glow so the digits separate from the dark background.
+    backgroundColor: "#0a0a0a",
     borderWidth: 1,
     borderColor: "#3f3f46",
-    borderRadius: 12,
+    borderRadius: 999,
     overflow: "hidden",
     elevation: 8, // Android stacking
-    shadowColor: "#000",
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
+    shadowColor: "#fff",
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
   },
   wheelText: {
     color: "#fafafa",

@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Dimensions, Pressable, StyleSheet, Text, View } from "react-native";
 
 /** Visual state of one canonical spot on the map. */
 export type SpotVisual =
@@ -39,9 +39,12 @@ const SPOT_XY = [
   { x: 0, y: 0.5 },
 ] as const;
 
-const MAP_W = 216;
-const MAP_H = 236; // a half court is slightly longer than wide
-const HIT = 34; // pressable hit box; the visible dot is smaller
+// Nearly full-screen width (small side margins), capped for tablets; a half
+// court is slightly longer than wide.
+const MAP_W = Math.min(Dimensions.get("window").width - 32, 380);
+const MAP_H = Math.round(MAP_W * 1.09);
+const HIT = 48; // pressable hit box; the visible dot is smaller
+const HIT_SLOP = 8; // extra forgiveness around each spot
 
 const DOT_COLOR: Record<SpotVisual, string> = {
   off: "transparent",
@@ -79,6 +82,7 @@ export function CourtMap({
             accessibilityState={{ selected: spots[i] !== "off" }}
             disabled={!onPressSpot}
             onPress={() => onPressSpot?.(i)}
+            hitSlop={HIT_SLOP}
             style={[
               styles.hit,
               { left: p.x * (MAP_W - HIT), top: p.y * (MAP_H - HIT) },
@@ -136,17 +140,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   dot: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
   },
   dotOff: {
     borderWidth: 1,
     borderColor: "#3f3f46",
   },
   dotEmphasis: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
   },
 });

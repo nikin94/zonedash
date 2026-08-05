@@ -45,6 +45,19 @@ test("count wheel opens over the pill and only sets the count — no map spots l
   expect(screen.queryByTestId("count-wheel")).toBeNull();
 });
 
+test("tapping outside the open wheel closes it without changing the value", async () => {
+  const t = await connectedTransport();
+  render(<PairingPanel transport={t} />);
+
+  fireEvent.press(screen.getByTestId("count-pill"));
+  expect(screen.getByTestId("count-wheel")).toBeTruthy();
+
+  // The backdrop catches any tap outside the dropdown.
+  fireEvent.press(screen.getByTestId("wheel-backdrop"));
+  expect(screen.queryByTestId("count-wheel")).toBeNull();
+  expect(screen.getByTestId("count-pill")).toHaveTextContent("8"); // unchanged
+});
+
 test("spots are picked during the round — free-form, e.g. all on the left", async () => {
   const t = await connectedTransport();
   render(<PairingPanel transport={t} />);
