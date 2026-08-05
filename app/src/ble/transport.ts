@@ -60,8 +60,9 @@ export interface CentralTransport {
   /** ControlOp.UndoPairBind (no payload). Unbinds the most recent target and
    *  reopens its pick — the operator's correction path when the wrong physical
    *  unit got confirmed. Works on a completed round too (it resumes). Only
-   *  valid between binds: while a spot is prompted, cancel that prompt first
-   *  (the central refuses an undo mid-prompt). */
+   *  valid between binds: while a spot is prompted the central refuses an
+   *  undo — there is no per-prompt cancel, so let the bind resolve and undo
+   *  it right after (resolve-then-undo). */
   undoPairing(): Promise<void>;
 
   /** ControlOp.LoadDrill. */
