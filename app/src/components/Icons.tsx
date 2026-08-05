@@ -49,12 +49,16 @@ const styles = StyleSheet.create({
     backgroundColor: colors.textMuted,
     justifyContent: "center",
   },
+  // Dark fill + light outline so the knob reads as a ring on the button's
+  // dark chrome instead of a solid white dot.
   knob: {
     position: "absolute",
     width: KNOB,
     height: KNOB,
     borderRadius: KNOB / 2,
-    backgroundColor: colors.text,
+    borderWidth: 1,
+    borderColor: colors.text,
+    backgroundColor: colors.background,
   },
   closeBox: {
     width: W,
