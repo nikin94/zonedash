@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import type { CentralTransport, DrillConfig } from "../ble/transport";
 import { AppText } from "../components/AppText";
 import { CourtMap, SPOT_NAMES, type SpotVisual } from "../components/CourtMap";
+import { CustomPressable } from "../components/CustomPressable";
 import { msOptions, WheelField } from "../components/WheelField";
 import { colors } from "../theme";
 import type { DrillSettings } from "./SettingsPanel";
@@ -141,7 +142,7 @@ export const DrillPanel = ({
   if (!paired) {
     return (
       <View style={styles.panel}>
-        <AppText size={13} center color={colors.textMuted}>
+        <AppText center size={13} color={colors.textMuted}>
           Pair your targets first — drills run on the paired layout
         </AppText>
       </View>
@@ -154,9 +155,9 @@ export const DrillPanel = ({
     <View style={styles.panel}>
       <View style={styles.modeRow}>
         {MODES.map((m) => (
-          <Pressable
+          <CustomPressable
             key={m.key}
-            accessibilityRole="button"
+            noFeedback
             accessibilityState={{ selected: uiMode === m.key }}
             onPress={() => pickMode(m.key)}
             style={[styles.modeChip, uiMode === m.key && styles.modeChipActive]}
@@ -167,7 +168,7 @@ export const DrillPanel = ({
             >
               {m.label}
             </AppText>
-          </Pressable>
+          </CustomPressable>
         ))}
       </View>
 
@@ -184,9 +185,9 @@ export const DrillPanel = ({
                   { key: "time", label: "Time" },
                 ] as const
               ).map((s) => (
-                <Pressable
+                <CustomPressable
                   key={s.key}
-                  accessibilityRole="button"
+                  noFeedback
                   accessibilityState={{ selected: stopBy === s.key }}
                   onPress={() => edit(setStopBy)(s.key)}
                   style={[styles.stopChip, stopBy === s.key && styles.modeChipActive]}
@@ -199,23 +200,23 @@ export const DrillPanel = ({
                   >
                     {s.label}
                   </AppText>
-                </Pressable>
+                </CustomPressable>
               ))}
             </View>
           </View>
           {stopBy === "count" ? (
             <WheelField
+              value={count}
               label="Targets to hit"
               testID="drill-count"
-              value={count}
               options={COUNT_OPTIONS}
               onChange={edit(setCount)}
             />
           ) : (
             <WheelField
+              value={durationMs}
               label="Duration"
               testID="drill-duration"
-              value={durationMs}
               options={DURATION_OPTIONS}
               onChange={edit(setDurationMs)}
             />
@@ -229,36 +230,34 @@ export const DrillPanel = ({
           {path.length > 0 ? (
             <>
               <AppText
-                size={13}
                 center
+                size={13}
                 color={colors.accentText}
                 testID="path-sequence"
               >
                 {path.map((s) => SPOT_NAMES[s]).join(" → ")}
               </AppText>
               <View style={styles.pathActions}>
-                <Pressable
-                  accessibilityRole="button"
+                <CustomPressable
                   onPress={() => edit(setPath)(path.slice(0, -1))}
-                  style={({ pressed }) => [styles.smallButton, pressed && styles.buttonPressed]}
+                  style={styles.smallButton}
                 >
                   <AppText size={15} weight="600">
                     Undo
                   </AppText>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
+                </CustomPressable>
+                <CustomPressable
                   onPress={() => edit(setPath)([])}
-                  style={({ pressed }) => [styles.smallButton, pressed && styles.buttonPressed]}
+                  style={styles.smallButton}
                 >
                   <AppText size={15} weight="600">
                     Clear
                   </AppText>
-                </Pressable>
+                </CustomPressable>
               </View>
             </>
           ) : (
-            <AppText size={13} center color={colors.textMuted}>
+            <AppText center size={13} color={colors.textMuted}>
               Tap paired spots in the order to run
             </AppText>
           )}
@@ -266,7 +265,7 @@ export const DrillPanel = ({
       )}
 
       {uiMode === "live" && (
-        <AppText size={13} center color={colors.textMuted}>
+        <AppText center size={13} color={colors.textMuted}>
           You pick each next target during the session
         </AppText>
       )}
@@ -282,20 +281,15 @@ export const DrillPanel = ({
           Drill loaded — ready to start
         </AppText>
       ) : (
-        <Pressable
-          accessibilityRole="button"
+        <CustomPressable
           disabled={!canLoad}
           onPress={load}
-          style={({ pressed }) => [
-            styles.button,
-            !canLoad && styles.buttonDisabled,
-            pressed && styles.buttonPressed,
-          ]}
+          style={[styles.button, !canLoad && styles.buttonDisabled]}
         >
           <AppText size={15} weight="600">
             Load drill
           </AppText>
-        </Pressable>
+        </CustomPressable>
       )}
     </View>
   );
@@ -365,8 +359,5 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.4,
-  },
-  buttonPressed: {
-    backgroundColor: colors.surface,
   },
 });

@@ -3,13 +3,13 @@ import {
   ActivityIndicator,
   Animated,
   Dimensions,
-  Pressable,
   StyleSheet,
   View,
 } from "react-native";
 
 import { alpha, colors } from "../theme";
 import { AppText } from "./AppText";
+import { CustomPressable } from "./CustomPressable";
 import { CheckIcon } from "./Icons";
 
 /** Visual state of one canonical spot on the map. */
@@ -192,22 +192,22 @@ export const CourtMap = ({
         </View>
       )}
       {SPOT_XY.map((p, i) => (
-        <Pressable
+        <CustomPressable
           key={i}
+          noFeedback
+          disabled={!onPressSpot}
+          hitSlop={HIT_SLOP}
           testID={`spot-${i}-${spots[i]}`}
-          accessibilityRole="button"
           accessibilityLabel={`${SPOT_NAMES[i]} spot, ${A11Y_STATE[spots[i]]}`}
           accessibilityState={{ selected: spots[i] !== "off" }}
-          disabled={!onPressSpot}
           onPress={() => onPressSpot?.(i)}
-          hitSlop={HIT_SLOP}
           style={[
             styles.hit,
             { left: p.x * (MAP_W - HIT), top: p.y * (MAP_H - HIT) },
           ]}
         >
           <AnimatedDot visual={spots[i]} />
-        </Pressable>
+        </CustomPressable>
       ))}
     </View>
   </View>

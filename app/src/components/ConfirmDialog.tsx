@@ -1,7 +1,8 @@
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import { colors } from "../theme";
 import { AppText } from "./AppText";
+import { CustomPressable } from "./CustomPressable";
 
 /**
  * The app's confirm box — the same one used for the pairing count change.
@@ -19,30 +20,25 @@ export const ConfirmDialog = ({
   actions: { label: string; onPress: () => void; danger?: boolean }[];
 }) => (
   <View testID={testID} style={styles.box}>
-    <AppText size={16} weight="600" center>
+    <AppText center size={16} weight="600">
       {title}
     </AppText>
     {body != null && (
-      <AppText size={13} center color={colors.textSecondary} style={styles.body}>
+      <AppText center size={13} color={colors.textSecondary} style={styles.body}>
         {body}
       </AppText>
     )}
     <View style={styles.row}>
       {actions.map((a) => (
-        <Pressable
+        <CustomPressable
           key={a.label}
-          accessibilityRole="button"
           onPress={a.onPress}
-          style={({ pressed }) => [
-            styles.button,
-            a.danger && styles.buttonDanger,
-            pressed && styles.buttonPressed,
-          ]}
+          style={[styles.button, a.danger && styles.buttonDanger]}
         >
-          <AppText size={16} weight="600" center>
+          <AppText center size={16} weight="600">
             {a.label}
           </AppText>
-        </Pressable>
+        </CustomPressable>
       ))}
     </View>
   </View>
@@ -71,8 +67,5 @@ const styles = StyleSheet.create({
   },
   buttonDanger: {
     borderColor: colors.dangerBorder,
-  },
-  buttonPressed: {
-    backgroundColor: colors.surface,
   },
 });

@@ -38,16 +38,16 @@ export const SettingsPanel = ({
       Drill settings
     </AppText>
     <WheelField
+      value={settings.delayMs}
       label="Delay between targets"
       testID="setting-delay"
-      value={settings.delayMs}
       options={DELAY_OPTIONS}
       onChange={(delayMs) => onChange({ ...settings, delayMs })}
     />
     <WheelField
+      value={settings.timeoutMs}
       label="Timeout (auto-miss)"
       testID="setting-timeout"
-      value={settings.timeoutMs}
       options={TIMEOUT_OPTIONS}
       onChange={(timeoutMs) => onChange({ ...settings, timeoutMs })}
     />
@@ -56,8 +56,8 @@ export const SettingsPanel = ({
         Same target twice in a row
       </AppText>
       <Switch
-        accessibilityLabel="Allow immediate repeat"
         value={settings.allowImmediateRepeat}
+        accessibilityLabel="Allow immediate repeat"
         onValueChange={(allowImmediateRepeat) =>
           onChange({ ...settings, allowImmediateRepeat })
         }

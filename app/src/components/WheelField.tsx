@@ -1,9 +1,10 @@
 import WheelPicker from "@quidone/react-native-wheel-picker";
 import { useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import { colors, glowShadow } from "../theme";
 import { AppText } from "./AppText";
+import { CustomPressable } from "./CustomPressable";
 
 export interface WheelOption {
   value: number;
@@ -47,19 +48,19 @@ const PILL_H = 36;
  * dismisses it.
  */
 export const WheelField = ({
-  label,
   value,
+  width = 84,
+  label,
+  testID,
   options,
   onChange,
-  testID,
-  width = 84,
 }: {
-  label: string;
   value: number;
+  width?: number;
+  label: string;
+  testID: string;
   options: WheelOption[];
   onChange: (v: number) => void;
-  testID: string;
-  width?: number;
 }) => {
   const [open, setOpen] = useState(false);
   const display = options.find((o) => o.value === value)?.label ?? String(value);
@@ -70,28 +71,32 @@ export const WheelField = ({
         {label}
       </AppText>
       <View style={[styles.anchor, { width }]}>
-        <Pressable
+        <CustomPressable
+          noFeedback
           testID={testID}
-          accessibilityRole="button"
           accessibilityLabel={`${label}: ${display}, tap to change`}
           onPress={() => setOpen((v) => !v)}
           style={[styles.pill, open && styles.pillActive]}
         >
           <AppText weight="600">{display}</AppText>
-        </Pressable>
+        </CustomPressable>
         {open && (
           <>
             {/* Oversized invisible catcher: any tap outside dismisses. */}
-            <Pressable
+            <CustomPressable
+              noFeedback
               testID={`${testID}-backdrop`}
               accessibilityLabel={`Close ${label} picker`}
-              style={styles.backdrop}
               onPress={() => setOpen(false)}
+              style={styles.backdrop}
             />
             <View testID={`${testID}-wheel`} style={styles.dropdown}>
               <WheelPicker
-                data={options}
                 value={value}
+                itemHeight={ITEM_H}
+                visibleItemCount={VISIBLE}
+                width={width}
+                data={options}
                 onValueChanged={({ item }) => {
                   // Settles only (intermediate passes go to onValueChanging):
                   // a new value applies and closes; the unchanged value keeps
@@ -101,9 +106,6 @@ export const WheelField = ({
                     setOpen(false);
                   }
                 }}
-                itemHeight={ITEM_H}
-                visibleItemCount={VISIBLE}
-                width={width}
                 itemTextStyle={styles.wheelText}
                 overlayItemStyle={styles.wheelOverlay}
               />

@@ -8,10 +8,10 @@ import {
 import { colors } from "../theme";
 
 export interface AppTextProps extends TextProps {
+  center?: boolean; // textAlign: "center"
   size?: number; // fontSize; defaults to the app's body size
   weight?: TextStyle["fontWeight"];
   color?: string;
-  center?: boolean; // textAlign: "center"
 }
 
 /** The app's default (and most common) text size. */
@@ -24,10 +24,10 @@ export const DEFAULT_TEXT_SIZE = 14;
  * overrides them as usual.
  */
 export const AppText = ({
+  center,
   size = DEFAULT_TEXT_SIZE,
   weight,
   color = colors.text,
-  center,
   style,
   ...rest
 }: AppTextProps) => (

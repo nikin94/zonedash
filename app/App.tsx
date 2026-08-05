@@ -1,11 +1,12 @@
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import { MockCentralTransport } from "./src/ble/mock";
 import type { ConnectionState } from "./src/ble/transport";
 import { AppText } from "./src/components/AppText";
 import { ConfirmDialog } from "./src/components/ConfirmDialog";
+import { CustomPressable } from "./src/components/CustomPressable";
 import { CloseIcon, SlidersIcon } from "./src/components/Icons";
 import { DrillPanel } from "./src/screens/DrillPanel";
 import { PairingPanel } from "./src/screens/PairingPanel";
@@ -88,16 +89,12 @@ const App = () => {
           ZoneDash
         </AppText>
         <View style={styles.headerRight}>
-          <Pressable
-            testID="status-chip"
-            accessibilityRole="button"
-            accessibilityLabel={`Central unit: ${CHIP_LABEL[connection]}`}
+          <CustomPressable
             disabled={busy}
+            testID="status-chip"
+            accessibilityLabel={`Central unit: ${CHIP_LABEL[connection]}`}
             onPress={onChipPress}
-            style={({ pressed }) => [
-              styles.chip,
-              pressed && styles.buttonPressed,
-            ]}
+            style={styles.chip}
           >
             <View
               style={[
@@ -109,31 +106,27 @@ const App = () => {
             <AppText size={13} weight="600" color={colors.textSecondary}>
               {CHIP_LABEL[connection]}
             </AppText>
-          </Pressable>
-          <Pressable
+          </CustomPressable>
+          <CustomPressable
             testID="settings-button"
-            accessibilityRole="button"
             accessibilityLabel={settingsOpen ? "Close settings" : "Open settings"}
             onPress={() => setSettingsOpen((v) => !v)}
-            style={({ pressed }) => [
-              styles.headerButton,
-              settingsOpen && styles.headerButtonActive,
-              pressed && styles.buttonPressed,
-            ]}
+            style={[styles.headerButton, settingsOpen && styles.headerButtonActive]}
           >
             {settingsOpen ? <CloseIcon /> : <SlidersIcon />}
-          </Pressable>
+          </CustomPressable>
         </View>
       </View>
 
       {disconnectAsk && (
         <>
           {/* Tap anywhere outside the dialog = No. */}
-          <Pressable
+          <CustomPressable
+            noFeedback
             testID="disconnect-backdrop"
             accessibilityLabel="Dismiss disconnect dialog"
-            style={styles.confirmBackdrop}
             onPress={() => setDisconnectAsk(false)}
+            style={styles.confirmBackdrop}
           />
           <View style={styles.confirmCard}>
             <ConfirmDialog
@@ -159,9 +152,9 @@ const App = () => {
           <>
             <View style={styles.sectionRow}>
               {(["pair", "drill"] as const).map((s) => (
-                <Pressable
+                <CustomPressable
                   key={s}
-                  accessibilityRole="button"
+                  noFeedback
                   accessibilityState={{ selected: section === s }}
                   onPress={() => setSection(s)}
                   style={[styles.section, section === s && styles.sectionActive]}
@@ -172,7 +165,7 @@ const App = () => {
                   >
                     {s === "pair" ? "Pairing" : "Drill"}
                   </AppText>
-                </Pressable>
+                </CustomPressable>
               ))}
             </View>
             {/* Both panels stay mounted — switching sections hides, not resets:
@@ -189,7 +182,7 @@ const App = () => {
             </View>
           </>
         ) : (
-          <AppText size={13} center color={colors.textMuted} style={styles.hint}>
+          <AppText center size={13} color={colors.textMuted} style={styles.hint}>
             {busy
               ? "Connecting to the central unit…"
               : connection === "error"
@@ -295,9 +288,6 @@ const styles = StyleSheet.create({
   },
   hint: {
     paddingHorizontal: 32,
-  },
-  buttonPressed: {
-    backgroundColor: colors.surface,
   },
   sectionRow: {
     flexDirection: "row",

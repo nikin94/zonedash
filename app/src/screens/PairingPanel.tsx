@@ -1,11 +1,12 @@
 import WheelPicker from "@quidone/react-native-wheel-picker";
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import type { PairingProgress } from "../ble/contract";
 import type { CentralTransport } from "../ble/transport";
 import { AppText } from "../components/AppText";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { CustomPressable } from "../components/CustomPressable";
 import { CourtMap, SPOT_NAMES, type SpotVisual } from "../components/CourtMap";
 import { colors, glowShadow } from "../theme";
 
@@ -168,11 +169,11 @@ export const PairingPanel = ({ transport }: { transport: CentralTransport }) => 
         {/* The wheel drops down as an absolute overlay anchored on the pill, so
             the selected item sits exactly where the pill is. */}
         <View style={styles.pillAnchor}>
-          <Pressable
-            testID="count-pill"
-            accessibilityRole="button"
-            accessibilityLabel={`${total} targets, tap to change`}
+          <CustomPressable
+            noFeedback
             disabled={running || confirming}
+            testID="count-pill"
+            accessibilityLabel={`${total} targets, tap to change`}
             onPress={() => setWheelOpen((v) => !v)}
             style={[styles.pill, wheelOpen && styles.pillActive]}
           >
@@ -182,25 +183,26 @@ export const PairingPanel = ({ transport }: { transport: CentralTransport }) => 
             >
               {total}
             </AppText>
-          </Pressable>
+          </CustomPressable>
           {wheelOpen && !running && (
             <>
               {/* Oversized invisible backdrop: any tap outside the dropdown
                   dismisses it, even when the settled value didn't change. */}
-              <Pressable
+              <CustomPressable
+                noFeedback
                 testID="wheel-backdrop"
                 accessibilityLabel="Close count picker"
-                style={styles.wheelBackdrop}
                 onPress={() => setWheelOpen(false)}
+                style={styles.wheelBackdrop}
               />
               <View testID="count-wheel" style={styles.wheelDropdown}>
                 <WheelPicker
-                  data={WHEEL_DATA}
                   value={total}
-                  onValueChanged={({ item }) => onWheelValue(item.value)}
                   itemHeight={WHEEL_ITEM_H}
                   visibleItemCount={WHEEL_VISIBLE}
                   width={WHEEL_W}
+                  data={WHEEL_DATA}
+                  onValueChanged={({ item }) => onWheelValue(item.value)}
                   itemTextStyle={styles.wheelText}
                   overlayItemStyle={styles.wheelOverlay}
                 />
@@ -247,11 +249,11 @@ export const PairingPanel = ({ transport }: { transport: CentralTransport }) => 
                 round phases, so nothing shifts as states change. */}
             <View testID="status-slot" style={styles.textSlot}>
               {choosing ? (
-                <AppText size={16} weight="600" center style={styles.slotText}>
+                <AppText center size={16} weight="600" style={styles.slotText}>
                   Tap the map where target {boundCount + 1} of {progress.total} stands
                 </AppText>
               ) : prompting ? (
-                <AppText size={16} weight="600" center style={styles.slotText}>
+                <AppText center size={16} weight="600" style={styles.slotText}>
                   {progress.awaitingConfirm
                     ? "Press again to confirm"
                     : `Press the ${SPOT_NAMES[progress.currentSpot!]} target (${
@@ -259,14 +261,14 @@ export const PairingPanel = ({ transport }: { transport: CentralTransport }) => 
                       }/${progress.total})`}
                 </AppText>
               ) : running ? (
-                <AppText size={16} weight="600" center style={styles.slotText}>
+                <AppText center size={16} weight="600" style={styles.slotText}>
                   Starting pairing…
                 </AppText>
               ) : done ? (
                 <AppText
+                  center
                   size={15}
                   weight="600"
-                  center
                   color={colors.success}
                   style={styles.slotText}
                 >
@@ -274,8 +276,8 @@ export const PairingPanel = ({ transport }: { transport: CentralTransport }) => 
                 </AppText>
               ) : (
                 <AppText
-                  size={13}
                   center
+                  size={13}
                   color={colors.textMuted}
                   style={styles.slotText}
                 >
@@ -286,7 +288,7 @@ export const PairingPanel = ({ transport }: { transport: CentralTransport }) => 
 
             <View testID="error-slot" style={styles.errorSlot}>
               {error !== null && (
-                <AppText size={13} center color={colors.danger} numberOfLines={1}>
+                <AppText center size={13} numberOfLines={1} color={colors.danger}>
                   {error}
                 </AppText>
               )}
@@ -296,41 +298,32 @@ export const PairingPanel = ({ transport }: { transport: CentralTransport }) => 
                 very bottom — so the block reads top-to-bottom in one place. */}
             <View style={styles.actionCol}>
               {running ? (
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={cancel}
-                  style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-                >
-                  <AppText size={16} weight="600" center>
+                <CustomPressable onPress={cancel} style={styles.button}>
+                  <AppText center size={16} weight="600">
                     Cancel
                   </AppText>
-                </Pressable>
+                </CustomPressable>
               ) : (
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={start}
-                  style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-                >
-                  <AppText size={16} weight="600" center>
+                <CustomPressable onPress={start} style={styles.button}>
+                  <AppText center size={16} weight="600">
                     {done ? "Re-pair" : "Start pairing"}
                   </AppText>
-                </Pressable>
+                </CustomPressable>
               )}
               {/* Undo is only offered between binds (choosing) or after done —
                   never mid-prompt, matching the central's refusal. The slot
                   keeps the row's height when the button is hidden. */}
               <View testID="undo-slot" style={styles.undoSlot}>
                 {(choosing || done) && boundCount > 0 && (
-                  <Pressable
-                    accessibilityRole="button"
+                  <CustomPressable
                     accessibilityLabel="Undo last bind"
                     onPress={undo}
-                    style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+                    style={styles.button}
                   >
-                    <AppText size={16} weight="600" center>
+                    <AppText center size={16} weight="600">
                       Undo
                     </AppText>
-                  </Pressable>
+                  </CustomPressable>
                 )}
               </View>
             </View>
@@ -447,8 +440,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     alignItems: "center",
     justifyContent: "center",
-  },
-  buttonPressed: {
-    backgroundColor: colors.surface,
   },
 });
