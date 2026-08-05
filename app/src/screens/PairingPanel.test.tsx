@@ -28,12 +28,21 @@ test("count wheel opens over the pill and only sets the count — no map spots l
   fireEvent.press(screen.getByTestId("count-pill"));
   expect(screen.getByTestId("count-wheel")).toBeTruthy();
 
-  // Drive the wheel the way a scroll settle would.
+  // Drive the wheel the way a scroll settle would: a NEW value closes it.
   const picker = screen.UNSAFE_getByType(WheelPicker);
   act(() => picker.props.onValueChanged({ item: { value: 3, label: "3" } }));
 
   expect(screen.getByTestId("count-pill")).toHaveTextContent("3");
+  expect(screen.queryByTestId("count-wheel")).toBeNull(); // auto-closed
   expect(screen.queryAllByTestId(/spot-\d-off/)).toHaveLength(8); // still nothing lit
+
+  // Settling on the unchanged value keeps the wheel open (pill dismisses it).
+  fireEvent.press(screen.getByTestId("count-pill"));
+  const reopened = screen.UNSAFE_getByType(WheelPicker);
+  act(() => reopened.props.onValueChanged({ item: { value: 3, label: "3" } }));
+  expect(screen.getByTestId("count-wheel")).toBeTruthy();
+  fireEvent.press(screen.getByTestId("count-pill"));
+  expect(screen.queryByTestId("count-wheel")).toBeNull();
 });
 
 test("spots are picked during the round — free-form, e.g. all on the left", async () => {

@@ -15,6 +15,7 @@ const WHEEL_DATA = Array.from({ length: 8 }, (_, i) => ({
 const WHEEL_ITEM_H = 36;
 const WHEEL_VISIBLE = 3;
 const WHEEL_H = WHEEL_ITEM_H * WHEEL_VISIBLE;
+const WHEEL_W = 48; // barely wider than the pill — single digits need no more
 const PILL_H = 28;
 
 /**
@@ -116,10 +117,18 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
               <WheelPicker
                 data={WHEEL_DATA}
                 value={total}
-                onValueChanged={({ item }) => setTotal(item.value)}
+                onValueChanged={({ item }) => {
+                  // Close as soon as a NEW value settles into place; a settle
+                  // on the unchanged value keeps the wheel open (tap the pill
+                  // to dismiss).
+                  if (item.value !== total) {
+                    setTotal(item.value);
+                    setWheelOpen(false);
+                  }
+                }}
                 itemHeight={WHEEL_ITEM_H}
                 visibleItemCount={WHEEL_VISIBLE}
-                width={72}
+                width={WHEEL_W}
                 itemTextStyle={styles.wheelText}
                 overlayItemStyle={styles.wheelOverlay}
               />
@@ -226,7 +235,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: -(WHEEL_H - PILL_H) / 2,
     left: "50%",
-    marginLeft: -36, // half the wheel width
+    marginLeft: -(WHEEL_W / 2 + 1), // half width + border
     backgroundColor: "#18181b",
     borderWidth: 1,
     borderColor: "#3f3f46",
