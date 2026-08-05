@@ -33,6 +33,17 @@ static void test_pair() {
   ZD_CHECK(!parse_command("pair 0").ok()); // N too small
   ZD_CHECK(!parse_command("pair 9").ok()); // N too big (> MAX_TARGETS)
   ZD_CHECK(!parse_command("pair x").ok()); // not a number
+  // Spot-list form mirrors the BLE StartPairing bitmask.
+  auto s = parse_command("pair 0,3,5");
+  ZD_CHECK(s.ok());
+  ZD_EQ(s.num_positions, 3);
+  ZD_EQ(s.spots.size(), 3);
+  ZD_EQ(s.spots[0], 0);
+  ZD_EQ(s.spots[1], 3);
+  ZD_EQ(s.spots[2], 5);
+  ZD_CHECK(parse_command("pair 8").spots.empty());  // N form carries no list
+  ZD_CHECK(!parse_command("pair 0,8").ok());        // spot out of range
+  ZD_CHECK(!parse_command("pair 0,0,1").ok());      // duplicate spot
 }
 
 static void test_case_and_whitespace_tolerant() {

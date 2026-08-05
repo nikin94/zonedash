@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "main": "index.ts",
   "dependencies": {
+    "@quidone/react-native-wheel-picker": "^1.7.1",
     "expo": "~57.0.10",
     "expo-status-bar": "~57.0.1",
     "react": "19.2.3",

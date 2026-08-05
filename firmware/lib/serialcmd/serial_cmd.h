@@ -6,6 +6,7 @@
 #pragma once
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "../engine/drill_engine.h" // DrillConfig / DrillMode (reused, not duplicated)
 #include "../protocol/protocol.h"   // Sensor, MAX_TARGETS
@@ -32,6 +33,9 @@ struct ParsedCommand {
   DrillConfig drill;           // valid when type == Drill && ok()
   Sensor sensor = Sensor::ToF; // valid when type == Sensor && ok()
   uint8_t num_positions = 0;   // active target count; valid when type == Pair && ok()
+  // Pair only: explicit canonical court spots (0..7) to walk, mirroring the
+  // BLE StartPairing bitmask. Empty = "pair N" form → the first N spots.
+  std::vector<uint8_t> spots;
 
   bool ok() const { return error.empty(); }
 };

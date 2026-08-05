@@ -131,10 +131,29 @@ ParsedCommand parse_command(const std::string& line) {
   std::string verb = lower(t[0]);
   if (verb == "pair") {
     c.type = CmdType::Pair;
-    // N is explicit so the pairing round never depends on hidden state.
+    // Two forms, both explicit so the round never depends on hidden state:
+    //   pair N       → the first N canonical spots
+    //   pair 0,3,5   → exactly these canonical spots (mirrors the BLE bitmask)
+    if (t.size() != 2) {
+      c.error = "usage: pair N (1.." + std::to_string(MAX_TARGETS) +
+                ") or pair s0,s1,...";
+      return c;
+    }
+    if (t[1].find(',') != std::string::npos) {
+      if (!parse_path(t[1], MAX_TARGETS, c.spots, c.error)) return c;
+      for (size_t i = 0; i < c.spots.size(); ++i)
+        for (size_t j = i + 1; j < c.spots.size(); ++j)
+          if (c.spots[i] == c.spots[j]) {
+            c.error = "duplicate spot: " + std::to_string(c.spots[i]);
+            return c;
+          }
+      c.num_positions = static_cast<uint8_t>(c.spots.size());
+      return c;
+    }
     uint32_t n;
-    if (t.size() != 2 || !parse_uint(t[1], n) || n < 1 || n > MAX_TARGETS) {
-      c.error = "usage: pair N (1.." + std::to_string(MAX_TARGETS) + ")";
+    if (!parse_uint(t[1], n) || n < 1 || n > MAX_TARGETS) {
+      c.error = "usage: pair N (1.." + std::to_string(MAX_TARGETS) +
+                ") or pair s0,s1,...";
       return c;
     }
     c.num_positions = static_cast<uint8_t>(n);

@@ -82,9 +82,14 @@ export class MockCentralTransport implements CentralTransport {
     this.setConnection("disconnected");
   }
 
-  async startPairing(numPositions: number): Promise<void> {
+  async startPairing(spots: number[]): Promise<void> {
     this.assertConnected();
-    const total = clampPositions(numPositions);
+    // Mirror the firmware clamp: valid canonical spots 0..7, deduped; an
+    // empty/garbage set degrades to a single-spot round, never a zero round.
+    const round = [
+      ...new Set(spots.map((s) => Math.floor(s)).filter((s) => s >= 0 && s < 8)),
+    ];
+    const total = round.length > 0 ? round.length : 1;
     this.session = "pairing";
     this.paired = 0;
     this.emitSession();

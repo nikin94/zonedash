@@ -25,7 +25,7 @@ export const CHAR = {
 export enum ControlOp {
   StartSession = 1,
   StopSession = 2,
-  StartPairing = 3, // MAC→position pairing round; payload: 1 byte N (active targets, 1..8)
+  StartPairing = 3, // MAC→position pairing round; payload: 1 bitmask byte — bit i = canonical court spot i is in the round
   DumpResults = 4,
   LoadDrill = 5, // push a drill config (mode, N, sequence, timing) — "Control: config"
 }
@@ -37,7 +37,10 @@ export enum ControlOp {
  * bind, or -1 when the round is done.
  */
 export interface PairingProgress {
-  currentPrompt: number; // 0-based slot being prompted, or -1 when done
+  // 0-based index into the round's ordered spot list (the set sent in
+  // StartPairing, ascending), or -1 when done. The app maps it back to a
+  // canonical court spot via the list it started the round with.
+  currentPrompt: number;
   total: number; // N — active targets this round
   /** True while the prompted slot has a candidate MAC waiting for its second
    *  confirm tap (firmware Tap::Await) — the UI shows "press again to confirm"

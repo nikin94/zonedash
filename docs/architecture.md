@@ -160,16 +160,21 @@ not a hardcoded 8-slot court grid. `N` is picked when the drill/session is set u
 positions are just labels/order in that set, with the geometric meaning ("far-left
 corner") supplied by the pairing prompts, not baked into firmware.
 
-**How the map is built — pairing round (chosen).** The operator picks how many
-targets are in play (N) — passed explicitly, never inferred: serial `pair N`, and
-the BLE `StartPairing` op carries a 1-byte N payload. The central unit then walks
-the slots one by one: it prompts on the display — e.g. **"Press here"** with the
-target's slot highlighted on the court/layout diagram — the person taps that
-physical target, and after a confirming second tap the unit binds that MAC to the
-slot → "next." N binds build the whole map. Self-calibrating: it doesn't matter
-which physical unit went where, or the order in the case, or how many are used.
-(Rejected: fixed numbered stickers — simpler code but demands placement discipline
-and breaks on a swapped corner; RSSI/range auto-localization — unreliable indoors.)
+**How the map is built — pairing round (chosen).** The operator picks the
+**canonical court spots** in play — passed explicitly, never inferred. On the
+phone the selector *is* a half-court map (net at the top): the operator taps
+the spots where targets physically stand, or spins a count wheel for a
+corners-first preset; the app sends the set as a **1-bitmask-byte
+`StartPairing` payload** (bit i = canonical spot i). On the bench: serial
+`pair N` (first N spots) or `pair 0,3,5` (exact list). The central unit then
+walks the active spots in order, prompting each on its own copy of the **same
+canonical map** — phone and HUB75 panel light the same dot — with "Press
+here"; the person taps that physical target, and after a confirming second tap
+the unit binds that MAC to the spot → "next." Self-calibrating: it doesn't
+matter which physical unit went where, or the order in the case, or how many
+are used. (Rejected: fixed numbered stickers — simpler code but demands
+placement discipline and breaks on a swapped corner; RSSI/range
+auto-localization — unreliable indoors.)
 
 **Two-tap confirm (robustness).** A bind takes **two consecutive taps from the
 same MAC**: the first makes it the slot's candidate ("press again to confirm"),
@@ -284,7 +289,7 @@ swaps the transport later.
 
 | Command | Does | BLE equivalent |
 |---------|------|----------------|
-| `pair N` | Enter pairing round for N slots: prompt each slot, confirm-bind the MAC that presses twice → `MAC→position` map | Control: StartPairing (N byte) |
+| `pair N` / `pair s0,s1,…` | Enter pairing round for the first N canonical spots, or an exact spot list: prompt each spot, confirm-bind the MAC that presses twice → `MAC→position` map | Control: StartPairing (spot bitmask byte) |
 | `undo` | Pairing: unbind the last bound slot and re-prompt it (`PairingRound::undo_last()`) | (dev-only for now) |
 | `nodes` | List paired targets: `position, MAC, fw, batt_mv, last_rssi` | Status read |
 | `drill N seq…` | Load a drill: N active targets + sequence (e.g. `drill 4 rand` or `drill 6 0,3,5,1,…`) + params | Control: config |
