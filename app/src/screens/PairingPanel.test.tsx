@@ -167,6 +167,69 @@ test("a dropped link mid-round surfaces a message instead of vanishing", async (
   expect(screen.getByText("Start pairing")).toBeTruthy();
 });
 
+// Pairs 2 targets to completion (spots 0 and 2) so "done" state is reached.
+const pairTwo = async () => {
+  fireEvent.press(screen.getByTestId("count-pill"));
+  const picker = screen.UNSAFE_getByType(WheelPicker);
+  act(() => picker.props.onValueChanged({ item: { value: 2, label: "2" } }));
+  fireEvent.press(screen.getByText("Start pairing"));
+  await act(() => jest.runAllTimersAsync());
+  fireEvent.press(screen.getByTestId("spot-0-available"));
+  await act(() => jest.runAllTimersAsync());
+  fireEvent.press(screen.getByTestId("spot-2-available"));
+  await act(() => jest.runAllTimersAsync());
+  expect(screen.getByText("Paired 2 targets")).toBeTruthy();
+};
+
+test("changing the count after a completed round asks for confirmation; No keeps everything", async () => {
+  const t = await connectedTransport();
+  render(<PairingPanel transport={t} />);
+  await pairTwo();
+
+  fireEvent.press(screen.getByTestId("count-pill"));
+  const picker = screen.UNSAFE_getByType(WheelPicker);
+  act(() => picker.props.onValueChanged({ item: { value: 5, label: "5" } }));
+
+  // The value is NOT committed — the dialog holds it hostage.
+  expect(screen.getByTestId("count-confirm")).toBeTruthy();
+  expect(screen.getByText("Change target count to 5?")).toBeTruthy();
+  expect(screen.getByTestId("count-pill")).toHaveTextContent("2");
+
+  fireEvent.press(screen.getByText("No"));
+  expect(screen.queryByTestId("count-confirm")).toBeNull();
+  expect(screen.getByTestId("count-pill")).toHaveTextContent("2"); // reverted
+  expect(screen.getByText("Paired 2 targets")).toBeTruthy(); // map intact
+  expect(screen.getByTestId("spot-0-bound")).toBeTruthy();
+});
+
+test("confirming the count change resets pairing to idle (no auto-start)", async () => {
+  const t = await connectedTransport();
+  render(<PairingPanel transport={t} />);
+  await pairTwo();
+
+  fireEvent.press(screen.getByTestId("count-pill"));
+  const picker = screen.UNSAFE_getByType(WheelPicker);
+  act(() => picker.props.onValueChanged({ item: { value: 5, label: "5" } }));
+  fireEvent.press(screen.getByText("Yes"));
+
+  expect(screen.getByTestId("count-pill")).toHaveTextContent("5"); // committed
+  expect(screen.queryByText(/Paired/)).toBeNull(); // done state discarded
+  expect(screen.queryAllByTestId(/spot-\d-off/)).toHaveLength(8); // map back to idle
+  expect(screen.getByText("Start pairing")).toBeTruthy(); // operator restarts
+});
+
+test("before any pairing, a count change needs no confirmation", async () => {
+  const t = await connectedTransport();
+  render(<PairingPanel transport={t} />);
+
+  fireEvent.press(screen.getByTestId("count-pill"));
+  const picker = screen.UNSAFE_getByType(WheelPicker);
+  act(() => picker.props.onValueChanged({ item: { value: 4, label: "4" } }));
+
+  expect(screen.queryByTestId("count-confirm")).toBeNull();
+  expect(screen.getByTestId("count-pill")).toHaveTextContent("4");
+});
+
 test("shows the net side for orientation", async () => {
   const t = await connectedTransport();
   render(<PairingPanel transport={t} />);

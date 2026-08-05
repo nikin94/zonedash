@@ -25,12 +25,17 @@ const PILL_H = 28;
  * round — the operator taps a court spot on the map, the central unit lights
  * that same spot on the LED panel, and a two-tap confirm on the physical
  * target binds it. Spots are free-form (e.g. 3 targets all on the left side).
+ * Status text and the action button live in the centre of the court, so the
+ * operator's eyes stay on the map instead of jumping around the layout.
  * No pairing state is owned here — the central unit drives the round; this
  * only mirrors its Status events.
  */
 export function PairingPanel({ transport }: { transport: CentralTransport }) {
   const [total, setTotal] = useState(8);
   const [wheelOpen, setWheelOpen] = useState(false);
+  // A new count picked AFTER a completed round — held until the operator
+  // confirms discarding the finished pairing.
+  const [pendingTotal, setPendingTotal] = useState<number | null>(null);
   const [progress, setProgress] = useState<PairingProgress | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +58,28 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
     return unsub;
   }, [transport]);
 
+  const done = progress !== null && progress.done;
+
+  const onWheelValue = (value: number) => {
+    if (value === total) return; // settling on the unchanged value keeps it open
+    setWheelOpen(false);
+    if (done) {
+      // A completed map is at stake — confirm before discarding it.
+      setPendingTotal(value);
+      return;
+    }
+    setTotal(value);
+  };
+
+  // Confirmed: apply the new count and drop back to idle — the operator
+  // starts the fresh round themselves.
+  const confirmCountChange = () => {
+    if (pendingTotal !== null) setTotal(pendingTotal);
+    setPendingTotal(null);
+    setProgress(null);
+    setError(null);
+  };
+
   const start = () => {
     setError(null);
     setProgress(null);
@@ -72,11 +99,11 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
     transport.stopSession().catch(() => {});
   };
 
-  const done = progress !== null && progress.done;
   // Round phases: "choosing" — waiting for the operator's map tap;
   // "prompting" — a spot is lit, waiting for the physical target's taps.
   const choosing = running && progress !== null && !done && progress.currentSpot === null;
   const prompting = running && progress !== null && !done && progress.currentSpot !== null;
+  const confirming = pendingTotal !== null;
 
   const pickSpot = (i: number) => {
     if (!choosing || progress === null || progress.boundSpots.includes(i)) return;
@@ -105,7 +132,7 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
             testID="count-pill"
             accessibilityRole="button"
             accessibilityLabel={`${total} targets, tap to change`}
-            disabled={running}
+            disabled={running || confirming}
             onPress={() => setWheelOpen((v) => !v)}
             style={[styles.pill, wheelOpen && styles.pillActive]}
           >
@@ -127,15 +154,7 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
                 <WheelPicker
                   data={WHEEL_DATA}
                   value={total}
-                  onValueChanged={({ item }) => {
-                    // Close as soon as a NEW value settles into place; a settle
-                    // on the unchanged value keeps the wheel open (dismissed by
-                    // the pill or the outside-tap backdrop).
-                    if (item.value !== total) {
-                      setTotal(item.value);
-                      setWheelOpen(false);
-                    }
-                  }}
+                  onValueChanged={({ item }) => onWheelValue(item.value)}
                   itemHeight={WHEEL_ITEM_H}
                   visibleItemCount={WHEEL_VISIBLE}
                   width={WHEEL_W}
@@ -148,51 +167,84 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
         </View>
       </View>
 
-      <CourtMap spots={visuals} onPressSpot={choosing ? pickSpot : undefined} />
+      <CourtMap spots={visuals} onPressSpot={choosing ? pickSpot : undefined}>
+        {confirming ? (
+          <View testID="count-confirm" style={styles.confirmBox}>
+            <Text style={styles.confirmTitle}>
+              Change target count to {pendingTotal}?
+            </Text>
+            <Text style={styles.confirmBody}>This resets the pairing</Text>
+            <View style={styles.confirmRow}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setPendingTotal(null)}
+                style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+              >
+                <Text style={styles.buttonLabel}>No</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                onPress={confirmCountChange}
+                style={({ pressed }) => [
+                  styles.button,
+                  styles.buttonDanger,
+                  pressed && styles.buttonPressed,
+                ]}
+              >
+                <Text style={styles.buttonLabel}>Yes</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : (
+          <>
+            {choosing ? (
+              <Text style={styles.prompt}>
+                Tap the map where target {boundCount + 1} of {progress.total} stands
+              </Text>
+            ) : prompting ? (
+              <Text style={styles.prompt}>
+                {progress.awaitingConfirm
+                  ? "Press again to confirm"
+                  : `Press the ${SPOT_NAMES[progress.currentSpot!]} target (${
+                      boundCount + 1
+                    }/${progress.total})`}
+              </Text>
+            ) : running ? (
+              <Text style={styles.prompt}>Starting pairing…</Text>
+            ) : done ? (
+              <Text style={styles.doneText}>
+                Paired {progress.total} {progress.total === 1 ? "target" : "targets"}
+              </Text>
+            ) : (
+              <Text style={styles.hint}>
+                Pick a count, then place each target during pairing
+              </Text>
+            )}
 
-      {choosing ? (
-        <Text style={styles.prompt}>
-          Tap the map where target {boundCount + 1} of {progress.total} stands
-        </Text>
-      ) : prompting ? (
-        <Text style={styles.prompt}>
-          {progress.awaitingConfirm
-            ? "Press again to confirm"
-            : `Press the ${SPOT_NAMES[progress.currentSpot!]} target (${
-                boundCount + 1
-              }/${progress.total})`}
-        </Text>
-      ) : running ? (
-        <Text style={styles.prompt}>Starting pairing…</Text>
-      ) : done ? (
-        <Text style={styles.doneText}>
-          Paired {progress.total} {progress.total === 1 ? "target" : "targets"}
-        </Text>
-      ) : (
-        <Text style={styles.hint}>
-          Pick a count, then place each target during pairing
-        </Text>
-      )}
+            {error !== null && <Text style={styles.error}>{error}</Text>}
 
-      {error !== null && <Text style={styles.error}>{error}</Text>}
-
-      {running ? (
-        <Pressable
-          accessibilityRole="button"
-          onPress={cancel}
-          style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-        >
-          <Text style={styles.buttonLabel}>Cancel</Text>
-        </Pressable>
-      ) : (
-        <Pressable
-          accessibilityRole="button"
-          onPress={start}
-          style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-        >
-          <Text style={styles.buttonLabel}>{done ? "Re-pair" : "Start pairing"}</Text>
-        </Pressable>
-      )}
+            {running ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={cancel}
+                style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+              >
+                <Text style={styles.buttonLabel}>Cancel</Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                accessibilityRole="button"
+                onPress={start}
+                style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+              >
+                <Text style={styles.buttonLabel}>
+                  {done ? "Re-pair" : "Start pairing"}
+                </Text>
+              </Pressable>
+            )}
+          </>
+        )}
+      </CourtMap>
     </View>
   );
 }
@@ -284,33 +336,66 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     textAlign: "center",
+    marginBottom: 16,
   },
   hint: {
     color: "#71717a",
     fontSize: 13,
+    textAlign: "center",
+    marginBottom: 16,
   },
   doneText: {
     color: "#34d399",
     fontSize: 15,
     fontWeight: "600",
+    textAlign: "center",
+    marginBottom: 16,
   },
   error: {
     color: "#f87171",
     fontSize: 13,
+    textAlign: "center",
+    marginBottom: 12,
   },
+  // Fingertip-sized action buttons (~48 px tall).
   button: {
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "#3f3f46",
-    paddingHorizontal: 24,
-    paddingVertical: 8,
+    backgroundColor: "#0a0a0a",
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+  },
+  buttonDanger: {
+    borderColor: "#7f1d1d",
   },
   buttonPressed: {
     backgroundColor: "#18181b",
   },
   buttonLabel: {
     color: "#fafafa",
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: "600",
+    textAlign: "center",
+  },
+  confirmBox: {
+    alignItems: "center",
+    gap: 8,
+  },
+  confirmTitle: {
+    color: "#fafafa",
+    fontSize: 16,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  confirmBody: {
+    color: "#a1a1aa",
+    fontSize: 13,
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  confirmRow: {
+    flexDirection: "row",
+    gap: 12,
   },
 });

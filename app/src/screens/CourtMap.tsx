@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Dimensions, Pressable, StyleSheet, Text, View } from "react-native";
 
 /** Visual state of one canonical spot on the map. */
@@ -57,13 +58,17 @@ const DOT_COLOR: Record<SpotVisual, string> = {
 /**
  * Half-court map. Pure renderer: the parent supplies each canonical spot's
  * visual state; taps (when enabled) report the canonical spot index.
+ * `children` render centered inside the court — the perimeter is all dots, so
+ * the middle is free real estate for the round's status text and action.
  */
 export function CourtMap({
   spots,
   onPressSpot,
+  children,
 }: {
   spots: SpotVisual[]; // length 8, canonical order
   onPressSpot?: (index: number) => void;
+  children?: ReactNode;
 }) {
   return (
     <View style={styles.wrap}>
@@ -73,6 +78,13 @@ export function CourtMap({
         <View style={styles.netLine} />
       </View>
       <View style={styles.court}>
+        {children != null && (
+          // box-none: the centre content is interactive, the empty area around
+          // it stays transparent to touches so the perimeter spots keep working.
+          <View pointerEvents="box-none" style={styles.centre}>
+            {children}
+          </View>
+        )}
         {SPOT_XY.map((p, i) => (
           <Pressable
             key={i}
@@ -131,6 +143,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#3f3f46",
     borderRadius: 4,
+  },
+  centre: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    // Keep the centre content clear of the perimeter dots' hit boxes.
+    padding: HIT + 8,
   },
   hit: {
     position: "absolute",
