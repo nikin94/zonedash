@@ -126,6 +126,24 @@ test("extendPairing refuses shrink/no-op and a never-paired state", async () => 
   await expect(t.extendPairing(2)).rejects.toThrow("grow");
 });
 
+// Same mid-prompt gate as undoPairing: an in-flight bind's timers would push
+// a bind into the resumed round otherwise. Unreachable from the UI, but the
+// seam contract must stay symmetric for the real central.
+test("extendPairing refuses while a spot prompt is in flight", async () => {
+  const t = make();
+  const p = t.connect();
+  await jest.runAllTimersAsync();
+  await p;
+
+  await t.startPairing(2);
+  await jest.runAllTimersAsync();
+  await t.selectPairingSpot(0); // prompt opens, bind not yet resolved
+  await expect(t.extendPairing(4)).rejects.toThrow("prompt in flight");
+
+  await jest.runAllTimersAsync(); // bind resolves → extend is legal again
+  await t.extendPairing(4);
+});
+
 test("undoPairing pops the last bind and reopens the pick — also out of done", async () => {
   const t = make();
   const events = record(t);

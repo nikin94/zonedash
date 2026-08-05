@@ -130,10 +130,14 @@ export class MockCentralTransport implements CentralTransport {
     const p = this.pairing;
     if (!p) throw new Error("no pairing round"); // never paired — use startPairing
     const total = clampPositions(numTargets);
+    // Same mid-prompt gate as undoPairing: an in-flight bind's timers would
+    // still fire and push a bind into the resumed round — resolve it first.
+    // (Unreachable from the UI — extend is only offered from done — but the
+    // seam contract stays symmetric for the real central.)
+    if (p.current !== null) throw new Error("prompt in flight");
     // Mirror PairingRound::extend: growth only, binds untouched.
     if (total <= p.total) throw new Error("extend must grow the round");
     p.total = total;
-    p.current = null;
     this.session = "pairing"; // a completed round resumes
     this.emitSession();
     // Same shape as startPairing: the round waits for the next spot pick.
@@ -144,8 +148,12 @@ export class MockCentralTransport implements CentralTransport {
     this.assertConnected();
     const p = this.pairing;
     if (!p) throw new Error("no pairing round");
-    // Mid-prompt the central refuses — the in-flight bind must resolve or be
-    // cancelled first, otherwise its late events would race the rollback.
+    // Mid-prompt the central refuses — the seam has no per-prompt cancel, so
+    // the operator lets the in-flight bind resolve and undoes it right after
+    // (resolve-then-undo); a mid-prompt rollback would race the bind's late
+    // events. NOTE: the firmware core does NOT enforce this — undo_last()
+    // called mid-prompt would double-rollback; the brain's receive path owns
+    // the refusal (see pairing.h contract).
     if (p.current !== null) throw new Error("prompt in flight");
     if (p.bound.length === 0) throw new Error("nothing to undo");
     p.bound.pop();

@@ -184,7 +184,12 @@ the second binds. This rejects a stray single trigger — a ball bounce, a ToF
 ghost, piezo cross-talk from an unbound node — that would otherwise silently
 mis-bind the wrong target and corrupt the whole session's map. A different unbound
 MAC just replaces the candidate; an already-bound MAC is ignored. `undo_last()`
-re-prompts the most recent slot for operator correction.
+re-prompts the most recent slot for operator correction. **The mid-prompt
+refusal of undo is the brain's job, not the core's:** `undo_last()` cannot see
+board state ("a spot is prompted, no tap yet") and, called mid-prompt, would
+cancel the pick *and* pop the previous confirmed bind. The brain's receive path
+must reject `UndoPairBind` / serial `undo` while a prompt is active — the
+transport mock already encodes this refusal.
 
 The round's logic is the hardware-free `lib/pairing/` core (`PairingRound` +
 `TargetMap`): it prompts slots in order, confirm-binds the tapping MAC, ignores
