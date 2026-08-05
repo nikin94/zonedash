@@ -125,6 +125,23 @@ export class MockCentralTransport implements CentralTransport {
     });
   }
 
+  async completePairingNow(): Promise<void> {
+    this.assertConnected();
+    const p = this.pairing;
+    if (!p || this.session !== "pairing") throw new Error("no pairing round");
+    // Dev shortcut: fill every remaining slot from the lowest free canonical
+    // spot and finish the round at once. The map still ends with all targets
+    // bound (green + check), so the handoff animation reads the same.
+    p.current = null;
+    for (let s = 0; s < 8 && p.bound.length < p.total; s++) {
+      if (!p.bound.includes(s)) p.bound.push(s);
+    }
+    this.paired = p.total;
+    this.session = "idle";
+    this.emitPairing(false); // done snapshot — every target bound
+    this.emitSession();
+  }
+
   async extendPairing(numTargets: number): Promise<void> {
     this.assertConnected();
     const p = this.pairing;

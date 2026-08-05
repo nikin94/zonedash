@@ -27,6 +27,10 @@ const WHEEL_W = 48; // barely wider than the pill — single digits need no more
 const WHEEL_PAD_V = 6; // matches the button's small vertical padding
 const PILL_H = 28;
 
+// Beat between the final bind and the handoff to Drill — long enough for the
+// last dot's fade (CourtMap FADE_MS) plus a moment to register the green check.
+const HANDOFF_DELAY_MS = 700;
+
 // Fixed footprints for the court-centre info block, so phase changes never
 // shift the layout: the tallest status text is 3 lines, the error is 1 line,
 // and every action row is one button tall (empty slot when Undo is hidden).
@@ -117,6 +121,25 @@ export const PairingPanel = ({ transport }: { transport: CentralTransport }) => 
       setRunning(false);
       setError(err instanceof Error ? err.message : "pairing failed");
     });
+  };
+
+  // DEV/TEST shortcut — open a round and bind every target at once, skipping
+  // the per-spot tapping. Wired only when the transport exposes the helper
+  // (the mock does; real BLE won't), so the affordance disappears with the
+  // real link.
+  const devComplete = () => {
+    if (!transport.completePairingNow) return;
+    setError(null);
+    setProgress(null);
+    setWheelOpen(false);
+    setRunning(true);
+    transport
+      .startPairing(total)
+      .then(() => transport.completePairingNow!())
+      .catch((err: unknown) => {
+        setRunning(false);
+        setError(err instanceof Error ? err.message : "pairing failed");
+      });
   };
 
   // Correction path: unbind the most recent target and reopen its pick. From
@@ -308,11 +331,26 @@ export const PairingPanel = ({ transport }: { transport: CentralTransport }) => 
                   </AppText>
                 </CustomPressable>
               ) : (
-                <CustomPressable onPress={start} style={styles.button}>
-                  <AppText center size={16} weight="600">
-                    {done ? "Re-pair" : "Start pairing"}
-                  </AppText>
-                </CustomPressable>
+                <>
+                  <CustomPressable onPress={start} style={styles.button}>
+                    <AppText center size={16} weight="600">
+                      {done ? "Re-pair" : "Start pairing"}
+                    </AppText>
+                  </CustomPressable>
+                  {/* DEV-only: bind everything at once so testing needn't tap
+                      each spot. Present only with the mock transport. */}
+                  {transport.completePairingNow && (
+                    <CustomPressable
+                      testID="dev-complete-pairing"
+                      onPress={devComplete}
+                      style={styles.devButton}
+                    >
+                      <AppText center size={13} weight="600" color={colors.textMuted}>
+                        Complete pairing (dev)
+                      </AppText>
+                    </CustomPressable>
+                  )}
+                </>
               )}
               {/* Undo is only offered between binds (choosing) or after done —
                   never mid-prompt, matching the central's refusal. The slot
@@ -356,19 +394,27 @@ export const PairingScreen = () => {
     navigation.setOptions({ gestureEnabled: paired });
   }, [navigation, paired]);
 
-  // A successful round hands straight over to the Drill screen. Reset instead
-  // of push so the stack is Home → Drill no matter how Pairing was reached
-  // (fresh connect, or a re-pair opened from the chip menu on Drill).
+  // A successful round hands over to the Drill screen — but only after the last
+  // bind's fade lands and its green check paints, so the operator sees the
+  // target confirmed instead of the screen swapping mid-animation. Reset
+  // instead of push so the stack is Home → Drill no matter how Pairing was
+  // reached (fresh connect, or a re-pair opened from the chip menu on Drill).
   useEffect(() => {
+    let handoff: ReturnType<typeof setTimeout> | null = null;
     const unsub = transport.onStatus((e) => {
-      if (e.kind === "pairing" && e.progress.done) {
-        navigation.reset({
-          index: 1,
-          routes: [{ name: "Home" }, { name: "Drill" }],
-        });
+      if (e.kind === "pairing" && e.progress.done && handoff === null) {
+        handoff = setTimeout(() => {
+          navigation.reset({
+            index: 1,
+            routes: [{ name: "Home" }, { name: "Drill" }],
+          });
+        }, HANDOFF_DELAY_MS);
       }
     });
-    return unsub;
+    return () => {
+      unsub();
+      if (handoff !== null) clearTimeout(handoff);
+    };
   }, [transport, navigation]);
 
   return (
@@ -497,6 +543,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.background,
+    paddingHorizontal: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  // Dev shortcut: dashed + muted so it never reads as a real control.
+  devButton: {
+    height: BUTTON_H,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: colors.border,
     paddingHorizontal: 32,
     alignItems: "center",
     justifyContent: "center",

@@ -55,6 +55,19 @@ test("connecting goes straight to the Pairing screen", async () => {
   expect(screen.getByText("Start pairing")).toBeTruthy();
 });
 
+// The dev shortcut binds every target at once so a tester needn't tap each
+// spot; it still runs through the normal completed-round handoff to Drill.
+test("the dev complete-pairing shortcut finishes the round and hands over to Drill", async () => {
+  await renderApp();
+  await connect(); // lands on Pairing, unpaired
+  fireEvent.press(screen.getByTestId("dev-complete-pairing"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+  expect(screen.getByText("Drill")).toBeTruthy(); // header title
+  expect(screen.getByText("Random")).toBeTruthy();
+});
+
 // Before a layout exists there is nowhere to go back TO — home redirects
 // straight back to Pairing — so the back button must not exist there. Once the
 // round completes the app hands over to the Drill screen instead.

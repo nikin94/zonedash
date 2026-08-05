@@ -60,6 +60,10 @@ const MAP_H = Math.round(MAP_W * 1.09);
 const HIT = 52; // pressable hit box; the visible dot is smaller
 const HIT_SLOP = 8; // extra forgiveness around each spot
 const DOT = 38; // visible dot diameter — one size for every state
+// Inset the whole spot grid off the field edges. Without it a dot's visible
+// edge sits (HIT-DOT)/2 = 7 px inside the border; adding that again doubles the
+// dot-to-border gap so the perimeter isn't crammed against the lines.
+const INSET = (HIT - DOT) / 2;
 
 // Fill + outline per state. "off" fades to a zero-alpha fill (outline only)
 // instead of snapping away. "active" is deliberately NOT a color of its own:
@@ -206,7 +210,10 @@ export const CourtMap = ({
           onPress={() => onPressSpot?.(i)}
           style={[
             styles.hit,
-            { left: p.x * (MAP_W - HIT), top: p.y * (MAP_H - HIT) },
+            {
+              left: INSET + p.x * (MAP_W - HIT - 2 * INSET),
+              top: INSET + p.y * (MAP_H - HIT - 2 * INSET),
+            },
           ]}
         >
           <AnimatedDot visual={spots[i]} />

@@ -63,7 +63,7 @@ test("stop-by-time resolves to the engine's time mode with a duration", async ()
   fireEvent.press(screen.getByText("Start"));
   await act(() => jest.advanceTimersByTimeAsync(0));
   expect(load).toHaveBeenLastCalledWith(
-    expect.objectContaining({ mode: "time", durationMs: 60000 }),
+    expect.objectContaining({ mode: "time", durationMs: 30000 }), // default window
   );
   expect(load).toHaveBeenLastCalledWith(
     expect.not.objectContaining({ count: expect.anything() }),

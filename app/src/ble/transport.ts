@@ -65,6 +65,12 @@ export interface CentralTransport {
    *  it right after (resolve-then-undo). */
   undoPairing(): Promise<void>;
 
+  /** DEV/TEST ONLY — bind every remaining target and finish the open round in
+   *  one call, so a tester needn't tap through each spot. The real BLE
+   *  transport does NOT implement it, so the UI shortcut it drives vanishes
+   *  with the mock. */
+  completePairingNow?(): Promise<void>;
+
   /** ControlOp.LoadDrill. */
   loadDrill(config: DrillConfig): Promise<void>;
   /** ControlOp.StartSession. */

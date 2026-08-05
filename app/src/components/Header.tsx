@@ -14,7 +14,7 @@ import { BackIcon, SlidersIcon } from "./Icons";
 /** Brief status-chip label per connection state. */
 const CHIP_LABEL: Record<ConnectionState, string> = {
   connected: "mock", // the device name once real BLE lands
-  connecting: "…",
+  connecting: "connecting",
   error: "error",
   disconnected: "offline",
 };
@@ -103,6 +103,7 @@ export const Header = ({ back, title = "ZoneDash" }: { back?: boolean; title?: s
               style={[
                 styles.dot,
                 connected && styles.dotConnected,
+                busy && styles.dotConnecting,
                 connection === "error" && styles.dotError,
               ]}
             />
@@ -231,6 +232,9 @@ const styles = StyleSheet.create({
   dotConnected: {
     backgroundColor: colors.success,
   },
+  dotConnecting: {
+    backgroundColor: colors.warning,
+  },
   dotError: {
     backgroundColor: colors.danger,
   },
@@ -261,6 +265,9 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: 20,
     paddingVertical: 6,
+    // Clip a pressed item's fill to the rounded corners — otherwise its
+    // rectangular highlight bleeds over the menu's radius.
+    overflow: "hidden",
     ...glowShadow,
   },
   menuItem: {
