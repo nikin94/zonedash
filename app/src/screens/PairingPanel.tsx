@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import type { PairingProgress } from "../ble/contract";
 import type { CentralTransport } from "../ble/transport";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { CourtMap, SPOT_NAMES, type SpotVisual } from "./CourtMap";
 
 /** Wheel choices for "how many targets". */
@@ -199,61 +200,31 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
         {confirming ? (
           pendingTotal! > (progress?.total ?? 0) ? (
             // Growing keeps every bound target — no destructive reset needed.
-            <View testID="count-extend" style={styles.confirmBox}>
-              <Text style={styles.confirmTitle}>
-                Add {pendingTotal! - (progress?.total ?? 0)} more{" "}
-                {pendingTotal! - (progress?.total ?? 0) === 1
+            <ConfirmDialog
+              testID="count-extend"
+              title={`Add ${pendingTotal! - (progress?.total ?? 0)} more ${
+                pendingTotal! - (progress?.total ?? 0) === 1
                   ? "target"
-                  : "targets"}
-                ?
-              </Text>
-              <Text style={styles.confirmBody}>
-                The {progress?.total} paired {progress?.total === 1 ? "target stays" : "targets stay"}
-              </Text>
-              <View style={styles.confirmRow}>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => setPendingTotal(null)}
-                  style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-                >
-                  <Text style={styles.buttonLabel}>No</Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={extendRound}
-                  style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-                >
-                  <Text style={styles.buttonLabel}>Add</Text>
-                </Pressable>
-              </View>
-            </View>
+                  : "targets"
+              }?`}
+              body={`The ${progress?.total} paired ${
+                progress?.total === 1 ? "target stays" : "targets stay"
+              }`}
+              actions={[
+                { label: "No", onPress: () => setPendingTotal(null) },
+                { label: "Add", onPress: extendRound },
+              ]}
+            />
           ) : (
-            <View testID="count-confirm" style={styles.confirmBox}>
-              <Text style={styles.confirmTitle}>
-                Change target count to {pendingTotal}?
-              </Text>
-              <Text style={styles.confirmBody}>This resets the pairing</Text>
-              <View style={styles.confirmRow}>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => setPendingTotal(null)}
-                  style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-                >
-                  <Text style={styles.buttonLabel}>No</Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={confirmCountChange}
-                  style={({ pressed }) => [
-                    styles.button,
-                    styles.buttonDanger,
-                    pressed && styles.buttonPressed,
-                  ]}
-                >
-                  <Text style={styles.buttonLabel}>Yes</Text>
-                </Pressable>
-              </View>
-            </View>
+            <ConfirmDialog
+              testID="count-confirm"
+              title={`Change target count to ${pendingTotal}?`}
+              body="This resets the pairing"
+              actions={[
+                { label: "No", onPress: () => setPendingTotal(null) },
+                { label: "Yes", danger: true, onPress: confirmCountChange },
+              ]}
+            />
           )
         ) : (
           <>
@@ -283,19 +254,9 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
 
             {error !== null && <Text style={styles.error}>{error}</Text>}
 
-            <View style={styles.actionRow}>
-              {/* Undo is only offered between binds (choosing) or after done —
-                  never mid-prompt, matching the central's refusal. */}
-              {(choosing || done) && boundCount > 0 && (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Undo last bind"
-                  onPress={undo}
-                  style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-                >
-                  <Text style={styles.buttonLabel}>Undo</Text>
-                </Pressable>
-              )}
+            {/* Actions stack vertically — primary on top, Undo always at the
+                very bottom — so the block reads top-to-bottom in one place. */}
+            <View style={styles.actionCol}>
               {running ? (
                 <Pressable
                   accessibilityRole="button"
@@ -313,6 +274,18 @@ export function PairingPanel({ transport }: { transport: CentralTransport }) {
                   <Text style={styles.buttonLabel}>
                     {done ? "Re-pair" : "Start pairing"}
                   </Text>
+                </Pressable>
+              )}
+              {/* Undo is only offered between binds (choosing) or after done —
+                  never mid-prompt, matching the central's refusal. */}
+              {(choosing || done) && boundCount > 0 && (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Undo last bind"
+                  onPress={undo}
+                  style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+                >
+                  <Text style={styles.buttonLabel}>Undo</Text>
                 </Pressable>
               )}
             </View>
@@ -335,8 +308,9 @@ const styles = StyleSheet.create({
     gap: 10,
     zIndex: 10, // the wheel dropdown must overlay the map below
   },
-  actionRow: {
-    flexDirection: "row",
+  actionCol: {
+    alignItems: "stretch",
+    alignSelf: "stretch",
     gap: 10,
   },
   heading: {
@@ -444,9 +418,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     paddingVertical: 14,
   },
-  buttonDanger: {
-    borderColor: "#7f1d1d",
-  },
   buttonPressed: {
     backgroundColor: "#18181b",
   },
@@ -455,25 +426,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     textAlign: "center",
-  },
-  confirmBox: {
-    alignItems: "center",
-    gap: 8,
-  },
-  confirmTitle: {
-    color: "#fafafa",
-    fontSize: 16,
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  confirmBody: {
-    color: "#a1a1aa",
-    fontSize: 13,
-    textAlign: "center",
-    marginBottom: 8,
-  },
-  confirmRow: {
-    flexDirection: "row",
-    gap: 12,
   },
 });

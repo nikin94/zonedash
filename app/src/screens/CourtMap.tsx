@@ -233,8 +233,9 @@ const styles = StyleSheet.create({
     right: 0,
     alignItems: "center",
     justifyContent: "center",
-    // Keep the centre content clear of the perimeter dots' hit boxes.
-    padding: HIT + 8,
+    // Keep the centre content well clear of the perimeter dots' hit boxes —
+    // breathing room so the info block never crowds the spots.
+    padding: HIT + 24,
   },
   hit: {
     position: "absolute",

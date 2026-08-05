@@ -1,9 +1,18 @@
+import WheelPicker from "@quidone/react-native-wheel-picker";
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 
 import { MockCentralTransport } from "../ble/mock";
 import type { DrillConfig } from "../ble/transport";
 import { DrillPanel } from "./DrillPanel";
 import { DEFAULT_SETTINGS, type DrillSettings } from "./SettingsPanel";
+
+// Open a WheelField by testID and settle its wheel on `value` — one tap plus
+// a scroll, the way the on-device control works.
+const pickWheelValue = (testID: string, value: number, label: string) => {
+  fireEvent.press(screen.getByTestId(testID));
+  const picker = screen.UNSAFE_getByType(WheelPicker);
+  act(() => picker.props.onValueChanged({ item: { value, label } }));
+};
 
 // Left-side layout from a pairing round: slot 0 = net left (0),
 // slot 1 = mid left (7), slot 2 = back left (6).
@@ -39,9 +48,8 @@ test("random / stop-by-hits loads count plus the screen settings", async () => {
   const load = jest.spyOn(t, "loadDrill");
   render(<DrillPanel transport={t} pairedSpots={PAIRED} settings={SETTINGS} />);
 
-  // count 10 → 12; delay/timeout/repeat come from the settings screen.
-  fireEvent.press(screen.getByLabelText("Increase Targets to hit"));
-  fireEvent.press(screen.getByLabelText("Increase Targets to hit"));
+  // count 10 → 12 via the wheel; delay/timeout/repeat come from settings.
+  pickWheelValue("drill-count", 12, "12");
 
   fireEvent.press(screen.getByText("Load drill"));
   await act(() => jest.runAllTimersAsync());
@@ -66,7 +74,7 @@ test("random / stop-by-time resolves to the engine's time mode with a duration",
   expect(screen.queryByText("Time")).toBeTruthy(); // the stop-by chip
   fireEvent.press(screen.getByText("Time"));
   expect(screen.queryByText("Targets to hit")).toBeNull();
-  fireEvent.press(screen.getByLabelText("Increase Duration")); // 60 → 75 s
+  pickWheelValue("drill-duration", 75000, "75 s"); // 60 → 75 s
 
   fireEvent.press(screen.getByText("Load drill"));
   await act(() => jest.runAllTimersAsync());
@@ -196,7 +204,7 @@ test("editing after a load invalidates the loaded state", async () => {
   await act(() => jest.runAllTimersAsync());
   expect(screen.getByText("Drill loaded — ready to start")).toBeTruthy();
 
-  fireEvent.press(screen.getByLabelText("Increase Targets to hit"));
+  pickWheelValue("drill-count", 11, "11");
   expect(screen.queryByText("Drill loaded — ready to start")).toBeNull();
   expect(screen.getByText("Load drill")).toBeTruthy();
 });

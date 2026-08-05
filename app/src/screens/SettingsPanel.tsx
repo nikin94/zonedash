@@ -1,6 +1,6 @@
 import { StyleSheet, Switch, Text, View } from "react-native";
 
-import { fmtSeconds, Stepper } from "./Stepper";
+import { msOptions, WheelField } from "./WheelField";
 
 /**
  * Session-wide drill settings, lifted out of the drill builder so they live
@@ -20,6 +20,10 @@ export const DEFAULT_SETTINGS: DrillSettings = {
   allowImmediateRepeat: false,
 };
 
+// 0.1 s resolution for fine-tuning; 0 keeps its named meaning.
+const DELAY_OPTIONS = msOptions(0, 5000, 100, "none");
+const TIMEOUT_OPTIONS = msOptions(0, 10000, 100, "off");
+
 export function SettingsPanel({
   settings,
   onChange,
@@ -30,22 +34,18 @@ export function SettingsPanel({
   return (
     <View style={styles.panel}>
       <Text style={styles.heading}>Drill settings</Text>
-      <Stepper
+      <WheelField
         label="Delay between targets"
+        testID="setting-delay"
         value={settings.delayMs}
-        display={settings.delayMs === 0 ? "none" : `${fmtSeconds(settings.delayMs)} s`}
-        min={0}
-        max={5000}
-        step={500}
+        options={DELAY_OPTIONS}
         onChange={(delayMs) => onChange({ ...settings, delayMs })}
       />
-      <Stepper
+      <WheelField
         label="Timeout (auto-miss)"
+        testID="setting-timeout"
         value={settings.timeoutMs}
-        display={settings.timeoutMs === 0 ? "off" : `${fmtSeconds(settings.timeoutMs)} s`}
-        min={0}
-        max={10000}
-        step={500}
+        options={TIMEOUT_OPTIONS}
         onChange={(timeoutMs) => onChange({ ...settings, timeoutMs })}
       />
       <View style={styles.paramRow}>

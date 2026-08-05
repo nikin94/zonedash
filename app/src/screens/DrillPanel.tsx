@@ -4,7 +4,13 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { CentralTransport, DrillConfig } from "../ble/transport";
 import { CourtMap, SPOT_NAMES, type SpotVisual } from "./CourtMap";
 import type { DrillSettings } from "./SettingsPanel";
-import { Stepper } from "./Stepper";
+import { msOptions, WheelField } from "./WheelField";
+
+const COUNT_OPTIONS = Array.from({ length: 99 }, (_, i) => ({
+  value: i + 1,
+  label: String(i + 1),
+}));
+const DURATION_OPTIONS = msOptions(15000, 300000, 15000);
 
 /** UI modes. The engine's `random` and `time` differ only in the stop
  *  condition (rep count vs duration window), so the UI folds them into one
@@ -189,23 +195,19 @@ export function DrillPanel({
             </View>
           </View>
           {stopBy === "count" ? (
-            <Stepper
+            <WheelField
               label="Targets to hit"
+              testID="drill-count"
               value={count}
-              display={String(count)}
-              min={1}
-              max={99}
-              step={1}
+              options={COUNT_OPTIONS}
               onChange={edit(setCount)}
             />
           ) : (
-            <Stepper
+            <WheelField
               label="Duration"
+              testID="drill-duration"
               value={durationMs}
-              display={`${durationMs / 1000} s`}
-              min={15000}
-              max={300000}
-              step={15000}
+              options={DURATION_OPTIONS}
               onChange={edit(setDurationMs)}
             />
           )}
