@@ -42,6 +42,14 @@ export interface SessionSnapshot {
   armedPosition: number | null;
   /** Steps resolved so far this session (hits + misses) — the Step counter. */
   resolvedCount: number;
+  // The config that shaped the run, so a remount restores its parameters too —
+  // not just its progress. Without these a rehydrated run reads its numbers off
+  // the defaults: `Run again` breaks for path (empty sequence) and shows the
+  // wrong count/duration for random/time. Path is in slot-index (wire) form,
+  // like DrillConfig.path — the panel maps it back onto canonical spots.
+  count?: number;
+  durationMs?: number;
+  path?: number[];
 }
 
 /** Decoded Status-characteristic notifications. */

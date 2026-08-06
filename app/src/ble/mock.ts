@@ -81,6 +81,9 @@ export class MockCentralTransport implements CentralTransport {
       mode: this.drill.mode,
       armedPosition: this.armedPosition,
       resolvedCount: this.hits.length, // each resolved step (hit or miss) pushes one
+      count: this.drill.count,
+      durationMs: this.drill.durationMs,
+      path: this.drill.path,
     };
   }
 

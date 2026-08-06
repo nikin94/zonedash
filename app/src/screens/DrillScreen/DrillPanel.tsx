@@ -105,9 +105,17 @@ export const DrillPanel = ({
 
   const [uiMode, setUiMode] = useState<UiMode>(live ? ui.uiMode : "random");
   const [stopBy, setStopBy] = useState<StopBy>(live ? ui.stopBy : "count");
-  const [count, setCount] = useState(10);
-  const [durationMs, setDurationMs] = useState(30000);
-  const [path, setPath] = useState<number[]>([]); // canonical spots, in order
+  // Seed the config params from the snapshot too, so a rehydrated run keeps the
+  // numbers it actually ran with — otherwise `Run again` breaks for path (empty
+  // sequence) and random/time show the defaults, not what's on the wire. The
+  // snapshot path is slot indices; the panel holds canonical spots, so map back.
+  const [count, setCount] = useState(live ? (snap.count ?? 10) : 10);
+  const [durationMs, setDurationMs] = useState(live ? (snap.durationMs ?? 30000) : 30000);
+  const [path, setPath] = useState<number[]>(
+    live && snap.path
+      ? snap.path.map((p) => pairedSpots[p]).filter((s): s is number => s != null)
+      : [],
+  ); // canonical spots, in order
   const [session, setSession] = useState<SessionState>(live ? "running" : "idle");
   // The mode the current records belong to, so a finished run's stats show
   // only while that mode is selected — switching modes hides them.

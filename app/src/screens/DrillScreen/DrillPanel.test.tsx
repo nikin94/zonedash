@@ -354,3 +354,53 @@ test("a remount over a finished session lands on a fresh idle Start", async () =
   expect(screen.queryByText("Stop")).toBeNull();
   expect(screen.queryByText("Run again")).toBeNull();
 });
+
+// The snapshot carries the loaded config, not just the run's progress: a
+// rehydrated path run keeps its sequence, so `Run again` stays enabled and
+// re-runs the same drill instead of dead-ending on an empty (disabled) path.
+test("a rehydrated run restores the config — path Run again works", async () => {
+  const t = await connectedTransport();
+  await t.loadDrill({ mode: "path", numPositions: 3, path: [2, 0], delayMs: 0 });
+  await t.startSession();
+  await act(() => jest.advanceTimersByTimeAsync(10)); // running, seq 0 armed
+
+  // A brand-new panel mounts onto the run and inherits its authored path.
+  panel(t, PAIRED, DEFAULT_SETTINGS);
+  fireEvent.press(screen.getByText("Stop"));
+  await act(() => jest.runAllTimersAsync()); // → done
+
+  // Slots 2, 0 → canonical spots 6, 0 (back left → net left) — restored, not lost.
+  expect(screen.getByTestId("path-sequence")).toHaveTextContent(
+    "back left → net left",
+  );
+
+  // Run again re-runs the SAME path — not a dead disabled button over an empty one.
+  const load = jest.spyOn(t, "loadDrill");
+  fireEvent.press(screen.getByText("Run again"));
+  await act(() => jest.advanceTimersByTimeAsync(0));
+  expect(load).toHaveBeenLastCalledWith(
+    expect.objectContaining({ mode: "path", path: [2, 0] }),
+  );
+  expect(screen.getByText("Stop")).toBeTruthy(); // the re-run started
+});
+
+// Random/time params rehydrate too — a remounted count run reads its real
+// count off the snapshot, not the default.
+test("a rehydrated random run shows its real count, not the default", async () => {
+  const t = await connectedTransport();
+  await t.loadDrill({ mode: "random", numPositions: 3, count: 20 });
+  await t.startSession();
+  await act(() => jest.advanceTimersByTimeAsync(10)); // running
+
+  panel(t, PAIRED, DEFAULT_SETTINGS);
+  fireEvent.press(screen.getByText("Stop"));
+  await act(() => jest.runAllTimersAsync()); // → done, config visible again
+
+  // Re-running must send count=20 (the drill that actually ran), not the 10 default.
+  const load = jest.spyOn(t, "loadDrill");
+  fireEvent.press(screen.getByText("Run again"));
+  await act(() => jest.advanceTimersByTimeAsync(0));
+  expect(load).toHaveBeenLastCalledWith(
+    expect.objectContaining({ mode: "random", count: 20 }),
+  );
+});
