@@ -1,0 +1,9 @@
+/**
+ * Hand-drawn icon set — minimal glyphs built from plain Views (no icon font /
+ * emoji, which render differently per platform). One component per file; this
+ * barrel keeps `import { … } from "../components/Icons"` working.
+ */
+export { SlidersIcon } from "./SlidersIcon";
+export { CloseIcon } from "./CloseIcon";
+export { BackIcon } from "./BackIcon";
+export { CheckIcon } from "./CheckIcon";

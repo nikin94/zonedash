@@ -1,7 +1,9 @@
 import { act, render, screen } from "@testing-library/react-native";
 import { Animated } from "react-native";
 
-import { CourtMap, SpotIcon, type SpotVisual } from "./CourtMap";
+import { CourtMap } from "./CourtMap";
+import { type SpotVisual } from "./geometry";
+import { SpotIcon } from "./SpotIcon";
 
 const allOff = Array.from({ length: 8 }, () => "off" as SpotVisual);
 

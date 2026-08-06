@@ -1,9 +1,9 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react-native";
 
-import { MockCentralTransport } from "../ble/mock";
-import type { DrillConfig } from "../ble/transport";
-import { DEFAULT_SETTINGS, type DrillSettings } from "../state/AppState";
-import { DrillPanel } from "./DrillScreen";
+import { MockCentralTransport } from "../../ble/mock";
+import type { DrillConfig } from "../../ble/transport";
+import { DEFAULT_SETTINGS, type DrillSettings } from "../../state/AppState";
+import { DrillPanel } from "./DrillPanel";
 
 // Left-side layout from a pairing round: slot 0 = net left (0),
 // slot 1 = mid left (7), slot 2 = back left (6).

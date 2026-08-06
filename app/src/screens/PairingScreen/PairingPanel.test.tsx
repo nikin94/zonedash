@@ -1,8 +1,8 @@
 import WheelPicker from "@quidone/react-native-wheel-picker";
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 
-import { MockCentralTransport } from "../ble/mock";
-import { PairingPanel } from "./PairingScreen";
+import { MockCentralTransport } from "../../ble/mock";
+import { PairingPanel } from "./PairingPanel";
 
 // Zero latency + a fixed, small tap delay so the two-tap confirm lands at
 // deterministic times (candidate at tapDelayMs, bind at 2×) — the app leaves

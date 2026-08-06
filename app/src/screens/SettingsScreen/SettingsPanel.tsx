@@ -1,10 +1,9 @@
 import { StyleSheet, Switch, View } from "react-native";
 
-import { AppText } from "../components/AppText";
-import { Header } from "../components/Header";
-import { msOptions, WheelField } from "../components/WheelField";
-import { useAppState, type DrillSettings } from "../state/AppState";
-import { colors } from "../theme";
+import { AppText } from "../../components/AppText";
+import { msOptions, WheelField } from "../../components/WheelField";
+import { type DrillSettings } from "../../state/AppState";
+import { colors } from "../../theme";
 
 // 0.1 s resolution for fine-tuning; 0 keeps its named meaning.
 const DELAY_OPTIONS = msOptions(0, 5000, 100, "none");
@@ -46,22 +45,7 @@ export const SettingsPanel = ({
   </View>
 );
 
-export const SettingsScreen = () => {
-  const { settings, setSettings } = useAppState();
-  return (
-    <View style={styles.screen}>
-      <Header back hideChip title="Settings" />
-      <SettingsPanel settings={settings} onChange={setSettings} />
-    </View>
-  );
-};
-
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.background,
-    paddingTop: 56, // clears the status bar without a safe-area dependency
-  },
   panel: {
     alignSelf: "stretch",
     paddingHorizontal: 24,
