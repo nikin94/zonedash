@@ -37,22 +37,11 @@ export const SPOT_NAMES = [
   "mid left",
 ] as const;
 
-/**
- * Two-letter code per canonical spot, for compact labels (e.g. the results
- * list). Row from the net down — F(ront)/M(id)/B(ack) — then column
- * L(eft)/C(entre)/R(ight). C is used for the centre column so the letter never
- * collides with the M of the mid row (FL, FC, FR / ML, MR / BL, BC, BR).
- */
-export const SPOT_CODES = [
-  "FL", // 0 net left
-  "FC", // 1 net centre
-  "FR", // 2 net right
-  "MR", // 3 mid right
-  "BR", // 4 back right
-  "BC", // 5 back centre
-  "BL", // 6 back left
-  "ML", // 7 mid left
-] as const;
+// Two-letter code per canonical spot (FL, MR, BC, …) — the compact results
+// label. Single source is domain/spot.ts, where it is derived from the same
+// (row, col) key we store, so display and storage can't drift. Re-exported
+// here since the map is where callers already reach for spot metadata.
+export { SPOT_CODES } from "../domain/spot";
 
 /**
  * Canonical spot geometry with the NET at the TOP of the map — the same

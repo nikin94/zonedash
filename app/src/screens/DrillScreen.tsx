@@ -255,12 +255,6 @@ export const DrillPanel = ({
   const avgMs =
     attempts.length > 0 ? totalMs / attempts.length : null;
 
-  // The canonical spot a record's slot maps back to, as a two-letter code.
-  const attemptCode = (position: number) => {
-    const spot = pairedSpots[position];
-    return spot != null ? SPOT_CODES[spot] : "—";
-  };
-
   // Secondary status line during a run. Auto modes narrate the athlete's
   // reaction; live mode narrates the operator's turn: tap → armed → time.
   const runStatus = liveRunning
@@ -467,31 +461,38 @@ export const DrillPanel = ({
             // No inner scroll — the whole screen scrolls, so the list just
             // grows and every attempt is one page-scroll away.
             <View testID="attempt-list" style={styles.attemptList}>
-              {attempts.map((r, i) => (
+              {attempts.map((r, i) => {
+                // The canonical spot the record's slot maps back to. Guarded
+                // once here so the number, icon, code and SR-label all degrade
+                // the same way if it is ever out of range.
+                const spot = pairedSpots[r.position];
+                return (
                 <View key={r.seq} style={styles.statRow}>
                   <View style={styles.attemptLead}>
                     <AppText
                       size={13}
                       color={colors.textMuted}
                       style={styles.attemptNum}
+                      accessibilityLabel={`Attempt ${i + 1}`}
                     >
                       {i + 1}
                     </AppText>
-                    <SpotIcon spot={pairedSpots[r.position]} />
+                    <SpotIcon spot={spot} />
                     <AppText
                       size={13}
                       weight="600"
                       color={colors.accentText}
-                      accessibilityLabel={SPOT_NAMES[pairedSpots[r.position]!]}
+                      accessibilityLabel={spot != null ? SPOT_NAMES[spot] : "unknown spot"}
                     >
-                      {attemptCode(r.position)}
+                      {spot != null ? SPOT_CODES[spot] : "—"}
                     </AppText>
                   </View>
                   <AppText size={13} weight="600">
                     {fmtSec(r.reactionMs)}
                   </AppText>
                 </View>
-              ))}
+                );
+              })}
             </View>
           ) : (
             <AppText center size={13} color={colors.textMuted}>
