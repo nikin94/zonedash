@@ -11,6 +11,7 @@ import type {
 import { AppText } from "../components/AppText";
 import {
   CourtMap,
+  SpotIcon,
   SPOT_CODES,
   SPOT_NAMES,
   type SpotVisual,
@@ -469,9 +470,14 @@ export const DrillPanel = ({
               {attempts.map((r, i) => (
                 <View key={r.seq} style={styles.statRow}>
                   <View style={styles.attemptLead}>
-                    <AppText size={13} color={colors.textMuted}>
-                      Attempt {i + 1}
+                    <AppText
+                      size={13}
+                      color={colors.textMuted}
+                      style={styles.attemptNum}
+                    >
+                      {i + 1}
                     </AppText>
+                    <SpotIcon spot={pairedSpots[r.position]} />
                     <AppText
                       size={13}
                       weight="600"
@@ -629,6 +635,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+  },
+  attemptNum: {
+    minWidth: 20, // fixed lead so rows align as the count reaches two digits
   },
   statRow: {
     flexDirection: "row",
