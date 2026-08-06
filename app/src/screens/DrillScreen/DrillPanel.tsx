@@ -57,6 +57,15 @@ const MODE_DESC: Record<UiMode, string> = {
   live: "Light targets by hand during the run — one tap each.",
 };
 
+/** Inverse of `wireMode`: the UI mode + stop-by a wire config resolves back to,
+ *  so a mount over a running/finished session restores the matching controls. */
+const uiFromWire = (mode: DrillConfig["mode"]): { uiMode: UiMode; stopBy: StopBy } => {
+  if (mode === "time") return { uiMode: "random", stopBy: "time" };
+  if (mode === "path") return { uiMode: "path", stopBy: "count" };
+  if (mode === "live") return { uiMode: "live", stopBy: "count" };
+  return { uiMode: "random", stopBy: "count" };
+};
+
 /**
  * The drill screen — reached once a layout is paired. One court map does
  * double duty: while
@@ -82,22 +91,39 @@ export const DrillPanel = ({
   pairedSpots: number[]; // canonical spots in bind order (slot order)
   settings: DrillSettings;
 }) => {
-  const [uiMode, setUiMode] = useState<UiMode>("random");
-  const [stopBy, setStopBy] = useState<StopBy>("count");
+  // Read the central's session ONCE at mount and, if a run is in progress, seed
+  // state from it — so a remount over a live run reflects it (running, armed
+  // target, Stop, step count) instead of a stale idle Start screen with no way
+  // to stop the background run. The central only re-emits `running` on
+  // StartSession, never on (re)mount. Same UI-cache-vs-truth fix as
+  // pairedSpots, on the session axis. Scoped to `running`: a finished session
+  // rehydrates to a fresh idle Start (the operator left; re-authoring is the
+  // likely next step, and its records were never theirs to keep across a leave).
+  const [snap] = useState(() => transport.sessionSnapshot);
+  const live = snap.state === "running";
+  const ui = uiFromWire(snap.mode);
+
+  const [uiMode, setUiMode] = useState<UiMode>(live ? ui.uiMode : "random");
+  const [stopBy, setStopBy] = useState<StopBy>(live ? ui.stopBy : "count");
   const [count, setCount] = useState(10);
   const [durationMs, setDurationMs] = useState(30000);
   const [path, setPath] = useState<number[]>([]); // canonical spots, in order
-  const [session, setSession] = useState<SessionState>("idle");
+  const [session, setSession] = useState<SessionState>(live ? "running" : "idle");
   // The mode the current records belong to, so a finished run's stats show
   // only while that mode is selected — switching modes hides them.
-  const [runMode, setRunMode] = useState<UiMode>("random");
-  const [armedSpot, setArmedSpot] = useState<number | null>(null); // canonical
+  const [runMode, setRunMode] = useState<UiMode>(live ? ui.uiMode : "random");
+  const [armedSpot, setArmedSpot] = useState<number | null>(
+    live && snap.armedPosition != null
+      ? (pairedSpots[snap.armedPosition] ?? null)
+      : null,
+  ); // canonical
   const [flashSpot, setFlashSpot] = useState<number | null>(null);
-  const [resolvedCount, setResolvedCount] = useState(0);
+  const [resolvedCount, setResolvedCount] = useState(live ? snap.resolvedCount : 0);
   const [lastReactionMs, setLastReactionMs] = useState<number | null>(null);
   // Live mode: a target is armed or in flight after the operator's tap, so
-  // further taps are ignored until it resolves.
-  const [liveBusy, setLiveBusy] = useState(false);
+  // further taps are ignored until it resolves. Seed busy from a lit target so
+  // a remount can't arm a second one over the one already up.
+  const [liveBusy, setLiveBusy] = useState(live && snap.armedPosition != null);
   const [records, setRecords] = useState<HitRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);

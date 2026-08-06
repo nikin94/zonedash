@@ -312,3 +312,45 @@ test("a failed start surfaces as an inline error, not a crash", async () => {
   expect(screen.getByText("write failed")).toBeTruthy();
   expect(screen.getByText("Start")).toBeTruthy(); // still retryable
 });
+
+// Rehydration: a fresh DrillPanel mount must reflect the central's current
+// session (snapshot on the seam), not start blank over a run already going —
+// otherwise a remount shows idle "Start" over a live run with no way to stop.
+test("a remount over a running session rehydrates it — Stop and the armed target", async () => {
+  const t = await connectedTransport();
+  await t.loadDrill({ mode: "path", numPositions: 3, path: [2, 0], delayMs: 0 });
+  await t.startSession();
+  await act(() => jest.advanceTimersByTimeAsync(10)); // seq 0 armed, not resolved
+  expect(t.sessionSnapshot.state).toBe("running");
+  expect(t.sessionSnapshot.armedPosition).toBe(2);
+
+  // A brand-new panel mounts onto that run.
+  panel(t, PAIRED, DEFAULT_SETTINGS);
+  expect(screen.getByText("Stop")).toBeTruthy();
+  expect(screen.queryByText("Start")).toBeNull();
+  expect(screen.getByTestId("spot-6-armed")).toBeTruthy(); // slot 2 → canonical 6
+  expect(screen.getByText("Step 1")).toBeTruthy();
+
+  // Stop drives the rehydrated panel through to a summary.
+  fireEvent.press(screen.getByText("Stop"));
+  await act(() => jest.runAllTimersAsync());
+  expect(screen.getByText("Run again")).toBeTruthy();
+});
+
+// Rehydration is scoped to a RUNNING session on purpose: a mount over a
+// finished one lands on a fresh idle Start (not trapped on "Fetching…", not a
+// disabled Run again over a path it no longer holds) — the operator left, and
+// re-authoring is the likely next step.
+test("a remount over a finished session lands on a fresh idle Start", async () => {
+  const t = await connectedTransport();
+  await t.loadDrill({ mode: "path", numPositions: 3, path: [2, 0], delayMs: 0 });
+  await t.startSession();
+  await act(() => jest.runAllTimersAsync()); // whole run resolves → done
+  expect(t.sessionSnapshot.state).toBe("done");
+
+  panel(t, PAIRED, DEFAULT_SETTINGS);
+  await act(() => jest.runAllTimersAsync());
+  expect(screen.getByText("Start")).toBeTruthy();
+  expect(screen.queryByText("Stop")).toBeNull();
+  expect(screen.queryByText("Run again")).toBeNull();
+});
