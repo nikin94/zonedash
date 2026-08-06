@@ -1,7 +1,9 @@
 import { act, render, screen } from "@testing-library/react-native";
 import { Animated } from "react-native";
 
-import { CourtMap, type SpotVisual } from "./CourtMap";
+import { type SpotVisual } from "../../helpers/court";
+import { CourtMap } from "./CourtMap";
+import { SpotIcon } from "./SpotIcon";
 
 const allOff = Array.from({ length: 8 }, () => "off" as SpotVisual);
 
@@ -122,4 +124,18 @@ test("hit flashes with a check", () => {
 
   expect(screen.getByTestId("spot-0-hit")).toBeTruthy();
   expect(screen.getAllByTestId("dot-check")).toHaveLength(1);
+});
+
+// SpotIcon: a centred ring plus a court fragment derived from the spot's
+// geometry — a 2-bar corner bracket for corners (FL), a single edge/side line
+// for the net/back centres and mid sides (FC, MR).
+test("SpotIcon builds the court fragment from the spot geometry", () => {
+  const { rerender } = render(<SpotIcon spot={0} />); // FL corner → bracket
+  expect(screen.getByTestId("spot-icon-0").children).toHaveLength(3); // 2 bars + ring
+
+  rerender(<SpotIcon spot={1} />); // FC net centre → one edge line
+  expect(screen.getByTestId("spot-icon-1").children).toHaveLength(2); // 1 bar + ring
+
+  rerender(<SpotIcon spot={3} />); // MR mid side → one side line
+  expect(screen.getByTestId("spot-icon-3").children).toHaveLength(2);
 });

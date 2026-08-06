@@ -1,9 +1,9 @@
-import { act, fireEvent, render, screen } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, within } from "@testing-library/react-native";
 
-import { MockCentralTransport } from "../ble/mock";
-import type { DrillConfig } from "../ble/transport";
-import { DEFAULT_SETTINGS, type DrillSettings } from "../state/AppState";
-import { DrillPanel } from "./DrillScreen";
+import { MockCentralTransport } from "../../ble/mock";
+import type { DrillConfig } from "../../ble/transport";
+import { DEFAULT_SETTINGS, type DrillSettings } from "../../state/AppState";
+import { DrillPanel } from "./DrillPanel";
 
 // Left-side layout from a pairing round: slot 0 = net left (0),
 // slot 1 = mid left (7), slot 2 = back left (6).
@@ -289,11 +289,15 @@ test("Stop aborts the run and still summarizes the partial records", async () =>
   fireEvent.press(screen.getByText("Stop"));
   await act(() => jest.runAllTimersAsync()); // no further steps may land
 
-  // The partial run still summarizes: one attempt in the results panel.
+  // The partial run still summarizes: one attempt in the results panel, keyed
+  // by a plain number (no "Attempt" prefix) and a court-position icon.
   expect(screen.getByText("Run again")).toBeTruthy();
   expect(screen.getByTestId("stats-panel")).toBeTruthy();
-  expect(screen.getByText("Attempt 1")).toBeTruthy();
-  expect(screen.queryByText("Attempt 2")).toBeNull();
+  const rows = screen.getByTestId("attempt-list");
+  expect(within(rows).getByText("1")).toBeTruthy();
+  expect(within(rows).queryByText("2")).toBeNull();
+  expect(screen.queryByText(/Attempt/)).toBeNull();
+  expect(screen.queryAllByTestId(/spot-icon-\d/).length).toBeGreaterThan(0);
   expect(screen.queryByText(/Step \d/)).toBeNull();
 });
 

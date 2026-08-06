@@ -1,26 +1,20 @@
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
-import type { HitRecord } from "../ble/contract";
+import type { HitRecord } from "../../ble/contract";
 import type {
   CentralTransport,
   DrillConfig,
   SessionState,
-} from "../ble/transport";
-import { AppText } from "../components/AppText";
-import {
-  CourtMap,
-  SPOT_CODES,
-  SPOT_NAMES,
-  type SpotVisual,
-} from "../components/CourtMap";
-import { CustomPressable } from "../components/CustomPressable";
-import { Header } from "../components/Header";
-import { msOptions, WheelField } from "../components/WheelField";
-import type { Nav } from "../navigation";
-import { useAppState, type DrillSettings } from "../state/AppState";
-import { colors } from "../theme";
+} from "../../ble/transport";
+import { AppText } from "../../components/AppText";
+import { CourtMap, SpotIcon } from "../../components/CourtMap";
+import { CustomPressable } from "../../components/CustomPressable";
+import { msOptions, WheelField } from "../../components/WheelField";
+import { SPOT_CODES, SPOT_NAMES } from "../../domain/spot";
+import { type SpotVisual } from "../../helpers/court";
+import { type DrillSettings } from "../../state/AppState";
+import { colors } from "../../theme";
 
 const COUNT_OPTIONS = Array.from({ length: 99 }, (_, i) => ({
   value: i + 1,
@@ -254,12 +248,6 @@ export const DrillPanel = ({
   const avgMs =
     attempts.length > 0 ? totalMs / attempts.length : null;
 
-  // The canonical spot a record's slot maps back to, as a two-letter code.
-  const attemptCode = (position: number) => {
-    const spot = pairedSpots[position];
-    return spot != null ? SPOT_CODES[spot] : "—";
-  };
-
   // Secondary status line during a run. Auto modes narrate the athlete's
   // reaction; live mode narrates the operator's turn: tap → armed → time.
   const runStatus = liveRunning
@@ -466,26 +454,38 @@ export const DrillPanel = ({
             // No inner scroll — the whole screen scrolls, so the list just
             // grows and every attempt is one page-scroll away.
             <View testID="attempt-list" style={styles.attemptList}>
-              {attempts.map((r, i) => (
+              {attempts.map((r, i) => {
+                // The canonical spot the record's slot maps back to. Guarded
+                // once here so the number, icon, code and SR-label all degrade
+                // the same way if it is ever out of range.
+                const spot = pairedSpots[r.position];
+                return (
                 <View key={r.seq} style={styles.statRow}>
                   <View style={styles.attemptLead}>
-                    <AppText size={13} color={colors.textMuted}>
-                      Attempt {i + 1}
+                    <AppText
+                      size={13}
+                      color={colors.textMuted}
+                      style={styles.attemptNum}
+                      accessibilityLabel={`Attempt ${i + 1}`}
+                    >
+                      {i + 1}
                     </AppText>
+                    <SpotIcon spot={spot} />
                     <AppText
                       size={13}
                       weight="600"
                       color={colors.accentText}
-                      accessibilityLabel={SPOT_NAMES[pairedSpots[r.position]!]}
+                      accessibilityLabel={spot != null ? SPOT_NAMES[spot] : "unknown spot"}
                     >
-                      {attemptCode(r.position)}
+                      {spot != null ? SPOT_CODES[spot] : "—"}
                     </AppText>
                   </View>
                   <AppText size={13} weight="600">
                     {fmtSec(r.reactionMs)}
                   </AppText>
                 </View>
-              ))}
+                );
+              })}
             </View>
           ) : (
             <AppText center size={13} color={colors.textMuted}>
@@ -515,61 +515,7 @@ export const DrillPanel = ({
   );
 };
 
-/** The Drill screen: Header + the drill panel, gated on the link and the
- *  paired layout (a drill runs on the layout the pairing round bound). */
-export const DrillScreen = () => {
-  const navigation = useNavigation<Nav>();
-  const { transport, connection, pairedSpots, settings } = useAppState();
-  const connected = connection === "connected";
-  const paired = pairedSpots.length > 0;
-
-  // Mirror the central's running flag so the screen can't be left mid-run. A
-  // fresh DrillPanel mount starts at "idle" and never rehydrates a live session
-  // (the central only re-emits `running` on StartSession), so leaving and
-  // coming back would show an idle screen over a run with no way to stop it —
-  // the same UI-cache-vs-truth class as the pairedSpots fix. Guard the exit
-  // instead of trusting a remount: hide the back chevron AND the iOS swipe-back
-  // gesture while running; the only way out is Stop (in the panel).
-  const [running, setRunning] = useState(false);
-  useEffect(() => {
-    const unsub = transport.onStatus((e) => {
-      if (e.kind === "session") setRunning(e.state === "running");
-    });
-    return unsub;
-  }, [transport]);
-  useEffect(() => {
-    navigation.setOptions({ gestureEnabled: !running });
-  }, [navigation, running]);
-
-  // A drill only makes sense over a live link and a paired layout. Losing
-  // either (link drop, layout cleared) sends the operator back home, where
-  // the unpaired redirect takes over if the link is still up.
-  useFocusEffect(
-    useCallback(() => {
-      if (!connected || !paired) navigation.popToTop();
-    }, [connected, paired, navigation]),
-  );
-
-  return (
-    <View style={styles.screen}>
-      <Header back lockBack={running} title="Drill" />
-      {connected && paired && (
-        <DrillPanel
-          transport={transport}
-          pairedSpots={pairedSpots}
-          settings={settings}
-        />
-      )}
-    </View>
-  );
-};
-
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.background,
-    paddingTop: 56, // clears the status bar without a safe-area dependency
-  },
   panel: {
     marginTop: 16,
     alignItems: "center",
@@ -629,6 +575,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+  },
+  attemptNum: {
+    minWidth: 20, // fixed lead so rows align as the count reaches two digits
   },
   statRow: {
     flexDirection: "row",
