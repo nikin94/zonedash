@@ -37,6 +37,23 @@ export const SPOT_NAMES = [
 ] as const;
 
 /**
+ * Two-letter code per canonical spot, for compact labels (e.g. the results
+ * list). Row from the net down — F(ront)/M(id)/B(ack) — then column
+ * L(eft)/C(entre)/R(ight). C is used for the centre column so the letter never
+ * collides with the M of the mid row (FL, FC, FR / ML, MR / BL, BC, BR).
+ */
+export const SPOT_CODES = [
+  "FL", // 0 net left
+  "FC", // 1 net centre
+  "FR", // 2 net right
+  "MR", // 3 mid right
+  "BR", // 4 back right
+  "BC", // 5 back centre
+  "BL", // 6 back left
+  "ML", // 7 mid left
+] as const;
+
+/**
  * Canonical spot geometry with the NET at the TOP of the map — the same
  * layout the HUB75 panel draws (display-ui.md "layout map"), so the phone and
  * the LED display always light the same dot. Clockwise from net-left:

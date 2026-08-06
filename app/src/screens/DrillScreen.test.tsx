@@ -120,7 +120,7 @@ test("live mode is operator-driven — a court tap lights a target at once, then
   // ready for the next pick (liveBusy cleared).
   await act(() => jest.advanceTimersByTimeAsync(20));
   expect(screen.getByTestId("spot-0-hit")).toBeTruthy();
-  expect(screen.getByText("20 ms")).toBeTruthy();
+  expect(screen.getByText("0.02 s")).toBeTruthy(); // reaction, shown in seconds
 });
 
 test("path is authored on the same court map — slot-index wire format", async () => {
@@ -213,10 +213,10 @@ test("a run arms spots, flashes hits, and ends in a hits-only summary", async ()
   expect(screen.queryAllByTestId("dot-spinner")).toHaveLength(0);
   expect(screen.getByText("React when a target lights up")).toBeTruthy();
 
-  // The step resolves as a hit → green flash + the reaction time.
+  // The step resolves as a hit → green flash + the reaction time (seconds).
   await act(() => jest.advanceTimersByTimeAsync(50));
   expect(screen.getByTestId("spot-6-hit")).toBeTruthy();
-  expect(screen.getByText("20 ms")).toBeTruthy();
+  expect(screen.getByText("0.02 s")).toBeTruthy();
   expect(screen.getByText("Step 2")).toBeTruthy();
 
   // Run out: second step resolves, session flips done, results panel fetched —
@@ -225,9 +225,39 @@ test("a run arms spots, flashes hits, and ends in a hits-only summary", async ()
   expect(screen.getByText("Run again")).toBeTruthy();
   expect(screen.getByText("Session complete")).toBeTruthy();
   expect(screen.getByTestId("stats-panel")).toBeTruthy();
-  expect(screen.getAllByText("20 ms")).toHaveLength(3); // 2 attempts + average
-  expect(screen.getByText("40 ms")).toBeTruthy(); // total time
+  expect(screen.getAllByText("0.02 s")).toHaveLength(3); // 2 attempts + average
+  expect(screen.getByText("0.04 s")).toBeTruthy(); // total time
   expect(screen.getByText("Average")).toBeTruthy();
+  // Each attempt is tagged with its two-letter spot code: slots 2,0 →
+  // canonical 6 (back left, BL) then 0 (net left, FL).
+  expect(screen.getByText("BL")).toBeTruthy();
+  expect(screen.getByText("FL")).toBeTruthy();
+});
+
+test("a finished run's results are tied to its mode — hidden on another mode", async () => {
+  const t = await connectedTransport();
+  panel(t, PAIRED, DEFAULT_SETTINGS);
+
+  // Run a path drill to completion.
+  fireEvent.press(screen.getByText("Path"));
+  fireEvent.press(screen.getByTestId("spot-6-available"));
+  fireEvent.press(screen.getByTestId("spot-0-available"));
+  fireEvent.press(screen.getByText("Start"));
+  await act(() => jest.runAllTimersAsync());
+  expect(screen.getByTestId("stats-panel")).toBeTruthy();
+  expect(screen.getByText("Run again")).toBeTruthy();
+
+  // Switch to another mode: the path run's stats belong to Path, so they go
+  // away and the screen reads fresh (Start, no "Session complete").
+  fireEvent.press(screen.getByText("Live"));
+  expect(screen.queryByTestId("stats-panel")).toBeNull();
+  expect(screen.queryByText("Session complete")).toBeNull();
+  expect(screen.getByText("Start")).toBeTruthy();
+
+  // Back on Path, the same run's results return.
+  fireEvent.press(screen.getByText("Path"));
+  expect(screen.getByTestId("stats-panel")).toBeTruthy();
+  expect(screen.getByText("Run again")).toBeTruthy();
 });
 
 test("the hit flash clears back to available after its window", async () => {

@@ -9,7 +9,12 @@ import type {
   SessionState,
 } from "../ble/transport";
 import { AppText } from "../components/AppText";
-import { CourtMap, SPOT_NAMES, type SpotVisual } from "../components/CourtMap";
+import {
+  CourtMap,
+  SPOT_CODES,
+  SPOT_NAMES,
+  type SpotVisual,
+} from "../components/CourtMap";
 import { CustomPressable } from "../components/CustomPressable";
 import { Header } from "../components/Header";
 import { msOptions, WheelField } from "../components/WheelField";
@@ -26,6 +31,11 @@ const DURATION_OPTIONS = msOptions(15000, 300000, 15000);
 /** How long a resolved step's green flash stays on the map. Shorter than the
  *  engine's default step cadence so the flash clears before the next arm. */
 const FLASH_MS = 450;
+
+/** Reaction/aggregate times read as seconds with 2 decimals (e.g. "0.82 s").
+ *  UNIT is a single knob — flip to "сек" here if a Cyrillic label is wanted. */
+const UNIT = "s";
+const fmtSec = (ms: number) => `${(ms / 1000).toFixed(2)} ${UNIT}`;
 
 // Fixed footprints for the court-centre block, so idle → running → done never
 // shifts the layout.
@@ -84,6 +94,9 @@ export const DrillPanel = ({
   const [durationMs, setDurationMs] = useState(30000);
   const [path, setPath] = useState<number[]>([]); // canonical spots, in order
   const [session, setSession] = useState<SessionState>("idle");
+  // The mode the current records belong to, so a finished run's stats show
+  // only while that mode is selected — switching modes hides them.
+  const [runMode, setRunMode] = useState<UiMode>("random");
   const [armedSpot, setArmedSpot] = useState<number | null>(null); // canonical
   const [flashSpot, setFlashSpot] = useState<number | null>(null);
   const [resolvedCount, setResolvedCount] = useState(0);
@@ -199,6 +212,7 @@ export const DrillPanel = ({
       config.path = positions;
     }
 
+    setRunMode(uiMode);
     setError(null);
     setRecords(null);
     setResolvedCount(0);
@@ -231,10 +245,20 @@ export const DrillPanel = ({
   });
 
   const canStart = uiMode !== "path" || path.length > 0;
+  // A finished run's court state and results belong to the mode they ran in:
+  // switching to another mode reads as fresh (Start), and the stats stay tied
+  // to their own mode until that mode runs again.
+  const showDone = done && uiMode === runMode;
   const attempts = records ?? [];
   const totalMs = attempts.reduce((s, r) => s + r.reactionMs, 0);
   const avgMs =
-    attempts.length > 0 ? Math.round(totalMs / attempts.length) : null;
+    attempts.length > 0 ? totalMs / attempts.length : null;
+
+  // The canonical spot a record's slot maps back to, as a two-letter code.
+  const attemptCode = (position: number) => {
+    const spot = pairedSpots[position];
+    return spot != null ? SPOT_CODES[spot] : "—";
+  };
 
   // Secondary status line during a run. Auto modes narrate the athlete's
   // reaction; live mode narrates the operator's turn: tap → armed → time.
@@ -242,15 +266,18 @@ export const DrillPanel = ({
     ? liveBusy
       ? "Hit the lit target"
       : lastReactionMs !== null
-        ? `${lastReactionMs} ms`
+        ? fmtSec(lastReactionMs)
         : "Tap a target to arm it"
     : lastReactionMs === null
       ? "React when a target lights up"
-      : `${lastReactionMs} ms`;
+      : fmtSec(lastReactionMs);
   const runStatusHit = !liveBusy && lastReactionMs !== null;
 
   return (
-    <ScrollView contentContainerStyle={styles.panel}>
+    <ScrollView
+      contentContainerStyle={styles.panel}
+      showsVerticalScrollIndicator={false}
+    >
       <CourtMap
         spots={visuals}
         onPressSpot={
@@ -272,13 +299,13 @@ export const DrillPanel = ({
                 {runStatus}
               </AppText>
             </>
-          ) : done && records !== null ? (
+          ) : showDone && records !== null ? (
             // Numbers live in the results panel below — the court just marks
             // the session done, so the map stays uncluttered.
             <AppText center size={16} weight="600" style={styles.slotText}>
               Session complete
             </AppText>
-          ) : done ? (
+          ) : showDone ? (
             <AppText center size={13} color={colors.textMuted} style={styles.slotText}>
               Fetching results…
             </AppText>
@@ -310,7 +337,7 @@ export const DrillPanel = ({
             style={[styles.button, !canStart && styles.buttonDisabled]}
           >
             <AppText size={16} weight="600">
-              {done ? "Run again" : "Start"}
+              {showDone ? "Run again" : "Start"}
             </AppText>
           </CustomPressable>
         )}
@@ -430,29 +457,36 @@ export const DrillPanel = ({
           ))}
       </View>
 
-      {done && records !== null && (
+      {showDone && records !== null && (
         <View style={styles.stats} testID="stats-panel">
           <AppText size={12} color={colors.textSecondary} style={styles.heading}>
             Results
           </AppText>
           {attempts.length > 0 ? (
-            <ScrollView
-              testID="attempt-list"
-              nestedScrollEnabled
-              style={styles.attemptList}
-              contentContainerStyle={styles.attemptListContent}
-            >
+            // No inner scroll — the whole screen scrolls, so the list just
+            // grows and every attempt is one page-scroll away.
+            <View testID="attempt-list" style={styles.attemptList}>
               {attempts.map((r, i) => (
                 <View key={r.seq} style={styles.statRow}>
-                  <AppText size={13} color={colors.textSecondary}>
-                    Attempt {i + 1}
-                  </AppText>
+                  <View style={styles.attemptLead}>
+                    <AppText size={13} color={colors.textMuted}>
+                      Attempt {i + 1}
+                    </AppText>
+                    <AppText
+                      size={13}
+                      weight="600"
+                      color={colors.accentText}
+                      accessibilityLabel={SPOT_NAMES[pairedSpots[r.position]!]}
+                    >
+                      {attemptCode(r.position)}
+                    </AppText>
+                  </View>
                   <AppText size={13} weight="600">
-                    {r.reactionMs} ms
+                    {fmtSec(r.reactionMs)}
                   </AppText>
                 </View>
               ))}
-            </ScrollView>
+            </View>
           ) : (
             <AppText center size={13} color={colors.textMuted}>
               No attempts recorded
@@ -464,7 +498,7 @@ export const DrillPanel = ({
               Total time
             </AppText>
             <AppText size={13} weight="600">
-              {totalMs} ms
+              {fmtSec(totalMs)}
             </AppText>
           </View>
           <View style={styles.statRow}>
@@ -472,7 +506,7 @@ export const DrillPanel = ({
               Average
             </AppText>
             <AppText size={13} weight="600">
-              {avgMs !== null ? `${avgMs} ms` : "—"}
+              {avgMs !== null ? fmtSec(avgMs) : "—"}
             </AppText>
           </View>
         </View>
@@ -571,10 +605,12 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border,
   },
   attemptList: {
-    maxHeight: 156, // ~5 rows before the list scrolls on its own
-  },
-  attemptListContent: {
     gap: 8,
+  },
+  attemptLead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
   statRow: {
     flexDirection: "row",
