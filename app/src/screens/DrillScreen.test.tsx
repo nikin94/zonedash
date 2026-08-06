@@ -16,8 +16,10 @@ const SETTINGS: DrillSettings = {
 };
 
 // Zero latency + a short step so fake timers drive the whole run explicitly.
+// A fixed tap delay makes reaction times deterministic (the app leaves it
+// random in the 750–1000 ms human-paced frame).
 const connectedTransport = async () => {
-  const t = new MockCentralTransport({ latencyMs: 0, stepMs: 100 });
+  const t = new MockCentralTransport({ latencyMs: 0, stepMs: 100, tapDelayMs: 20 });
   const p = t.connect();
   await jest.runAllTimersAsync();
   await p;
@@ -76,7 +78,7 @@ test("live mode sends exactly mode and positions — no delay or repeat leak", a
   panel(t);
 
   fireEvent.press(screen.getByText("Live"));
-  expect(screen.queryByText("Stop after")).toBeNull();
+  expect(screen.queryByText("Session length")).toBeNull();
   fireEvent.press(screen.getByText("Start"));
   await act(() => jest.advanceTimersByTimeAsync(0));
 
@@ -86,9 +88,9 @@ test("live mode sends exactly mode and positions — no delay or repeat leak", a
   } satisfies DrillConfig);
 });
 
-test("live mode is operator-driven — a court tap arms a target, then it resolves", async () => {
-  // A small fixed tap delay makes the arm/hit beats deterministic (the app
-  // leaves it random, 750–1000 ms).
+test("live mode is operator-driven — a court tap lights a target at once, then it resolves", async () => {
+  // A small fixed tap delay makes the hit beat deterministic (the app leaves
+  // it random, 750–1000 ms).
   const t = new MockCentralTransport({ latencyMs: 0, stepMs: 100, tapDelayMs: 20 });
   const p = t.connect();
   await jest.runAllTimersAsync();
@@ -101,15 +103,18 @@ test("live mode is operator-driven — a court tap arms a target, then it resolv
   await act(() => jest.advanceTimersByTimeAsync(0));
 
   // Nothing arms on its own — the mock schedules no steps for live; the
-  // operator drives it, and the map invites the first tap.
+  // operator drives it, and the map invites the first tap. No spinner here —
+  // the lit target uses the radar ping, so no dot shows the pairing spinner.
   expect(screen.getByText("Tap a target to arm it")).toBeTruthy();
-  expect(screen.queryAllByTestId(/spot-\d-active/)).toHaveLength(0);
+  expect(screen.queryAllByTestId("dot-spinner")).toHaveLength(0);
 
-  // Tap net left (canonical 0 → slot 0). The target lights a beat later.
-  fireEvent.press(screen.getByTestId("spot-0-available"));
+  // Tap net left (canonical 0 → slot 0): it lights up immediately (armed), no
+  // arm delay.
+  await act(async () => {
+    fireEvent.press(screen.getByTestId("spot-0-available"));
+  });
   expect(arm).toHaveBeenCalledWith(0);
-  await act(() => jest.advanceTimersByTimeAsync(20));
-  expect(screen.getByTestId("spot-0-active")).toBeTruthy();
+  expect(screen.getByTestId("spot-0-armed")).toBeTruthy();
 
   // The athlete's hit resolves it → green flash + reaction time; the map is
   // ready for the next pick (liveBusy cleared).
@@ -202,22 +207,27 @@ test("a run arms spots, flashes hits, and ends in a hits-only summary", async ()
   fireEvent.press(screen.getByText("Start"));
   await act(() => jest.advanceTimersByTimeAsync(0)); // seq 0 armed
 
-  // Step 1: slot 2 → back left (6) is prompted with the spinner.
+  // Step 1: slot 2 → back left (6) lights up (radar ping, not a spinner).
   expect(screen.getByText("Step 1")).toBeTruthy();
-  expect(screen.getByTestId("spot-6-active")).toBeTruthy();
+  expect(screen.getByTestId("spot-6-armed")).toBeTruthy();
+  expect(screen.queryAllByTestId("dot-spinner")).toHaveLength(0);
   expect(screen.getByText("React when a target lights up")).toBeTruthy();
 
   // The step resolves as a hit → green flash + the reaction time.
   await act(() => jest.advanceTimersByTimeAsync(50));
   expect(screen.getByTestId("spot-6-hit")).toBeTruthy();
-  expect(screen.getByText("380 ms")).toBeTruthy();
+  expect(screen.getByText("20 ms")).toBeTruthy();
   expect(screen.getByText("Step 2")).toBeTruthy();
 
-  // Run out: second step resolves, session flips done, summary fetched.
+  // Run out: second step resolves, session flips done, results panel fetched —
+  // the numbers live below the court, not on it.
   await act(() => jest.runAllTimersAsync());
-  expect(screen.getByText("2 hits")).toBeTruthy();
-  expect(screen.getByText(/avg \d+ ms · best 380 ms/)).toBeTruthy();
   expect(screen.getByText("Run again")).toBeTruthy();
+  expect(screen.getByText("Session complete")).toBeTruthy();
+  expect(screen.getByTestId("stats-panel")).toBeTruthy();
+  expect(screen.getAllByText("20 ms")).toHaveLength(3); // 2 attempts + average
+  expect(screen.getByText("40 ms")).toBeTruthy(); // total time
+  expect(screen.getByText("Average")).toBeTruthy();
 });
 
 test("the hit flash clears back to available after its window", async () => {
@@ -249,8 +259,11 @@ test("Stop aborts the run and still summarizes the partial records", async () =>
   fireEvent.press(screen.getByText("Stop"));
   await act(() => jest.runAllTimersAsync()); // no further steps may land
 
-  expect(screen.getByText("1 hit")).toBeTruthy();
+  // The partial run still summarizes: one attempt in the results panel.
   expect(screen.getByText("Run again")).toBeTruthy();
+  expect(screen.getByTestId("stats-panel")).toBeTruthy();
+  expect(screen.getByText("Attempt 1")).toBeTruthy();
+  expect(screen.queryByText("Attempt 2")).toBeNull();
   expect(screen.queryByText(/Step \d/)).toBeNull();
 });
 

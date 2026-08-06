@@ -102,6 +102,17 @@ test("active shows a spinner, bound shows a check, selected shows neither", () =
   expect(screen.getByTestId("spot-2-selected")).toBeTruthy();
 });
 
+// A lit exercise target ("armed") carries the radar ping, never the pairing
+// spinner — a spinner would read as loading, not "react now".
+test("armed shows the radar ping and no spinner", () => {
+  const spots = [...allOff];
+  spots[0] = "armed";
+  render(<CourtMap spots={spots} />);
+
+  expect(screen.getByTestId("dot-ping")).toBeTruthy();
+  expect(screen.queryAllByTestId("dot-spinner")).toHaveLength(0);
+});
+
 // Drill-run flash: a hit flash is green with a check (same glyph as
 // bound). Misses don't exist in the app — no timeout ever goes on the wire.
 test("hit flashes with a check", () => {

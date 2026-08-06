@@ -46,13 +46,20 @@ const MODES: { key: UiMode; label: string }[] = [
   { key: "live", label: "Live" },
 ];
 
+/** One-line explanation shown under the mode selector. */
+const MODE_DESC: Record<UiMode, string> = {
+  random: "Targets light in a random order until the session ends.",
+  path: "Run a fixed sequence you tap out on the map.",
+  live: "Light targets by hand during the run — one tap each.",
+};
+
 /**
  * The drill screen — reached once a layout is paired. One court map does
  * double duty: while
  * idle it authors the drill (Path steps are tapped right on it), while running
- * it mirrors the central unit's Status events — `progress` arms a spot
- * (spinner), `resolved` flashes it green, and the `done` session state pulls
- * DumpResults for the summary. The drill config lives below the court; Start
+ * it mirrors the central unit's Status events — `progress` arms a spot (radar
+ * ping), `resolved` flashes it green, and the `done` session state pulls
+ * DumpResults for the results panel. The drill config lives below the court; Start
  * composes it (mode + count/duration + the Settings-screen params) and sends
  * LoadDrill + StartSession in one go — no separate load step. No timeout goes
  * on the wire, so a run counts hits only — misses don't exist in the app.
@@ -215,27 +222,25 @@ export const DrillPanel = ({
   const visuals: SpotVisual[] = Array.from({ length: 8 }, (_, i) => {
     if (!pairedSpots.includes(i)) return "off";
     if (flashSpot === i) return "hit";
-    if (running && armedSpot === i) return "active";
+    // A lit exercise target gets the radar ping ("react"), never the pairing
+    // spinner ("loading").
+    if (running && armedSpot === i) return "armed";
     // While idle the map is the Path authoring surface.
     if (!running && uiMode === "path" && path.includes(i)) return "selected";
     return "available";
   });
 
   const canStart = uiMode !== "path" || path.length > 0;
+  const attempts = records ?? [];
+  const totalMs = attempts.reduce((s, r) => s + r.reactionMs, 0);
   const avgMs =
-    records !== null && records.length > 0
-      ? Math.round(records.reduce((s, r) => s + r.reactionMs, 0) / records.length)
-      : null;
-  const bestMs =
-    records !== null && records.length > 0
-      ? Math.min(...records.map((r) => r.reactionMs))
-      : null;
+    attempts.length > 0 ? Math.round(totalMs / attempts.length) : null;
 
   // Secondary status line during a run. Auto modes narrate the athlete's
   // reaction; live mode narrates the operator's turn: tap → armed → time.
   const runStatus = liveRunning
     ? liveBusy
-      ? "React when the target lights up"
+      ? "Hit the lit target"
       : lastReactionMs !== null
         ? `${lastReactionMs} ms`
         : "Tap a target to arm it"
@@ -268,19 +273,11 @@ export const DrillPanel = ({
               </AppText>
             </>
           ) : done && records !== null ? (
-            <>
-              <AppText center size={16} weight="600" style={styles.slotText}>
-                {records.length} {records.length === 1 ? "hit" : "hits"}
-              </AppText>
-              <AppText
-                center
-                size={13}
-                color={colors.textSecondary}
-                style={styles.slotText}
-              >
-                {avgMs !== null ? `avg ${avgMs} ms · best ${bestMs} ms` : "—"}
-              </AppText>
-            </>
+            // Numbers live in the results panel below — the court just marks
+            // the session done, so the map stays uncluttered.
+            <AppText center size={16} weight="600" style={styles.slotText}>
+              Session complete
+            </AppText>
           ) : done ? (
             <AppText center size={13} color={colors.textMuted} style={styles.slotText}>
               Fetching results…
@@ -325,30 +322,38 @@ export const DrillPanel = ({
         pointerEvents={running ? "none" : "auto"}
         style={[styles.config, running && styles.dimmed]}
       >
-        <View style={styles.modeRow}>
-          {MODES.map((m) => (
-            <CustomPressable
-              key={m.key}
-              noFeedback
-              accessibilityState={{ selected: uiMode === m.key }}
-              onPress={() => setUiMode(m.key)}
-              style={[styles.modeChip, uiMode === m.key && styles.modeChipActive]}
-            >
-              <AppText
-                weight="600"
-                color={uiMode === m.key ? colors.accentText : colors.textSecondary}
+        <View style={styles.stopRow}>
+          <AppText color={colors.textSecondary} style={styles.paramLabel}>
+            Mode
+          </AppText>
+          <View style={styles.stopChips}>
+            {MODES.map((m) => (
+              <CustomPressable
+                key={m.key}
+                noFeedback
+                accessibilityState={{ selected: uiMode === m.key }}
+                onPress={() => setUiMode(m.key)}
+                style={[styles.modeChip, uiMode === m.key && styles.modeChipActive]}
               >
-                {m.label}
-              </AppText>
-            </CustomPressable>
-          ))}
+                <AppText
+                  weight="600"
+                  color={uiMode === m.key ? colors.accentText : colors.textSecondary}
+                >
+                  {m.label}
+                </AppText>
+              </CustomPressable>
+            ))}
+          </View>
         </View>
+        <AppText center size={12} color={colors.textMuted} testID="mode-desc">
+          {MODE_DESC[uiMode]}
+        </AppText>
 
         {uiMode === "random" && (
           <>
             <View style={styles.stopRow}>
               <AppText color={colors.textSecondary} style={styles.paramLabel}>
-                Stop after
+                Session length
               </AppText>
               <View style={styles.stopChips}>
                 {(
@@ -423,13 +428,55 @@ export const DrillPanel = ({
               Tap paired spots on the map in the order to run
             </AppText>
           ))}
-
-        {uiMode === "live" && (
-          <AppText center size={13} color={colors.textMuted}>
-            The coach picks targets on the fly — nothing to configure
-          </AppText>
-        )}
       </View>
+
+      {done && records !== null && (
+        <View style={styles.stats} testID="stats-panel">
+          <AppText size={12} color={colors.textSecondary} style={styles.heading}>
+            Results
+          </AppText>
+          {attempts.length > 0 ? (
+            <ScrollView
+              testID="attempt-list"
+              nestedScrollEnabled
+              style={styles.attemptList}
+              contentContainerStyle={styles.attemptListContent}
+            >
+              {attempts.map((r, i) => (
+                <View key={r.seq} style={styles.statRow}>
+                  <AppText size={13} color={colors.textSecondary}>
+                    Attempt {i + 1}
+                  </AppText>
+                  <AppText size={13} weight="600">
+                    {r.reactionMs} ms
+                  </AppText>
+                </View>
+              ))}
+            </ScrollView>
+          ) : (
+            <AppText center size={13} color={colors.textMuted}>
+              No attempts recorded
+            </AppText>
+          )}
+          <View style={styles.statDivider} />
+          <View style={styles.statRow}>
+            <AppText size={13} color={colors.textSecondary}>
+              Total time
+            </AppText>
+            <AppText size={13} weight="600">
+              {totalMs} ms
+            </AppText>
+          </View>
+          <View style={styles.statRow}>
+            <AppText size={13} color={colors.textSecondary}>
+              Average
+            </AppText>
+            <AppText size={13} weight="600">
+              {avgMs !== null ? `${avgMs} ms` : "—"}
+            </AppText>
+          </View>
+        </View>
+      )}
     </ScrollView>
   );
 };
@@ -511,10 +558,33 @@ const styles = StyleSheet.create({
     gap: 12,
     marginTop: 8,
   },
-  modeRow: {
-    flexDirection: "row",
-    justifyContent: "center",
+  heading: {
+    letterSpacing: 2,
+    textTransform: "uppercase",
+  },
+  stats: {
+    alignSelf: "stretch",
+    gap: 10,
+    marginTop: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  attemptList: {
+    maxHeight: 156, // ~5 rows before the list scrolls on its own
+  },
+  attemptListContent: {
     gap: 8,
+  },
+  statRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  statDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginTop: 2,
   },
   modeChip: {
     borderRadius: 999,

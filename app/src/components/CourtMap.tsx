@@ -1,8 +1,9 @@
-import { memo, useLayoutEffect, useRef, type ReactNode } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Animated,
   Dimensions,
+  Easing,
   StyleSheet,
   View,
 } from "react-native";
@@ -16,7 +17,8 @@ import { CheckIcon } from "./Icons";
 export type SpotVisual =
   | "off" // faint outline — a potential location, nothing assigned
   | "available" // pairing round waiting for the operator to pick this (or any) spot
-  | "active" // being prompted ("press here") — in-progress spinner, not a color
+  | "active" // pairing prompt ("press here") — in-progress spinner, not a color
+  | "armed" // exercise run: target lit, waiting for the athlete — radar ping
   | "confirm" // candidate tapped once, awaiting the confirm tap
   | "bound" // bound (this round / done) — green with a check mark
   | "selected" // a static pick (e.g. a path step in the drill builder)
@@ -66,13 +68,14 @@ const DOT = 38; // visible dot diameter — one size for every state
 const INSET = (HIT - DOT) / 2;
 
 // Fill + outline per state. "off" fades to a zero-alpha fill (outline only)
-// instead of snapping away. "active" is deliberately NOT a color of its own:
-// the in-progress prompt is communicated by the spinner inside the dot, on a
-// neutral dark fill.
+// instead of snapping away. "active" (pairing) is a neutral dark fill under a
+// spinner — it means "loading". "armed" (a lit exercise target) is a bright
+// accent fill under a radar ping — it means "react now", never a spinner.
 const DOT_STYLE: Record<SpotVisual, { fill: string; ring: string }> = {
   off: { fill: alpha(colors.border, 0), ring: colors.border },
   available: { fill: colors.dim, ring: alpha(colors.border, 0) },
   active: { fill: colors.surface, ring: colors.border },
+  armed: { fill: colors.accent, ring: alpha(colors.border, 0) },
   confirm: { fill: colors.warning, ring: alpha(colors.border, 0) },
   bound: { fill: colors.success, ring: alpha(colors.border, 0) },
   selected: { fill: colors.accent, ring: alpha(colors.border, 0) },
@@ -87,10 +90,46 @@ const A11Y_STATE: Record<SpotVisual, string> = {
   off: "empty",
   available: "available",
   active: "press here",
+  armed: "target lit, react",
   confirm: "awaiting confirm",
   bound: "bound",
   selected: "selected",
   hit: "hit",
+};
+
+// A diverging ring that expands and fades on a loop, drawn behind a lit
+// exercise target — the "react now" cue (a spinner would read as loading).
+const PING_MS = 1200;
+
+const RadarPing = () => {
+  const t = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(t, {
+        toValue: 1,
+        duration: PING_MS,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [t]);
+  return (
+    <Animated.View
+      pointerEvents="none"
+      testID="dot-ping"
+      style={[
+        styles.ping,
+        {
+          opacity: t.interpolate({ inputRange: [0, 1], outputRange: [0.55, 0] }),
+          transform: [
+            { scale: t.interpolate({ inputRange: [0, 1], outputRange: [1, 2.1] }) },
+          ],
+        },
+      ]}
+    />
+  );
 };
 
 /**
@@ -154,10 +193,12 @@ const AnimatedDot = memo(({ visual }: { visual: SpotVisual }) => {
         ]}
       />
       {/* Glyphs sit above the fade overlay so they appear with the new state:
-          a spinner while the spot is prompted, a check on bound/hit. */}
+          a spinner while a pairing spot is prompted (loading), a radar ping on
+          a lit exercise target (react now), a check on bound/hit. */}
       {toRef.current === "active" && (
         <ActivityIndicator testID="dot-spinner" size="small" color={colors.text} />
       )}
+      {toRef.current === "armed" && <RadarPing />}
       {(toRef.current === "bound" || toRef.current === "hit") && (
         <View testID="dot-check" style={styles.dotGlyph}>
           <CheckIcon />
@@ -283,6 +324,15 @@ const styles = StyleSheet.create({
   dotGlyph: {
     alignItems: "center",
     justifyContent: "center",
+  },
+  // Expanding radar ring behind a lit exercise target.
+  ping: {
+    position: "absolute",
+    width: DOT,
+    height: DOT,
+    borderRadius: DOT / 2,
+    borderWidth: 2,
+    borderColor: colors.accent,
   },
   // The old-color layer covers the base including its border (-1 offsets, so
   // its diameter is DOT + 2 and its radius must match — a hardcoded radius

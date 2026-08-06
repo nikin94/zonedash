@@ -248,7 +248,9 @@ export class MockCentralTransport implements CentralTransport {
         const miss =
           timeoutMs > 0 && this.missEvery > 0 && (seq + 1) % this.missEvery === 0;
         const tLitUs = seq * this.stepMs * 1000;
-        const reactionMs = miss ? timeoutMs : 380 + seq * 37;
+        // Reaction is a human beat (tapDelay, 750–1000 ms), same frame the
+        // pairing taps and the live hits use — not a made-up ramp.
+        const reactionMs = miss ? timeoutMs : this.tapDelay();
         const tHitUs = miss ? 0 : tLitUs + reactionMs * 1000;
         this.hits.push({
           seq,
@@ -284,26 +286,24 @@ export class MockCentralTransport implements CentralTransport {
     const pos = ((Math.floor(position) % n) + n) % n;
     const seq = this.liveSeq++;
     this.liveArmed = true;
-    // The operator picked a target; it lights up a beat later (tap + link
-    // round-trip), then resolves on the athlete's hit a beat after that —
-    // both human-paced.
-    this.after(this.tapDelay(), () => {
-      this.emit({ kind: "progress", seq, position: pos });
-      const reactionMs = this.tapDelay();
-      this.after(reactionMs, () => {
-        this.hits.push({
-          seq,
-          position: pos,
-          tLitUs: 0,
-          tHitUs: reactionMs * 1000,
-          reactionMs,
-          movementMs: 0,
-          sensor: "tof",
-          miss: false,
-        });
-        this.liveArmed = false;
-        this.emit({ kind: "resolved", seq, position: pos, miss: false, reactionMs });
+    // The target lights up the instant the operator picks it — no arm delay
+    // (the real central lights its LED on the write). The athlete's hit
+    // resolves it a human beat later (tapDelay).
+    this.emit({ kind: "progress", seq, position: pos });
+    const reactionMs = this.tapDelay();
+    this.after(reactionMs, () => {
+      this.hits.push({
+        seq,
+        position: pos,
+        tLitUs: 0,
+        tHitUs: reactionMs * 1000,
+        reactionMs,
+        movementMs: 0,
+        sensor: "tof",
+        miss: false,
       });
+      this.liveArmed = false;
+      this.emit({ kind: "resolved", seq, position: pos, miss: false, reactionMs });
     });
   }
 
