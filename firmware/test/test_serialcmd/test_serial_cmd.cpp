@@ -60,6 +60,18 @@ static void test_spot() {
   ZD_CHECK(!parse_command("spot x").ok()); // not a number
 }
 
+// `next S` arms slot S as the live next target (BLE: ArmLiveTarget / set_next).
+static void test_next() {
+  auto c = parse_command("next 3");
+  ZD_CHECK(c.type == CmdType::Next);
+  ZD_CHECK(c.ok());
+  ZD_EQ(c.position, 3);
+  ZD_CHECK(parse_command("NEXT 0").ok()); // case-insensitive, 0 is valid
+  ZD_CHECK(!parse_command("next").ok());   // missing S
+  ZD_CHECK(!parse_command("next 8").ok()); // >= MAX_TARGETS
+  ZD_CHECK(!parse_command("next x").ok()); // not a number
+}
+
 static void test_case_and_whitespace_tolerant() {
   ZD_CHECK(parse_command("START").type == CmdType::Start);
   ZD_CHECK(parse_command("  Stop  ").type == CmdType::Stop);
@@ -156,6 +168,7 @@ int main() {
   ZD_RUN(test_pair);
   ZD_RUN(test_extend);
   ZD_RUN(test_spot);
+  ZD_RUN(test_next);
   ZD_RUN(test_case_and_whitespace_tolerant);
   ZD_RUN(test_unknown);
   ZD_RUN(test_drill_random_defaults);

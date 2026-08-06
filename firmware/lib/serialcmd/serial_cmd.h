@@ -22,6 +22,7 @@ enum class CmdType : uint8_t {
   Nodes,   // list paired targets
   Drill,   // load a drill (fills `drill`)
   Start,   // run the loaded drill
+  Next,    // live: arm slot index S as the next target (DrillEngine::set_next)
   Stop,    // abort + disarm all
   Dump,    // print session hit records as CSV
   Sensor,  // select trigger for the A/B test (fills `sensor`)
@@ -36,6 +37,7 @@ struct ParsedCommand {
   Sensor sensor = Sensor::ToF; // valid when type == Sensor && ok()
   uint8_t num_positions = 0;   // targets to bind; valid when type == Pair/Extend && ok()
   uint8_t spot = 0;            // canonical court spot; valid when type == Spot && ok()
+  uint8_t position = 0;        // live next-target slot index; valid when type == Next && ok()
 
   bool ok() const { return error.empty(); }
 };

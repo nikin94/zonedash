@@ -164,6 +164,19 @@ ParsedCommand parse_command(const std::string& line) {
     c.spot = static_cast<uint8_t>(s);
     return c;
   }
+  if (verb == "next") {
+    // Live: arm slot index S (0..num_positions-1) as the next target
+    // (DrillEngine::set_next / BLE ArmLiveTarget). Bounded by MAX_TARGETS here;
+    // the caller checks S against the live layout size.
+    c.type = CmdType::Next;
+    uint32_t s;
+    if (t.size() != 2 || !parse_uint(t[1], s) || s >= MAX_TARGETS) {
+      c.error = "usage: next S (0.." + std::to_string(MAX_TARGETS - 1) + ")";
+      return c;
+    }
+    c.position = static_cast<uint8_t>(s);
+    return c;
+  }
   if (verb == "undo")  { c.type = CmdType::Undo;  return c; }
   if (verb == "nodes") { c.type = CmdType::Nodes; return c; }
   if (verb == "start") { c.type = CmdType::Start; return c; }

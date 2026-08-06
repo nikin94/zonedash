@@ -185,6 +185,28 @@ test("a disconnect clears the paired layout — reconnect starts at Pairing agai
   expect(screen.queryAllByTestId(/spot-\d-bound/)).toHaveLength(0);
 });
 
+// A running drill must not be left behind: a fresh DrillPanel mount starts at
+// "idle" and never rehydrates the live session, so the exit is locked (no back
+// chevron, swipe disabled) until the run ends.
+test("the drill screen locks its exit while a run is on", async () => {
+  await renderApp();
+  await connect();
+  await pairTwo(); // on Drill, idle
+  expect(screen.getByTestId("header-back")).toBeTruthy(); // idle: exit available
+
+  fireEvent.press(screen.getByText("Start"));
+  await act(() => jest.advanceTimersByTimeAsync(0)); // session → running
+  expect(screen.getByText("Stop")).toBeTruthy();
+  expect(screen.queryByTestId("header-back")).toBeNull(); // can't leave mid-run
+
+  // Stop ends the run → the exit returns.
+  fireEvent.press(screen.getByText("Stop"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+  expect(screen.getByTestId("header-back")).toBeTruthy();
+});
+
 test("the settings button opens the Settings screen — no timeout setting exists", async () => {
   await renderApp();
   await connect();

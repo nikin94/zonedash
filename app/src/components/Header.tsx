@@ -28,12 +28,14 @@ const CHIP_LABEL: Record<ConnectionState, string> = {
  */
 export const Header = ({
   back,
-  title = "ZoneDash",
+  lockBack,
   hideChip,
+  title = "ZoneDash",
 }: {
   back?: boolean;
-  title?: string;
+  lockBack?: boolean; // pushed screen, but the back way out is suppressed (e.g. a running drill)
   hideChip?: boolean; // Settings is config-only — no connection controls there.
+  title?: string;
 }) => {
   const navigation = useNavigation<Nav>();
   const { transport, connection, pairedSpots } = useAppState();
@@ -83,7 +85,7 @@ export const Header = ({
   return (
     <View style={styles.header}>
       <View style={styles.headerLeft}>
-        {back && (
+        {back && !lockBack && (
           <CustomPressable
             testID="header-back"
             accessibilityLabel="Go back"
