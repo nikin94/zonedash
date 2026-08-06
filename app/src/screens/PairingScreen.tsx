@@ -1,13 +1,17 @@
 import WheelPicker from "@quidone/react-native-wheel-picker";
+import { useNavigation } from "@react-navigation/native";
 import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import type { PairingProgress } from "../ble/contract";
 import type { CentralTransport } from "../ble/transport";
 import { AppText } from "../components/AppText";
-import { ConfirmDialog } from "../components/ConfirmDialog";
+import { ConfirmModal } from "../components/ConfirmModal";
 import { CustomPressable } from "../components/CustomPressable";
 import { CourtMap, SPOT_NAMES, type SpotVisual } from "../components/CourtMap";
+import { Header } from "../components/Header";
+import type { Nav } from "../navigation";
+import { useAppState } from "../state/AppState";
 import { colors, glowShadow } from "../theme";
 
 /** Wheel choices for "how many targets". */
@@ -22,6 +26,10 @@ const WHEEL_H = WHEEL_ITEM_H * WHEEL_VISIBLE;
 const WHEEL_W = 48; // barely wider than the pill — single digits need no more
 const WHEEL_PAD_V = 6; // matches the button's small vertical padding
 const PILL_H = 28;
+
+// Beat between the final bind and the handoff to Drill — long enough for the
+// last dot's fade (CourtMap FADE_MS) plus a moment to register the green check.
+const HANDOFF_DELAY_MS = 700;
 
 // Fixed footprints for the court-centre info block, so phase changes never
 // shift the layout: the tallest status text is 3 lines, the error is 1 line,
@@ -113,6 +121,25 @@ export const PairingPanel = ({ transport }: { transport: CentralTransport }) => 
       setRunning(false);
       setError(err instanceof Error ? err.message : "pairing failed");
     });
+  };
+
+  // DEV/TEST shortcut — open a round and bind every target at once, skipping
+  // the per-spot tapping. Wired only when the transport exposes the helper
+  // (the mock does; real BLE won't), so the affordance disappears with the
+  // real link.
+  const devComplete = () => {
+    if (!transport.completePairingNow) return;
+    setError(null);
+    setProgress(null);
+    setWheelOpen(false);
+    setRunning(true);
+    transport
+      .startPairing(total)
+      .then(() => transport.completePairingNow!())
+      .catch((err: unknown) => {
+        setRunning(false);
+        setError(err instanceof Error ? err.message : "pairing failed");
+      });
   };
 
   // Correction path: unbind the most recent target and reopen its pick. From
@@ -213,37 +240,7 @@ export const PairingPanel = ({ transport }: { transport: CentralTransport }) => 
       </View>
 
       <CourtMap spots={visuals} onPressSpot={choosing ? pickSpot : undefined}>
-        {confirming ? (
-          pendingTotal! > (progress?.total ?? 0) ? (
-            // Growing keeps every bound target — no destructive reset needed.
-            <ConfirmDialog
-              testID="count-extend"
-              title={`Add ${pendingTotal! - (progress?.total ?? 0)} more ${
-                pendingTotal! - (progress?.total ?? 0) === 1
-                  ? "target"
-                  : "targets"
-              }?`}
-              body={`The ${progress?.total} paired ${
-                progress?.total === 1 ? "target stays" : "targets stay"
-              }`}
-              actions={[
-                { label: "No", onPress: () => setPendingTotal(null) },
-                { label: "Add", onPress: extendRound },
-              ]}
-            />
-          ) : (
-            <ConfirmDialog
-              testID="count-confirm"
-              title={`Change target count to ${pendingTotal}?`}
-              body="This resets the pairing"
-              actions={[
-                { label: "No", onPress: () => setPendingTotal(null) },
-                { label: "Yes", danger: true, onPress: confirmCountChange },
-              ]}
-            />
-          )
-        ) : (
-          <>
+        <>
             {/* Every slot below has a FIXED footprint — the text area, the
                 error line, and both button rows keep their size across all
                 round phases, so nothing shifts as states change. */}
@@ -304,11 +301,26 @@ export const PairingPanel = ({ transport }: { transport: CentralTransport }) => 
                   </AppText>
                 </CustomPressable>
               ) : (
-                <CustomPressable onPress={start} style={styles.button}>
-                  <AppText center size={16} weight="600">
-                    {done ? "Re-pair" : "Start pairing"}
-                  </AppText>
-                </CustomPressable>
+                <>
+                  <CustomPressable onPress={start} style={styles.button}>
+                    <AppText center size={16} weight="600">
+                      {done ? "Re-pair" : "Start pairing"}
+                    </AppText>
+                  </CustomPressable>
+                  {/* DEV-only: bind everything at once so testing needn't tap
+                      each spot. Present only with the mock transport. */}
+                  {transport.completePairingNow && (
+                    <CustomPressable
+                      testID="dev-complete-pairing"
+                      onPress={devComplete}
+                      style={styles.devButton}
+                    >
+                      <AppText center size={13} weight="600" color={colors.textMuted}>
+                        Complete pairing (dev)
+                      </AppText>
+                    </CustomPressable>
+                  )}
+                </>
               )}
               {/* Undo is only offered between binds (choosing) or after done —
                   never mid-prompt, matching the central's refusal. The slot
@@ -328,13 +340,109 @@ export const PairingPanel = ({ transport }: { transport: CentralTransport }) => 
               </View>
             </View>
           </>
-        )}
       </CourtMap>
+
+      {/* Count-change confirms — shown centered on screen like every confirm. */}
+      {confirming &&
+        (pendingTotal! > (progress?.total ?? 0) ? (
+          // Growing keeps every bound target — no destructive reset needed.
+          <ConfirmModal
+            visible
+            onDismiss={() => setPendingTotal(null)}
+            testID="count-extend"
+            title={`Add ${pendingTotal! - (progress?.total ?? 0)} more ${
+              pendingTotal! - (progress?.total ?? 0) === 1 ? "target" : "targets"
+            }?`}
+            body={`The ${progress?.total} paired ${
+              progress?.total === 1 ? "target stays" : "targets stay"
+            }`}
+            actions={[
+              { label: "No", onPress: () => setPendingTotal(null) },
+              { label: "Add", onPress: extendRound },
+            ]}
+          />
+        ) : (
+          <ConfirmModal
+            visible
+            onDismiss={() => setPendingTotal(null)}
+            testID="count-confirm"
+            title={`Change target count to ${pendingTotal}?`}
+            body="This resets the pairing"
+            actions={[
+              { label: "No", onPress: () => setPendingTotal(null) },
+              { label: "Yes", danger: true, onPress: confirmCountChange },
+            ]}
+          />
+        ))}
+    </View>
+  );
+};
+
+/**
+ * Pairing as its own screen, pushed from the header's central-unit menu. A
+ * link drop pops the stack back home (Header handles that), so the panel only
+ * renders while connected.
+ */
+export const PairingScreen = () => {
+  const navigation = useNavigation<Nav>();
+  const { transport, connection, pairedSpots } = useAppState();
+  const paired = pairedSpots.length > 0;
+
+  // Without a layout there is nowhere to go back TO: home immediately
+  // redirects right back here, so a back affordance would only loop. Hide the
+  // button AND the iOS swipe-back gesture until a round completes; both appear
+  // once there is a layout to return to.
+  useEffect(() => {
+    navigation.setOptions({ gestureEnabled: paired });
+  }, [navigation, paired]);
+
+  // A successful round hands over to the Drill screen — but only after the last
+  // bind's fade lands and its green check paints, so the operator sees the
+  // target confirmed instead of the screen swapping mid-animation. Reset
+  // instead of push so the stack is Home → Drill no matter how Pairing was
+  // reached (fresh connect, or a re-pair opened from the chip menu on Drill).
+  useEffect(() => {
+    let handoff: ReturnType<typeof setTimeout> | null = null;
+    const unsub = transport.onStatus((e) => {
+      if (e.kind === "pairing" && e.progress.done && handoff === null) {
+        handoff = setTimeout(() => {
+          navigation.reset({
+            index: 1,
+            routes: [{ name: "Home" }, { name: "Drill" }],
+          });
+        }, HANDOFF_DELAY_MS);
+      }
+    });
+    return () => {
+      unsub();
+      if (handoff !== null) clearTimeout(handoff);
+    };
+  }, [transport, navigation]);
+
+  return (
+    <View style={styles.screen}>
+      <Header back={paired} title="Pairing" />
+      {connection === "connected" ? (
+        <PairingPanel transport={transport} />
+      ) : (
+        <AppText center size={13} color={colors.textMuted} style={styles.screenHint}>
+          Not connected — tap the status in the header to connect
+        </AppText>
+      )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: colors.background,
+    paddingTop: 56, // clears the status bar without a safe-area dependency
+  },
+  screenHint: {
+    marginTop: 48,
+    paddingHorizontal: 32,
+  },
   panel: {
     marginTop: 32,
     alignItems: "center",
@@ -437,6 +545,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.background,
+    paddingHorizontal: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  // Dev shortcut: dashed + muted so it never reads as a real control.
+  devButton: {
+    height: BUTTON_H,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: colors.border,
     paddingHorizontal: 32,
     alignItems: "center",
     justifyContent: "center",

@@ -65,10 +65,21 @@ export interface CentralTransport {
    *  it right after (resolve-then-undo). */
   undoPairing(): Promise<void>;
 
+  /** DEV/TEST ONLY — bind every remaining target and finish the open round in
+   *  one call, so a tester needn't tap through each spot. The real BLE
+   *  transport does NOT implement it, so the UI shortcut it drives vanishes
+   *  with the mock. */
+  completePairingNow?(): Promise<void>;
+
   /** ControlOp.LoadDrill. */
   loadDrill(config: DrillConfig): Promise<void>;
   /** ControlOp.StartSession. */
   startSession(): Promise<void>;
+  /** ControlOp.ArmLiveTarget (serial `next S`) — live mode only: the operator
+   *  picks the next target during a running session. `position` is a slot index
+   *  (0..numPositions-1); the central lights it and the step resolves on the
+   *  hit (DrillEngine::set_next). A no-op while a target is already lit. */
+  armLiveTarget(position: number): Promise<void>;
   /** ControlOp.StopSession. */
   stopSession(): Promise<void>;
   /** ControlOp.DumpResults — resolves with the session's hit records. */

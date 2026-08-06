@@ -253,7 +253,8 @@ Data model (app side):
   - **live** — the operator picks the next target on demand (coach-in-the-loop);
     the engine has no pre-built sequence, it just lights whatever it's told. This
     means the engine must accept an **externally-driven next-target** command, not
-    only self-sequence — a real constraint on the engine API.
+    only self-sequence — a real constraint on the engine API (`DrillEngine::set_next`,
+    driven by serial `next S` / BLE `ArmLiveTarget`).
   - **time-limited** — random order, run for a fixed `duration_ms`; the score is
     "how many targets in the window." Not count-bounded.
 - **Two settings that shape sequencing** (not separate modes):
@@ -314,6 +315,7 @@ swaps the transport later.
 | `nodes` | List paired targets: `position, MAC, fw, batt_mv, last_rssi` | Status read |
 | `drill N seq…` | Load a drill: N active targets + sequence (e.g. `drill 4 rand` or `drill 6 0,3,5,1,…`) + params | Control: config |
 | `start` | Run the loaded drill (SYNC broadcast → ARM first target → loop) | Control: start |
+| `next S` | Live: arm slot S (0..N-1) as the next target (`DrillEngine::set_next()`); operator-driven, one at a time | Control: ArmLiveTarget (slot byte) |
 | `stop` | Abort the run, DISARM all | Control: stop |
 | `dump` | Print the session's hit records as CSV: `seq,pos,t_lit,t_hit,reaction_ms,move_ms,sensor,miss` | Results read |
 | `sensor tof\|piezo` | Select which trigger the target reports (court A/B test) | (dev-only) |

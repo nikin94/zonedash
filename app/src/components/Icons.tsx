@@ -29,6 +29,14 @@ export const CloseIcon = () => (
   </View>
 );
 
+/** A ‹ chevron built from two rotated bars — the header back affordance. */
+export const BackIcon = () => (
+  <View style={styles.backBox} accessible={false}>
+    <View style={[styles.backBar, styles.backBarA]} />
+    <View style={[styles.backBar, styles.backBarB]} />
+  </View>
+);
+
 /** A ✓ built from two rotated bars — sized for the 38 px court dots. */
 export const CheckIcon = () => (
   <View style={styles.checkBox} accessible={false}>
@@ -49,15 +57,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.textMuted,
     justifyContent: "center",
   },
-  // Dark fill + light outline so the knob reads as a ring on the button's
-  // dark chrome instead of a solid white dot.
+  // Dark fill + outline matching the tracks, so the knob reads as a ring in
+  // the same tone as the rest of the icon.
   knob: {
     position: "absolute",
     width: KNOB,
     height: KNOB,
     borderRadius: KNOB / 2,
     borderWidth: 1,
-    borderColor: colors.text,
+    borderColor: colors.textMuted,
     backgroundColor: colors.background,
   },
   closeBox: {
@@ -78,6 +86,28 @@ const styles = StyleSheet.create({
   },
   closeBarB: {
     transform: [{ rotate: "-45deg" }],
+  },
+  backBox: {
+    width: W,
+    height: W,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  backBar: {
+    position: "absolute",
+    width: 11,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: colors.text,
+    left: 3,
+  },
+  backBarA: {
+    top: 5,
+    transform: [{ rotate: "-45deg" }],
+  },
+  backBarB: {
+    bottom: 5,
+    transform: [{ rotate: "45deg" }],
   },
   checkBox: {
     width: 16,

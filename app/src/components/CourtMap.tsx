@@ -1,8 +1,9 @@
-import { memo, useLayoutEffect, useRef, type ReactNode } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Animated,
   Dimensions,
+  Easing,
   StyleSheet,
   View,
 } from "react-native";
@@ -16,10 +17,12 @@ import { CheckIcon } from "./Icons";
 export type SpotVisual =
   | "off" // faint outline — a potential location, nothing assigned
   | "available" // pairing round waiting for the operator to pick this (or any) spot
-  | "active" // being prompted ("press here") — in-progress spinner, not a color
+  | "active" // pairing prompt ("press here") — in-progress spinner, not a color
+  | "armed" // exercise run: target lit, waiting for the athlete — radar ping
   | "confirm" // candidate tapped once, awaiting the confirm tap
   | "bound" // bound (this round / done) — green with a check mark
-  | "selected"; // a static pick (e.g. a path step in the drill builder)
+  | "selected" // a static pick (e.g. a path step in the drill builder)
+  | "hit"; // exercise run: step resolved as a hit — green flash with a check
 
 /** Human names for the canonical spots, for prompts and screen readers. */
 export const SPOT_NAMES = [
@@ -31,6 +34,23 @@ export const SPOT_NAMES = [
   "back centre",
   "back left",
   "mid left",
+] as const;
+
+/**
+ * Two-letter code per canonical spot, for compact labels (e.g. the results
+ * list). Row from the net down — F(ront)/M(id)/B(ack) — then column
+ * L(eft)/C(entre)/R(ight). C is used for the centre column so the letter never
+ * collides with the M of the mid row (FL, FC, FR / ML, MR / BL, BC, BR).
+ */
+export const SPOT_CODES = [
+  "FL", // 0 net left
+  "FC", // 1 net centre
+  "FR", // 2 net right
+  "MR", // 3 mid right
+  "BR", // 4 back right
+  "BC", // 5 back centre
+  "BL", // 6 back left
+  "ML", // 7 mid left
 ] as const;
 
 /**
@@ -59,18 +79,24 @@ const MAP_H = Math.round(MAP_W * 1.09);
 const HIT = 52; // pressable hit box; the visible dot is smaller
 const HIT_SLOP = 8; // extra forgiveness around each spot
 const DOT = 38; // visible dot diameter — one size for every state
+// Inset the whole spot grid off the field edges. Without it a dot's visible
+// edge sits (HIT-DOT)/2 = 7 px inside the border; adding that again doubles the
+// dot-to-border gap so the perimeter isn't crammed against the lines.
+const INSET = (HIT - DOT) / 2;
 
 // Fill + outline per state. "off" fades to a zero-alpha fill (outline only)
-// instead of snapping away. "active" is deliberately NOT a color of its own:
-// the in-progress prompt is communicated by the spinner inside the dot, on a
-// neutral dark fill.
+// instead of snapping away. "active" (pairing) is a neutral dark fill under a
+// spinner — it means "loading". "armed" (a lit exercise target) is a bright
+// accent fill under a radar ping — it means "react now", never a spinner.
 const DOT_STYLE: Record<SpotVisual, { fill: string; ring: string }> = {
   off: { fill: alpha(colors.border, 0), ring: colors.border },
   available: { fill: colors.dim, ring: alpha(colors.border, 0) },
   active: { fill: colors.surface, ring: colors.border },
+  armed: { fill: colors.accent, ring: alpha(colors.border, 0) },
   confirm: { fill: colors.warning, ring: alpha(colors.border, 0) },
   bound: { fill: colors.success, ring: alpha(colors.border, 0) },
   selected: { fill: colors.accent, ring: alpha(colors.border, 0) },
+  hit: { fill: colors.success, ring: alpha(colors.border, 0) },
 };
 
 const FADE_MS = 200;
@@ -81,9 +107,46 @@ const A11Y_STATE: Record<SpotVisual, string> = {
   off: "empty",
   available: "available",
   active: "press here",
+  armed: "target lit, react",
   confirm: "awaiting confirm",
   bound: "bound",
   selected: "selected",
+  hit: "hit",
+};
+
+// A diverging ring that expands and fades on a loop, drawn behind a lit
+// exercise target — the "react now" cue (a spinner would read as loading).
+const PING_MS = 1200;
+
+const RadarPing = () => {
+  const t = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(t, {
+        toValue: 1,
+        duration: PING_MS,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [t]);
+  return (
+    <Animated.View
+      pointerEvents="none"
+      testID="dot-ping"
+      style={[
+        styles.ping,
+        {
+          opacity: t.interpolate({ inputRange: [0, 1], outputRange: [0.55, 0] }),
+          transform: [
+            { scale: t.interpolate({ inputRange: [0, 1], outputRange: [1, 2.1] }) },
+          ],
+        },
+      ]}
+    />
+  );
 };
 
 /**
@@ -147,11 +210,13 @@ const AnimatedDot = memo(({ visual }: { visual: SpotVisual }) => {
         ]}
       />
       {/* Glyphs sit above the fade overlay so they appear with the new state:
-          a spinner while the spot is prompted, a check once it is bound. */}
+          a spinner while a pairing spot is prompted (loading), a radar ping on
+          a lit exercise target (react now), a check on bound/hit. */}
       {toRef.current === "active" && (
         <ActivityIndicator testID="dot-spinner" size="small" color={colors.text} />
       )}
-      {toRef.current === "bound" && (
+      {toRef.current === "armed" && <RadarPing />}
+      {(toRef.current === "bound" || toRef.current === "hit") && (
         <View testID="dot-check" style={styles.dotGlyph}>
           <CheckIcon />
         </View>
@@ -199,11 +264,14 @@ export const CourtMap = ({
           hitSlop={HIT_SLOP}
           testID={`spot-${i}-${spots[i]}`}
           accessibilityLabel={`${SPOT_NAMES[i]} spot, ${A11Y_STATE[spots[i]]}`}
-          accessibilityState={{ selected: spots[i] !== "off" }}
+          accessibilityState={{ disabled: !onPressSpot, selected: spots[i] !== "off" }}
           onPress={() => onPressSpot?.(i)}
           style={[
             styles.hit,
-            { left: p.x * (MAP_W - HIT), top: p.y * (MAP_H - HIT) },
+            {
+              left: INSET + p.x * (MAP_W - HIT - 2 * INSET),
+              top: INSET + p.y * (MAP_H - HIT - 2 * INSET),
+            },
           ]}
         >
           <AnimatedDot visual={spots[i]} />
@@ -273,6 +341,15 @@ const styles = StyleSheet.create({
   dotGlyph: {
     alignItems: "center",
     justifyContent: "center",
+  },
+  // Expanding radar ring behind a lit exercise target.
+  ping: {
+    position: "absolute",
+    width: DOT,
+    height: DOT,
+    borderRadius: DOT / 2,
+    borderWidth: 2,
+    borderColor: colors.accent,
   },
   // The old-color layer covers the base including its border (-1 offsets, so
   // its diameter is DOT + 2 and its radius must match — a hardcoded radius
