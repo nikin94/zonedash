@@ -1,9 +1,9 @@
 import { memo, useLayoutEffect, useRef } from "react";
 import { ActivityIndicator, Animated, StyleSheet, View } from "react-native";
 
+import { DOT, type SpotVisual } from "../../helpers/court";
 import { alpha, colors } from "../../theme";
 import { CheckIcon } from "../Icons";
-import { DOT, type SpotVisual } from "./geometry";
 import { RadarPing } from "./RadarPing";
 
 // Fill + outline per state. "off" fades to a zero-alpha fill (outline only)

@@ -6,8 +6,10 @@ import type { PairingProgress } from "../../ble/contract";
 import type { CentralTransport } from "../../ble/transport";
 import { AppText } from "../../components/AppText";
 import { ConfirmModal } from "../../components/ConfirmModal";
+import { CourtMap } from "../../components/CourtMap";
 import { CustomPressable } from "../../components/CustomPressable";
-import { CourtMap, SPOT_NAMES, type SpotVisual } from "../../components/CourtMap";
+import { SPOT_NAMES } from "../../domain/spot";
+import { type SpotVisual } from "../../helpers/court";
 import { colors, glowShadow } from "../../theme";
 
 /** Wheel choices for "how many targets". */

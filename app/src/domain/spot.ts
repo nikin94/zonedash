@@ -19,6 +19,39 @@
  * inverse the map render already does).
  */
 
+/** Human names for the canonical spots, for prompts and screen readers. */
+export const SPOT_NAMES = [
+  "net left",
+  "net centre",
+  "net right",
+  "mid right",
+  "back right",
+  "back centre",
+  "back left",
+  "mid left",
+] as const;
+
+/**
+ * Canonical spot geometry as normalised (x, y) in [0, 1], NET at the TOP — the
+ * same layout the HUB75 panel draws (display-ui.md "layout map"), so the phone
+ * and the LED display always light the same dot. Clockwise from net-left:
+ *   0 ─ 1 ─ 2   ← net line
+ *   7       3
+ *   6 ─ 5 ─ 4   ← back line
+ * A view (CourtMap, SpotIcon) scales these to pixels; the numbers themselves
+ * are a spot fact, not a render detail.
+ */
+export const SPOT_XY = [
+  { x: 0, y: 0 },
+  { x: 0.5, y: 0 },
+  { x: 1, y: 0 },
+  { x: 1, y: 0.5 },
+  { x: 1, y: 1 },
+  { x: 0.5, y: 1 },
+  { x: 0, y: 1 },
+  { x: 0, y: 0.5 },
+] as const;
+
 export const SPOT_ROWS = ["F", "M", "B"] as const; // front (net) / mid / back
 export const SPOT_COLS = ["L", "C", "R"] as const; // left / centre / right
 
@@ -35,7 +68,7 @@ export interface CanonicalSpot {
 export type SpotKey = `${SpotRow}${SpotCol}`;
 
 /**
- * Canonical spot per geometry index — CourtMap SPOT_XY order, clockwise from
+ * Canonical spot per geometry index — SPOT_XY order (above), clockwise from
  * net-left. The mid row has only L/R; its centre (MC) is the court's info
  * block, so eight spots, not nine.
  */

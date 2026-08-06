@@ -1,20 +1,12 @@
 import { type ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
 
+import { SPOT_NAMES, SPOT_XY } from "../../domain/spot";
+import { HIT, HIT_SLOP, INSET, MAP_H, MAP_W, type SpotVisual } from "../../helpers/court";
 import { colors } from "../../theme";
 import { AppText } from "../AppText";
 import { CustomPressable } from "../CustomPressable";
 import { AnimatedDot } from "./AnimatedDot";
-import {
-  HIT,
-  HIT_SLOP,
-  INSET,
-  MAP_H,
-  MAP_W,
-  SPOT_NAMES,
-  SPOT_XY,
-  type SpotVisual,
-} from "./geometry";
 
 // Screen-reader wording per state — the label must carry it, since fill and
 // glyph are the only visual differentiators between the states.

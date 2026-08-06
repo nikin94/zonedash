@@ -1,7 +1,7 @@
 import { StyleSheet, View, type ViewStyle } from "react-native";
 
+import { SPOT_XY } from "../../domain/spot";
 import { colors } from "../../theme";
-import { SPOT_XY } from "./geometry";
 
 // Glyph geometry — a small self-contained box, independent of the full map.
 const ICON = 22; // glyph box side

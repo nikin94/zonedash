@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "react";
 import { Animated, Easing, StyleSheet } from "react-native";
 
+import { DOT } from "../../helpers/court";
 import { colors } from "../../theme";
-import { DOT } from "./geometry";
 
 // A diverging ring that expands and fades on a loop, drawn behind a lit
 // exercise target — the "react now" cue (a spinner would read as loading).

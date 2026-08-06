@@ -8,15 +8,11 @@ import type {
   SessionState,
 } from "../../ble/transport";
 import { AppText } from "../../components/AppText";
-import {
-  CourtMap,
-  SpotIcon,
-  SPOT_CODES,
-  SPOT_NAMES,
-  type SpotVisual,
-} from "../../components/CourtMap";
+import { CourtMap, SpotIcon } from "../../components/CourtMap";
 import { CustomPressable } from "../../components/CustomPressable";
 import { msOptions, WheelField } from "../../components/WheelField";
+import { SPOT_CODES, SPOT_NAMES } from "../../domain/spot";
+import { type SpotVisual } from "../../helpers/court";
 import { type DrillSettings } from "../../state/AppState";
 import { colors } from "../../theme";
 
