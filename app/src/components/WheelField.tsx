@@ -160,8 +160,8 @@ const styles = StyleSheet.create({
     top: -((WHEEL_H - PILL_H) / 2 + PAD_V + 1),
     left: -1, // border compensation — wheel width matches the pill width
     paddingVertical: PAD_V,
-    // Button-matched chrome: black fill, same border and rounding, soft white
-    // glow so the values separate from the dark background.
+    // Button-matched chrome: page fill, same border and rounding, soft drop
+    // shadow so the values lift off the page.
     backgroundColor: colors.background,
     borderWidth: 1,
     borderColor: colors.border,

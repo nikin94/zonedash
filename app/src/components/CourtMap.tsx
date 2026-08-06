@@ -85,8 +85,8 @@ const DOT = 38; // visible dot diameter — one size for every state
 const INSET = (HIT - DOT) / 2;
 
 // Fill + outline per state. "off" fades to a zero-alpha fill (outline only)
-// instead of snapping away. "active" (pairing) is a neutral dark fill under a
-// spinner — it means "loading". "armed" (a lit exercise target) is a bright
+// instead of snapping away. "active" (pairing) is a neutral surface fill under
+// a spinner — it means "loading". "armed" (a lit exercise target) is a bright
 // accent fill under a radar ping — it means "react now", never a spinner.
 const DOT_STYLE: Record<SpotVisual, { fill: string; ring: string }> = {
   off: { fill: alpha(colors.border, 0), ring: colors.border },

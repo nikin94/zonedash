@@ -1,4 +1,4 @@
-import { DarkTheme, NavigationContainer } from "@react-navigation/native";
+import { DefaultTheme, NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { StatusBar } from "expo-status-bar";
 
@@ -13,9 +13,9 @@ import { colors } from "./src/theme";
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const theme = {
-  ...DarkTheme,
+  ...DefaultTheme,
   colors: {
-    ...DarkTheme.colors,
+    ...DefaultTheme.colors,
     background: colors.background,
     card: colors.background,
     text: colors.text,
@@ -47,7 +47,7 @@ const App = () => (
         <Stack.Screen name="Settings" component={SettingsScreen} />
       </Stack.Navigator>
     </NavigationContainer>
-    <StatusBar style="light" />
+    <StatusBar style="dark" />
   </AppStateProvider>
 );
 

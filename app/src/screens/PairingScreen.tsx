@@ -498,8 +498,8 @@ const styles = StyleSheet.create({
     left: "50%",
     marginLeft: -(WHEEL_W / 2 + 1), // half width + border
     paddingVertical: WHEEL_PAD_V,
-    // Button-matched chrome: black fill, same border and full rounding, with a
-    // soft white glow so the digits separate from the dark background.
+    // Button-matched chrome: page fill, same border and full rounding, with a
+    // soft drop shadow so the digits lift off the page.
     backgroundColor: colors.background,
     borderWidth: 1,
     borderColor: colors.border,

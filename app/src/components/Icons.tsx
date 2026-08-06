@@ -57,7 +57,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.textMuted,
     justifyContent: "center",
   },
-  // Dark fill + outline matching the tracks, so the knob reads as a ring in
+  // Page fill + outline matching the tracks, so the knob reads as a ring in
   // the same tone as the rest of the icon.
   knob: {
     position: "absolute",
@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     height: 2.5,
     borderRadius: 1.25,
-    backgroundColor: colors.background, // dark on the emerald bound fill
+    backgroundColor: colors.background, // page color on the emerald bound fill
   },
   checkBarShort: {
     width: 7,

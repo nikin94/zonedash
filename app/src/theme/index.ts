@@ -1,24 +1,27 @@
 /**
- * ZoneDash dark theme — the single source for every color in the app.
+ * ZoneDash light theme — the single source for every color in the app. Built
+ * for high contrast in bright rooms (courts, gyms): a white page, near-black
+ * text, strong outlines, and saturated status colors that read under glare.
  * Components must pull from here; no inline hex values in styles.
  */
 export const colors = {
-  background: "#0a0a0a", // app + button/dropdown fill
-  surface: "#18181b", // pressed states, active section pill, prompted dot
-  surfaceAlt: "#27272a", // wheel selection band
-  border: "#3f3f46",
-  text: "#fafafa",
-  textSecondary: "#a1a1aa", // labels, headings
+  background: "#ffffff", // app + button/dropdown fill
+  surface: "#f4f4f5", // pressed states, neutral active pill, prompted dot
+  surfaceAlt: "#e4e4e7", // wheel selection band
+  border: "#a1a1aa", // strong outlines — visible under glare
+  text: "#18181b", // near-black primary text
+  textSecondary: "#52525b", // labels, headings
   textMuted: "#71717a", // hints, inactive chips, idle indicator
-  accent: "#818cf8", // selection (path steps, open pill border)
-  accentSurface: "#1e1b4b", // active pill fill
-  accentText: "#e0e7ff",
-  success: "#34d399", // bound dots, done text, connected indicator
-  warning: "#fbbf24", // awaiting-confirm dot
-  danger: "#f87171", // errors, error indicator
-  dangerBorder: "#7f1d1d", // destructive confirm button
-  dim: "#52525b", // available court dots
-  glow: "#fff", // floating-chrome shadow
+  accent: "#4f46e5", // selection (path steps, armed dots, open pill border)
+  accentSurface: "#eef2ff", // active pill fill (pale indigo tint)
+  accentText: "#3730a3", // text/label on accentSurface
+  success: "#059669", // bound/hit dots, done text, connected indicator
+  warning: "#d97706", // awaiting-confirm dot — amber-600 reads on white
+  danger: "#dc2626", // errors, error indicator
+  dangerBorder: "#dc2626", // destructive confirm button
+  dim: "#a1a1aa", // available court dots — filled, visible under glare
+  shadow: "#000", // floating-chrome drop shadow
+  scrim: "#000", // modal dim base (used at partial alpha)
 } as const;
 
 /** hex (#rgb or #rrggbb) → rgba string, for styles that need an explicit
@@ -30,11 +33,12 @@ export const alpha = (hex: string, a: number): string => {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 };
 
-/** Soft white glow shared by floating chrome (wheel dropdown, confirm card). */
+/** Soft drop shadow shared by floating chrome (wheel dropdown, menu, confirm
+ *  card) to lift it off the white page. */
 export const glowShadow = {
   elevation: 8, // Android stacking
-  shadowColor: colors.glow,
-  shadowOpacity: 0.18,
-  shadowRadius: 10,
-  shadowOffset: { width: 0, height: 0 },
+  shadowColor: colors.shadow,
+  shadowOpacity: 0.15,
+  shadowRadius: 12,
+  shadowOffset: { width: 0, height: 4 },
 } as const;

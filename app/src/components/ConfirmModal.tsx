@@ -53,7 +53,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
-    backgroundColor: alpha(colors.background, 0.7),
+    // A dark dim over the light page so the card pops and the background reads
+    // as inactive (a same-color scrim would just wash the screen out).
+    backgroundColor: alpha(colors.scrim, 0.5),
   },
   card: {
     backgroundColor: colors.background,
