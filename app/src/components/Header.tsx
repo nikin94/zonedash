@@ -252,7 +252,7 @@ const styles = StyleSheet.create({
     left: -1000,
     right: -1000,
   },
-  // Chrome-matched to the wheel dropdown: black fill, same border, soft glow.
+  // Chrome-matched to the wheel dropdown: page fill, same border, soft shadow.
   menu: {
     position: "absolute",
     top: 50,
