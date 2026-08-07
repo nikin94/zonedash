@@ -8,8 +8,12 @@ import { colors } from "../../theme";
 // exercise target — the "react now" cue (a spinner would read as loading).
 const PING_MS = 1200;
 
-/** Expanding radar ring behind a lit exercise target (the "armed" dot state). */
-export const RadarPing = () => {
+/**
+ * Expanding radar ring drawn behind a dot. Used two ways: a bright accent ping
+ * on a lit exercise target ("armed" — react now), and a soft dim breath on the
+ * unbound pairing spots ("pulse" — tap here). `color` picks between them.
+ */
+export const RadarPing = ({ color = colors.accent }: { color?: string }) => {
   const t = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     const loop = Animated.loop(
@@ -30,6 +34,7 @@ export const RadarPing = () => {
       style={[
         styles.ping,
         {
+          borderColor: color,
           opacity: t.interpolate({ inputRange: [0, 1], outputRange: [0.55, 0] }),
           transform: [
             { scale: t.interpolate({ inputRange: [0, 1], outputRange: [1, 2.1] }) },
@@ -47,6 +52,6 @@ const styles = StyleSheet.create({
     height: DOT,
     borderRadius: DOT / 2,
     borderWidth: 2,
-    borderColor: colors.accent,
+    // borderColor comes from the `color` prop above.
   },
 });

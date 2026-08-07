@@ -17,6 +17,7 @@ enum class CmdType : uint8_t {
   Empty,   // blank / whitespace-only line — no-op
   Pair,    // open a pairing round for N targets
   Extend,  // pairing: grow the round to N targets, keeping existing binds
+  Finish,  // pairing: end the round early at the current bound count
   Spot,    // pairing: pick the court spot (0..7) for the next bind
   Undo,    // pairing: unbind the last slot and re-prompt it
   Nodes,   // list paired targets

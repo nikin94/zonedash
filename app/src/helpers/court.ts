@@ -10,7 +10,8 @@ import { Dimensions } from "react-native";
 /** Visual state of one canonical spot on the map. */
 export type SpotVisual =
   | "off" // faint outline — a potential location, nothing assigned
-  | "available" // pairing round waiting for the operator to pick this (or any) spot
+  | "available" // a tappable but resting spot (e.g. a paired spot on the drill map)
+  | "pulse" // pairing round: an unbound spot inviting a tap — a soft radar breath
   | "active" // pairing prompt ("press here") — in-progress spinner, not a color
   | "armed" // exercise run: target lit, waiting for the athlete — radar ping
   | "confirm" // candidate tapped once, awaiting the confirm tap

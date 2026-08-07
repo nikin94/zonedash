@@ -65,6 +65,13 @@ class PairingRound {
   // true if the target count changed.
   bool extend(uint8_t num_positions);
 
+  // Finish an in-progress round early at however many slots are already bound:
+  // trims the target down to the bound count so the round reads as done, keeping
+  // every existing bind. The operator's "good enough, stop here" path — the
+  // complement of extend (which only grows). No-op (returns false) on an idle
+  // round or with nothing bound yet; a mid-prompt candidate is dropped.
+  bool finish();
+
   bool active() const { return target_ > 0 && map_.count < target_; }
   bool done() const { return target_ > 0 && map_.count >= target_; }
   // Slot awaiting a bind (== bound count while running), or -1 when done/idle.

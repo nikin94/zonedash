@@ -429,3 +429,44 @@ test("path mode follows the authored sequence", async () => {
   const hits = await dump;
   expect(hits.map((h) => h.position)).toEqual([2, 0, 5]);
 });
+
+test("finishPairing ends a round early at the current bound count, keeping binds", async () => {
+  const t = new MockCentralTransport({ latencyMs: 0, tapDelayMs: 20 });
+  const p = t.connect();
+  await jest.runAllTimersAsync();
+  await p;
+  const events = record(t);
+
+  await t.startPairing(8);
+  await jest.runAllTimersAsync();
+  await t.selectPairingSpot(0);
+  await jest.runAllTimersAsync();
+  await t.selectPairingSpot(2);
+  await jest.runAllTimersAsync();
+
+  await t.finishPairing();
+  const last = events.filter((e) => e.kind === "pairing").pop() as Extract<
+    StatusEvent,
+    { kind: "pairing" }
+  >;
+  // Trimmed to the two bound spots and marked done — binds untouched.
+  expect(last.progress).toMatchObject({
+    total: 2,
+    boundSpots: [0, 2],
+    done: true,
+  });
+  const lastSession = events.filter((e) => e.kind === "session").pop();
+  expect(lastSession).toMatchObject({ state: "idle", targetsOnline: 2 });
+});
+
+test("finishPairing refuses with nothing bound or no round", async () => {
+  const t = make();
+  const p = t.connect();
+  await jest.runAllTimersAsync();
+  await p;
+
+  await expect(t.finishPairing()).rejects.toThrow("no pairing round");
+  await t.startPairing(4);
+  await jest.runAllTimersAsync();
+  await expect(t.finishPairing()).rejects.toThrow("nothing bound");
+});

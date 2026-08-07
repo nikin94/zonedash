@@ -13,6 +13,9 @@ import { RadarPing } from "./RadarPing";
 const DOT_STYLE: Record<SpotVisual, { fill: string; ring: string }> = {
   off: { fill: alpha(colors.border, 0), ring: colors.border },
   available: { fill: colors.dim, ring: alpha(colors.border, 0) },
+  // Same resting fill as "available" — the breathing ring (below) is what sets
+  // a pulsing pairing spot apart, so it reads as "tap here" while binding.
+  pulse: { fill: colors.dim, ring: alpha(colors.border, 0) },
   active: { fill: colors.surface, ring: colors.border },
   armed: { fill: colors.accent, ring: alpha(colors.border, 0) },
   confirm: { fill: colors.warning, ring: alpha(colors.border, 0) },
@@ -90,6 +93,7 @@ export const AnimatedDot = memo(({ visual }: { visual: SpotVisual }) => {
         <ActivityIndicator testID="dot-spinner" size="small" color={colors.text} />
       )}
       {toRef.current === "armed" && <RadarPing />}
+      {toRef.current === "pulse" && <RadarPing color={colors.textMuted} />}
       {(toRef.current === "bound" || toRef.current === "hit") && (
         <View testID="dot-check" style={styles.dotGlyph}>
           <CheckIcon />

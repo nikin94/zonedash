@@ -1,4 +1,3 @@
-import WheelPicker from "@quidone/react-native-wheel-picker";
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 
 import App from "./App";
@@ -23,19 +22,20 @@ const connect = async () => {
 };
 
 // Pairs two targets (spots 0 and 2) on the pairing surface — connect() already
-// revealed it. A completed round waits out the handoff, then the drill controls
+// revealed it. A round opens at the max; place two, then Finish early (with its
+// confirm). A completed round waits out the handoff, then the drill controls
 // replace the pairing UI under the same court.
 const pairTwo = async () => {
-  fireEvent.press(screen.getByTestId("count-pill"));
-  const picker = screen.UNSAFE_getByType(WheelPicker);
-  act(() => picker.props.onValueChanged({ item: { value: 2, label: "2" } }));
   fireEvent.press(screen.getByText("Start pairing"));
   await act(() => jest.runAllTimersAsync());
-  fireEvent.press(screen.getByTestId("spot-0-available"));
+  fireEvent.press(screen.getByTestId("spot-0-pulse"));
   await act(() => jest.runAllTimersAsync());
-  fireEvent.press(screen.getByTestId("spot-2-available"));
+  fireEvent.press(screen.getByTestId("spot-2-pulse"));
+  await act(() => jest.runAllTimersAsync());
+  fireEvent.press(screen.getByTestId("finish-pairing"));
+  fireEvent.press(screen.getAllByText("Finish")[1]); // the confirm's action
   await act(async () => {
-    await jest.runAllTimersAsync(); // last bind + the 700 ms handoff → drill
+    await jest.runAllTimersAsync(); // finish → done + the 700 ms handoff → drill
   });
 };
 
@@ -48,14 +48,13 @@ test("renders the disconnected surface — an idle court and a connect hint", as
   expect(screen.queryAllByTestId(/spot-\d-off/)).toHaveLength(8); // court is present, idle
 });
 
-// Connecting turns the court into the pairing surface — the count picker lives
-// inside the court now, not above it.
-test("connecting reveals the pairing surface with the count inside the court", async () => {
+// Connecting turns the court into the pairing surface — Start pairing over the
+// court, no count picker (a round opens at the max and Finish trims it).
+test("connecting reveals the pairing surface", async () => {
   await renderApp();
   await connect();
   expect(screen.getByText("mock")).toBeTruthy(); // connected chip label
-  expect(screen.getByText("Targets")).toBeTruthy();
-  expect(screen.getByTestId("count-pill")).toBeTruthy();
+  expect(screen.queryByTestId("count-pill")).toBeNull();
   expect(screen.getByText("Start pairing")).toBeTruthy();
 });
 

@@ -115,6 +115,18 @@ test("armed shows the radar ping and no spinner", () => {
   expect(screen.queryAllByTestId("dot-spinner")).toHaveLength(0);
 });
 
+// A pulsing pairing spot ("pulse") breathes with the same radar ping (a softer
+// color), inviting a tap — and never shows the spinner.
+test("pulse breathes with the radar ping and no spinner", () => {
+  const spots = [...allOff];
+  spots[0] = "pulse";
+  render(<CourtMap spots={spots} />);
+
+  expect(screen.getByTestId("spot-0-pulse")).toBeTruthy();
+  expect(screen.getByTestId("dot-ping")).toBeTruthy();
+  expect(screen.queryAllByTestId("dot-spinner")).toHaveLength(0);
+});
+
 // Drill-run flash: a hit flash is green with a check (same glyph as
 // bound). Misses don't exist in the app — no timeout ever goes on the wire.
 test("hit flashes with a check", () => {

@@ -13,6 +13,7 @@ import { AnimatedDot } from "./AnimatedDot";
 const A11Y_STATE: Record<SpotVisual, string> = {
   off: "empty",
   available: "available",
+  pulse: "tap to place a target here",
   active: "press here",
   armed: "target lit, react",
   confirm: "awaiting confirm",

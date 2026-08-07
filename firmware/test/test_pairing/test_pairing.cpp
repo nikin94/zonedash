@@ -147,6 +147,37 @@ static void test_extend_clears_candidate() {
   ZD_CHECK(p.on_tap(B) == PairingRound::Tap::Bound);
 }
 
+// finish() ends a round early at the current bound count, keeping every bind.
+static void test_finish_early() {
+  PairingRound p;
+  ZD_CHECK(!p.finish()); // idle — nothing to finish
+
+  p.begin(8);
+  ZD_CHECK(!p.finish()); // nothing bound yet
+  bind(p, A);
+  bind(p, B);
+  ZD_CHECK(p.active());
+  ZD_CHECK(p.finish());          // stop here at 2 of 8
+  ZD_CHECK(p.done());
+  ZD_CHECK(!p.active());
+  ZD_EQ(p.map().count, 2);       // binds kept
+  ZD_EQ(p.map().position_of(A), 0);
+  ZD_EQ(p.map().position_of(B), 1);
+  ZD_CHECK(!p.finish());         // already done — no-op
+}
+
+// finish() drops a pending (unconfirmed) candidate, like extend/undo.
+static void test_finish_clears_candidate() {
+  PairingRound p;
+  p.begin(4);
+  bind(p, A);
+  ZD_CHECK(p.on_tap(B) == PairingRound::Tap::Await); // B is a candidate
+  ZD_CHECK(p.finish());                              // stop at 1
+  ZD_CHECK(p.done());
+  ZD_EQ(p.map().count, 1);
+  ZD_EQ(p.map().position_of(B), -1); // the candidate never bound
+}
+
 static void test_undo() {
   PairingRound p;
   p.begin(3);
@@ -205,6 +236,8 @@ int main() {
   ZD_RUN(test_extend_keeps_binds);
   ZD_RUN(test_extend_guards);
   ZD_RUN(test_extend_clears_candidate);
+  ZD_RUN(test_finish_early);
+  ZD_RUN(test_finish_clears_candidate);
   ZD_RUN(test_undo);
   ZD_RUN(test_clamp);
   ZD_RUN(test_restart);
