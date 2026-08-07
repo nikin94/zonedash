@@ -1,5 +1,5 @@
-import { act, render, screen } from "@testing-library/react-native";
-import { Animated } from "react-native";
+import { act, fireEvent, render, screen } from "@testing-library/react-native";
+import { Animated, StyleSheet } from "react-native";
 
 import { type SpotVisual } from "../../helpers/court";
 import { CourtMap } from "./CourtMap";
@@ -148,4 +148,38 @@ test("SpotIcon builds the court fragment from the spot geometry", () => {
 
   rerender(<SpotIcon spot={3} />); // MR mid side → one side line
   expect(screen.getByTestId("spot-icon-3").children).toHaveLength(2);
+});
+
+// The rotate control only appears when the parent supplies a toggle, reflects
+// the current orientation, and fires the toggle on press.
+test("rotate control: hidden without a toggle, reflects and fires it when given", () => {
+  const { rerender } = render(<CourtMap spots={allOff} />);
+  expect(screen.queryByTestId("court-rotate")).toBeNull();
+
+  const onToggleFlip = jest.fn();
+  rerender(<CourtMap spots={allOff} onToggleFlip={onToggleFlip} />);
+  const btn = screen.getByTestId("court-rotate");
+  expect(btn.props.accessibilityState.selected).toBe(false);
+
+  fireEvent.press(btn);
+  expect(onToggleFlip).toHaveBeenCalledTimes(1);
+
+  rerender(<CourtMap spots={allOff} flipped onToggleFlip={onToggleFlip} />);
+  expect(screen.getByTestId("court-rotate").props.accessibilityState.selected).toBe(true);
+});
+
+// A flip mirrors WHERE each dot is drawn (180°) but never WHICH spot it is:
+// net-left (spot 0, top-left) lands where back-right (spot 4) sat, still as spot 0.
+test("flipped mirrors a dot's position, not its identity", () => {
+  const pos = (i: number) => {
+    const s = StyleSheet.flatten(screen.getByTestId(`spot-${i}-off`).props.style);
+    return { left: s.left, top: s.top };
+  };
+
+  const { rerender } = render(<CourtMap spots={allOff} />);
+  const backRightNormal = pos(4);
+
+  rerender(<CourtMap spots={allOff} flipped />);
+  expect(pos(0)).toEqual(backRightNormal); // drawn where back-right was
+  expect(screen.getByTestId("spot-0-off")).toBeTruthy(); // still reported as spot 0
 });

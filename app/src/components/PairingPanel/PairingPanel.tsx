@@ -32,7 +32,16 @@ const ERROR_SLOT_H = 18;
  * bound so far. No pairing state is owned here — the central drives the round;
  * this only mirrors its Status events.
  */
-export const PairingPanel = ({ transport }: { transport: CentralTransport }) => {
+export const PairingPanel = ({
+  transport,
+  flipped,
+  onToggleFlip,
+}: {
+  transport: CentralTransport;
+  /** Court view orientation + its toggle, threaded to the map (see CourtMap). */
+  flipped?: boolean;
+  onToggleFlip?: () => void;
+}) => {
   const [progress, setProgress] = useState<PairingProgress | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -144,7 +153,12 @@ export const PairingPanel = ({ transport }: { transport: CentralTransport }) => 
 
   return (
     <View style={styles.panel}>
-      <CourtMap spots={visuals} onPressSpot={choosing ? pickSpot : undefined}>
+      <CourtMap
+        spots={visuals}
+        onPressSpot={choosing ? pickSpot : undefined}
+        flipped={flipped}
+        onToggleFlip={onToggleFlip}
+      >
         <>
           {/* Every slot has a FIXED footprint — the text area, the error line,
               and the action rows keep their size across all round phases, so

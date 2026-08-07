@@ -7,3 +7,4 @@ export { SlidersIcon } from "./SlidersIcon";
 export { CloseIcon } from "./CloseIcon";
 export { CheckIcon } from "./CheckIcon";
 export { UndoIcon } from "./UndoIcon";
+export { RotateIcon } from "./RotateIcon";
