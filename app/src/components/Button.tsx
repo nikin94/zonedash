@@ -81,7 +81,7 @@ export const Button = ({
 
 const styles = StyleSheet.create({
   base: {
-    borderRadius: 999,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.background,

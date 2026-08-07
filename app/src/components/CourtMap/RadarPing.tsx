@@ -30,7 +30,7 @@ export const RadarPing = ({ color = colors.accent }: { color?: string }) => {
             {
               scale: pulseClock.interpolate({
                 inputRange: [0, 1],
-                outputRange: [1, 2.1],
+                outputRange: [1, 1.7],
               }),
             },
           ],

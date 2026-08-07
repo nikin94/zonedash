@@ -26,13 +26,13 @@ export const MAP_H = Math.round(MAP_W * 1.09);
 export const HIT = 56; // pressable hit box; the visible dot is smaller
 export const HIT_SLOP = 8; // extra forgiveness around each spot
 export const DOT = 44; // visible dot diameter — one size for every state
-// Push the whole spot grid further off the field edges than the bare
-// hit-box centring would (was (HIT-DOT)/2), so bigger targets keep clear of
-// the court lines.
-export const INSET = 16;
-// Padding around the centre info/controls block. It is deliberately ~1.5×
-// narrower than the old block (which cleared HIT+24 = 76 px each side): a
-// tighter block frees the perimeter for the larger, further-inset targets.
-// Derived from MAP_W so the ratio holds across phone widths.
-const CENTRE_CONTENT = Math.round((MAP_W - 2 * 76) / 1.5);
+// Push the whole spot grid off the field edges a little more than the bare
+// hit-box centring would (was (HIT-DOT)/2 = 6), keeping the bigger targets off
+// the court lines while still sitting close to the border.
+export const INSET = 10;
+// Padding around the centre info/controls block. It is deliberately narrower
+// than the old block (which cleared HIT+24 = 76 px each side): a tighter block
+// frees the perimeter for the larger targets, but wide enough that the Cancel +
+// Undo row fits on one line. Derived from MAP_W so the ratio holds across widths.
+const CENTRE_CONTENT = Math.round((MAP_W - 2 * 76) / 1.3);
 export const CENTRE_PAD = Math.round((MAP_W - CENTRE_CONTENT) / 2);
