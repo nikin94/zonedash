@@ -1,4 +1,3 @@
-import WheelPicker from "@quidone/react-native-wheel-picker";
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 
 import App from "./App";
@@ -23,19 +22,20 @@ const connect = async () => {
 };
 
 // Pairs two targets (spots 0 and 2) on the pairing surface — connect() already
-// revealed it. A completed round waits out the handoff, then the drill controls
+// revealed it. A round opens at the max; place two, then Finish early (with its
+// confirm). A completed round waits out the handoff, then the drill controls
 // replace the pairing UI under the same court.
 const pairTwo = async () => {
-  fireEvent.press(screen.getByTestId("count-pill"));
-  const picker = screen.UNSAFE_getByType(WheelPicker);
-  act(() => picker.props.onValueChanged({ item: { value: 2, label: "2" } }));
-  fireEvent.press(screen.getByText("Start pairing"));
+  fireEvent.press(screen.getByTestId("start-pairing"));
   await act(() => jest.runAllTimersAsync());
-  fireEvent.press(screen.getByTestId("spot-0-available"));
+  fireEvent.press(screen.getByTestId("spot-0-pulse"));
   await act(() => jest.runAllTimersAsync());
-  fireEvent.press(screen.getByTestId("spot-2-available"));
+  fireEvent.press(screen.getByTestId("spot-2-pulse"));
+  await act(() => jest.runAllTimersAsync());
+  fireEvent.press(screen.getByTestId("finish-pairing"));
+  fireEvent.press(screen.getAllByText("Finish")[1]); // the confirm's action
   await act(async () => {
-    await jest.runAllTimersAsync(); // last bind + the 700 ms handoff → drill
+    await jest.runAllTimersAsync(); // finish → done + the 700 ms handoff → drill
   });
 };
 
@@ -48,15 +48,14 @@ test("renders the disconnected surface — an idle court and a connect hint", as
   expect(screen.queryAllByTestId(/spot-\d-off/)).toHaveLength(8); // court is present, idle
 });
 
-// Connecting turns the court into the pairing surface — the count picker lives
-// inside the court now, not above it.
-test("connecting reveals the pairing surface with the count inside the court", async () => {
+// Connecting turns the court into the pairing surface — Start pairing over the
+// court, no count picker (a round opens at the max and Finish trims it).
+test("connecting reveals the pairing surface", async () => {
   await renderApp();
   await connect();
   expect(screen.getByText("mock")).toBeTruthy(); // connected chip label
-  expect(screen.getByText("Targets")).toBeTruthy();
-  expect(screen.getByTestId("count-pill")).toBeTruthy();
-  expect(screen.getByText("Start pairing")).toBeTruthy();
+  expect(screen.queryByTestId("count-pill")).toBeNull();
+  expect(screen.getByTestId("start-pairing")).toBeTruthy();
 });
 
 // A completed round doesn't navigate — the same court stays put and the drill
@@ -68,9 +67,11 @@ test("a completed round reveals the drill controls under the court", async () =>
 
   expect(screen.getByText("Random")).toBeTruthy();
   expect(screen.getByText("Start")).toBeTruthy();
-  expect(screen.getByTestId("repair-button")).toBeTruthy();
-  // Pairing UI is gone — the surface swapped in place, no leftover pairing text.
-  expect(screen.queryByText("Start pairing")).toBeNull();
+  // Re-pair now lives in the chip menu (not under the court), so it isn't
+  // visible until the menu is opened.
+  expect(screen.queryByTestId("repair-button")).toBeNull();
+  // Pairing UI is gone — the surface swapped in place, no leftover pairing UI.
+  expect(screen.queryByTestId("start-pairing")).toBeNull();
 });
 
 // The dev shortcut binds every target at once, then runs through the same
@@ -86,20 +87,62 @@ test("the dev complete-pairing shortcut reveals the drill controls", async () =>
   expect(screen.getByText("Start")).toBeTruthy();
 });
 
-// Re-pair is a control under the court; it returns to the pairing surface
-// without dropping the link.
-test("re-pair from the controls returns to the pairing surface", async () => {
+// Re-pair lives in the chip menu (next to Disconnect); behind a confirm, it
+// returns to the pairing surface without dropping the link.
+test("re-pair from the chip menu confirms, then returns to the pairing surface", async () => {
   await renderApp();
   await connect();
   await pairTwo();
   expect(screen.getByText("Random")).toBeTruthy();
 
+  // The menu item only arms the confirm — the layout is still up behind it.
+  fireEvent.press(screen.getByTestId("status-chip")); // open the chip menu
   fireEvent.press(screen.getByTestId("repair-button"));
+  expect(screen.getByTestId("repair-confirm")).toBeTruthy();
+  expect(screen.getByText("Random")).toBeTruthy(); // not re-paired yet
+
+  // Keep going backs out with the layout intact.
+  fireEvent.press(screen.getByText("Keep going"));
+  expect(screen.queryByTestId("repair-confirm")).toBeNull();
+  expect(screen.getByText("Random")).toBeTruthy();
+
+  // Confirming Re-pair opens the pairing surface.
+  fireEvent.press(screen.getByTestId("status-chip"));
+  fireEvent.press(screen.getByTestId("repair-button"));
+  fireEvent.press(screen.getByText("Re-pair"));
   await act(async () => {
     await jest.runAllTimersAsync();
   });
-  expect(screen.getByText("Start pairing")).toBeTruthy(); // pairing surface again
+  expect(screen.getByTestId("start-pairing")).toBeTruthy(); // pairing surface again
   expect(screen.queryByText("Random")).toBeNull();
+});
+
+// Regression: the pairing→drill handoff must re-arm for EVERY round, not just
+// the first. The timer's null-guard once stayed set after round one, so a
+// second round (via Re-pair) finished but never revealed the drill controls —
+// the operator was stranded on the pairing surface. Reachable by the shipped
+// Re-pair gesture, previously uncovered.
+test("a second round after Re-pair still hands off to the drill controls", async () => {
+  await renderApp();
+  await connect();
+  await pairTwo(); // first round → drill controls
+  expect(screen.getByText("Random")).toBeTruthy();
+
+  // Re-pair (confirmed) back to the pairing surface.
+  fireEvent.press(screen.getByTestId("status-chip"));
+  fireEvent.press(screen.getByTestId("repair-button"));
+  fireEvent.press(screen.getByText("Re-pair"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+  expect(screen.getByTestId("start-pairing")).toBeTruthy();
+  expect(screen.queryByText("Random")).toBeNull();
+
+  // Second round completes → the handoff fires again → drill controls return.
+  await pairTwo();
+  expect(screen.getByText("Random")).toBeTruthy();
+  expect(screen.getByText("Start")).toBeTruthy(); // drill's Start, not pairing's
+  expect(screen.queryByTestId("start-pairing")).toBeNull();
 });
 
 test("the settings gear opens the settings modal — no timeout setting exists", async () => {
@@ -153,7 +196,7 @@ test("an outside tap closes the chip menu without acting", async () => {
   expect(screen.getByTestId("chip-menu")).toBeTruthy();
   fireEvent.press(screen.getByTestId("chip-menu-backdrop"));
   expect(screen.queryByTestId("chip-menu")).toBeNull();
-  expect(screen.getByText("Start pairing")).toBeTruthy(); // still the pairing surface
+  expect(screen.getByTestId("start-pairing")).toBeTruthy(); // still the pairing surface
 });
 
 // Regression: pairedSpots is an app-side cache of state that lives on the
@@ -174,7 +217,7 @@ test("a disconnect clears the paired layout — reconnect returns to pairing", a
   await connect();
 
   // Back on the pairing surface with a clean map — no phantom drill controls.
-  expect(screen.getByText("Start pairing")).toBeTruthy();
+  expect(screen.getByTestId("start-pairing")).toBeTruthy();
   expect(screen.queryByText("Random")).toBeNull();
   expect(screen.queryAllByTestId(/spot-\d-bound/)).toHaveLength(0);
 });

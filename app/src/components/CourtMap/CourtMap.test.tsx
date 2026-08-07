@@ -90,29 +90,39 @@ test("a mass change (Start pairing) fades each dot exactly once, natively driven
   expect(screen.getAllByTestId(/spot-\d-available/)).toHaveLength(8);
 });
 
-// State glyphs: the prompted spot carries a spinner (in-progress, not a
-// color), a bound spot carries a check mark; static picks carry neither.
-test("active shows a spinner, bound shows a check, selected shows neither", () => {
+// State glyphs: the prompted spot ("active") breathes with the radar ping —
+// "press this one now" — a bound spot carries a check mark; static picks carry
+// neither.
+test("active breathes with the ping, bound shows a check, selected shows neither", () => {
   const spots = [...allOff];
   spots[0] = "active";
   spots[1] = "bound";
   spots[2] = "selected";
   render(<CourtMap spots={spots} />);
 
-  expect(screen.getAllByTestId("dot-spinner")).toHaveLength(1);
+  expect(screen.getAllByTestId("dot-ping")).toHaveLength(1); // the prompted spot
   expect(screen.getAllByTestId("dot-check")).toHaveLength(1);
   expect(screen.getByTestId("spot-2-selected")).toBeTruthy();
 });
 
-// A lit exercise target ("armed") carries the radar ping, never the pairing
-// spinner — a spinner would read as loading, not "react now".
-test("armed shows the radar ping and no spinner", () => {
+// A lit exercise target ("armed") carries the radar ping — "react now".
+test("armed shows the radar ping", () => {
   const spots = [...allOff];
   spots[0] = "armed";
   render(<CourtMap spots={spots} />);
 
   expect(screen.getByTestId("dot-ping")).toBeTruthy();
-  expect(screen.queryAllByTestId("dot-spinner")).toHaveLength(0);
+});
+
+// A pulsing pairing spot ("pulse") breathes with the same radar ping (a softer
+// color), inviting a tap.
+test("pulse breathes with the radar ping", () => {
+  const spots = [...allOff];
+  spots[0] = "pulse";
+  render(<CourtMap spots={spots} />);
+
+  expect(screen.getByTestId("spot-0-pulse")).toBeTruthy();
+  expect(screen.getByTestId("dot-ping")).toBeTruthy();
 });
 
 // Drill-run flash: a hit flash is green with a check (same glyph as

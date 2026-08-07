@@ -1,65 +1,49 @@
-import WheelPicker from "@quidone/react-native-wheel-picker";
 import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import type { PairingProgress } from "../../ble/contract";
 import type { CentralTransport } from "../../ble/transport";
-import { AppText } from "../AppText";
-import { ConfirmModal } from "../ConfirmModal";
-import { CourtMap } from "../CourtMap";
-import { CustomPressable } from "../CustomPressable";
 import { SPOT_NAMES } from "../../domain/spot";
 import { type SpotVisual } from "../../helpers/court";
-import { colors, glowShadow } from "../../theme";
+import { colors } from "../../theme";
+import { AppText } from "../AppText";
+import { Button } from "../Button";
+import { ConfirmModal } from "../ConfirmModal";
+import { CourtMap } from "../CourtMap";
+import { UndoIcon } from "../Icons";
 
-/** Wheel choices for "how many targets". */
-const WHEEL_DATA = Array.from({ length: 8 }, (_, i) => ({
-  value: i + 1,
-  label: String(i + 1),
-}));
-
-const WHEEL_ITEM_H = 36;
-const WHEEL_VISIBLE = 3;
-const WHEEL_H = WHEEL_ITEM_H * WHEEL_VISIBLE;
-const WHEEL_W = 48; // barely wider than the pill — single digits need no more
-const WHEEL_PAD_V = 6; // matches the button's small vertical padding
-const PILL_H = 28;
+/** Every layout can bind up to this many targets; a round opens at the max and
+ *  Finish trims it to however many the operator actually placed. */
+const MAX_TARGETS = 8;
 
 // Fixed footprints for the court-centre info block, so phase changes never
 // shift the layout: the tallest status text is 3 lines, the error is 1 line,
-// and every action row is one button tall (empty slot when Undo is hidden).
+// and the action rows keep their size across every round phase.
 const TEXT_SLOT_H = 60; // 3 lines at lineHeight 20
 const ERROR_SLOT_H = 18;
-const BUTTON_H = 48; // fingertip-sized; explicit so hidden slots match exactly
 
 /**
- * Pairing round UI (display-ui.md screen 2, phone side). The count wheel only
- * sets HOW MANY targets get bound; WHERE each one stands is chosen during the
- * round — the operator taps a court spot on the map, the central unit lights
- * that same spot on the LED panel, and a two-tap confirm on the physical
- * target binds it. Spots are free-form (e.g. 3 targets all on the left side).
- * Status text and the action button live in the centre of the court, so the
- * operator's eyes stay on the map instead of jumping around the layout.
- * No pairing state is owned here — the central unit drives the round; this
- * only mirrors its Status events.
+ * Pairing round UI (display-ui.md screen 2, phone side). There is no count to
+ * pick: a round opens at the max and the operator places targets one at a time
+ * by tapping a court spot — the central unit lights that same spot on the LED
+ * panel, and a two-tap confirm on the physical target binds it. Unbound spots
+ * breathe (pulse) to invite the next tap. The operator stops when done: binding
+ * all 8 completes the round automatically; Finish ends it early at whatever is
+ * bound so far. No pairing state is owned here — the central drives the round;
+ * this only mirrors its Status events.
  */
-export const PairingPanel = ({
-  transport,
-}: {
-  transport: CentralTransport;
-}) => {
-  const [total, setTotal] = useState(8);
-  const [wheelOpen, setWheelOpen] = useState(false);
-  // A new count picked AFTER a completed round — held until the operator
-  // confirms discarding the finished pairing.
-  const [pendingTotal, setPendingTotal] = useState<number | null>(null);
+export const PairingPanel = ({ transport }: { transport: CentralTransport }) => {
   const [progress, setProgress] = useState<PairingProgress | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Destructive actions confirm first — Cancel discards the whole round, Finish
+  // ends it with some spots still unpaired.
+  const [cancelAsk, setCancelAsk] = useState(false);
+  const [finishAsk, setFinishAsk] = useState(false);
 
-  // Link loss is deliberately NOT handled here: App only mounts this panel
-  // while connected, so on a drop the whole panel unmounts in the same commit
-  // and App's status row shows the reason — a local handler could never paint.
+  // Link loss is deliberately NOT handled here: MainScreen only mounts this
+  // panel while connected, so on a drop the whole panel unmounts in the same
+  // commit — a local handler could never paint.
   useEffect(() => {
     const unsub = transport.onStatus((e) => {
       if (e.kind === "pairing") {
@@ -72,67 +56,26 @@ export const PairingPanel = ({
 
   const done = progress !== null && progress.done;
 
-  // onValueChanged fires only when the scroll SETTLES (the lib emits
-  // onValueChanging for intermediate passes) — so a fling 8→4 lands on 4,
-  // not on the first value crossed.
-  const onWheelValue = (value: number) => {
-    if (value === total) return; // settling on the unchanged value keeps it open
-    setWheelOpen(false);
-    if (done) {
-      // A completed map is at stake — confirm before discarding it.
-      setPendingTotal(value);
-      return;
-    }
-    setTotal(value);
-  };
-
-  // Confirmed: apply the new count and drop back to idle — the operator
-  // starts the fresh round themselves.
-  const confirmCountChange = () => {
-    if (pendingTotal !== null) setTotal(pendingTotal);
-    setPendingTotal(null);
-    setProgress(null);
-    setError(null);
-  };
-
-  // Growing a completed map doesn't have to reset it: ExtendPairing keeps the
-  // bound targets and resumes the round for the extra ones.
-  const extendRound = () => {
-    if (pendingTotal === null) return;
-    const target = pendingTotal;
-    setPendingTotal(null);
-    setError(null);
-    setTotal(target);
-    setRunning(true);
-    transport.extendPairing(target).catch((err: unknown) => {
-      setRunning(false);
-      setError(err instanceof Error ? err.message : "extend failed");
-    });
-  };
-
   const start = () => {
     setError(null);
     setProgress(null);
-    setWheelOpen(false);
     setRunning(true);
-    transport.startPairing(total).catch((err: unknown) => {
+    transport.startPairing(MAX_TARGETS).catch((err: unknown) => {
       setRunning(false);
       setError(err instanceof Error ? err.message : "pairing failed");
     });
   };
 
-  // DEV/TEST shortcut — open a round and bind every target at once, skipping
-  // the per-spot tapping. Wired only when the transport exposes the helper
-  // (the mock does; real BLE won't), so the affordance disappears with the
-  // real link.
+  // DEV/TEST shortcut — open a round and bind every target at once, skipping the
+  // per-spot tapping. Wired only when the transport exposes the helper (the mock
+  // does; real BLE won't), so the affordance disappears with the real link.
   const devComplete = () => {
     if (!transport.completePairingNow) return;
     setError(null);
     setProgress(null);
-    setWheelOpen(false);
     setRunning(true);
     transport
-      .startPairing(total)
+      .startPairing(MAX_TARGETS)
       .then(() => transport.completePairingNow!())
       .catch((err: unknown) => {
         setRunning(false);
@@ -140,9 +83,24 @@ export const PairingPanel = ({
       });
   };
 
-  // Correction path: unbind the most recent target and reopen its pick. From
-  // a completed round this resumes it, so the map/flow states keep flowing
-  // from the central's events — the panel owns nothing.
+  // Stop the round early at the current bound count, keeping every bind.
+  const finish = () => {
+    setFinishAsk(false);
+    setError(null);
+    transport.finishPairing().catch((err: unknown) => {
+      setError(err instanceof Error ? err.message : "finish failed");
+    });
+  };
+
+  // Abort the whole round — nothing is kept.
+  const cancel = () => {
+    setCancelAsk(false);
+    setRunning(false);
+    setProgress(null);
+    transport.stopSession().catch(() => {});
+  };
+
+  // Correction path: unbind the most recent target and reopen its pick.
   const undo = () => {
     setError(null);
     setRunning(true);
@@ -152,21 +110,12 @@ export const PairingPanel = ({
     });
   };
 
-  // Escape hatch for a round that never progresses (a real BLE write can be
-  // acked while Status notifications never arrive) — never trap the operator.
-  const cancel = () => {
-    setRunning(false);
-    setProgress(null);
-    transport.stopSession().catch(() => {});
-  };
-
-  // Round phases: "choosing" — waiting for the operator's map tap;
-  // "prompting" — a spot is lit, waiting for the physical target's taps.
+  // Round phases: "choosing" — waiting for the operator's map tap; "prompting"
+  // — a spot is lit, waiting for the physical target's taps.
   const choosing =
     running && progress !== null && !done && progress.currentSpot === null;
   const prompting =
     running && progress !== null && !done && progress.currentSpot !== null;
-  const confirming = pendingTotal !== null;
 
   const pickSpot = (i: number) => {
     if (!choosing || progress === null || progress.boundSpots.includes(i))
@@ -180,90 +129,36 @@ export const PairingPanel = ({
     if (progress.currentSpot === i) {
       return progress.awaitingConfirm ? "confirm" : "active";
     }
-    // Idle spots stay dim for the WHOLE round (not just the choosing phase):
-    // dipping them to "off" while a prompt is up made every bind read as a
-    // double blink and dropped the spatial context mid-prompt.
-    return running && !done ? "available" : "off";
+    // Unbound spots breathe to invite the next tap — but ONLY while choosing
+    // (no spot prompted). Once a target is being placed the rest go static so
+    // the eye stays on the one prompt; they resume pulsing the moment it binds
+    // (the check appears) and the round is choosing again. Off once done.
+    if (!running || done) return "off";
+    return progress.currentSpot === null ? "pulse" : "available";
   });
 
   const boundCount = progress?.boundSpots.length ?? 0;
+  // Undo and Finish are only offered between binds (never mid-prompt, matching
+  // the central's refusal) and once at least one target is bound.
+  const canCorrect = choosing && boundCount > 0;
 
   return (
     <View style={styles.panel}>
       <CourtMap spots={visuals} onPressSpot={choosing ? pickSpot : undefined}>
         <>
-          {/* The count picker lives inside the court, above the status text,
-                so the whole pairing UI reads on one surface. The wheel drops
-                down as an absolute overlay anchored on the pill. */}
-          <View style={styles.headerRow}>
-            <AppText
-              size={12}
-              color={colors.textSecondary}
-              style={styles.heading}
-            >
-              Targets
-            </AppText>
-            <View style={styles.pillAnchor}>
-              <CustomPressable
-                noFeedback
-                disabled={running || confirming}
-                testID="count-pill"
-                accessibilityLabel={`${total} targets, tap to change`}
-                onPress={() => setWheelOpen((v) => !v)}
-                style={[styles.pill, wheelOpen && styles.pillActive]}
-              >
-                <AppText
-                  weight="600"
-                  color={wheelOpen ? colors.accentText : colors.text}
-                >
-                  {total}
-                </AppText>
-              </CustomPressable>
-              {wheelOpen && !running && (
-                <>
-                  {/* Oversized invisible backdrop: any tap outside the
-                        dropdown dismisses it, even when the settled value
-                        didn't change. */}
-                  <CustomPressable
-                    noFeedback
-                    testID="wheel-backdrop"
-                    accessibilityLabel="Close count picker"
-                    onPress={() => setWheelOpen(false)}
-                    style={styles.wheelBackdrop}
-                  />
-                  <View testID="count-wheel" style={styles.wheelDropdown}>
-                    <WheelPicker
-                      value={total}
-                      itemHeight={WHEEL_ITEM_H}
-                      visibleItemCount={WHEEL_VISIBLE}
-                      width={WHEEL_W}
-                      data={WHEEL_DATA}
-                      onValueChanged={({ item }) => onWheelValue(item.value)}
-                      itemTextStyle={styles.wheelText}
-                      overlayItemStyle={styles.wheelOverlay}
-                    />
-                  </View>
-                </>
-              )}
-            </View>
-          </View>
-
-          {/* Every slot below has a FIXED footprint — the text area, the
-                error line, and both button rows keep their size across all
-                round phases, so nothing shifts as states change. */}
+          {/* Every slot has a FIXED footprint — the text area, the error line,
+              and the action rows keep their size across all round phases, so
+              nothing shifts as states change. */}
           <View testID="status-slot" style={styles.textSlot}>
             {choosing ? (
               <AppText center size={16} weight="600" style={styles.slotText}>
-                Tap the map where target {boundCount + 1} of {progress.total}{" "}
-                stands
+                Tap the map to place target {boundCount + 1}
               </AppText>
             ) : prompting ? (
               <AppText center size={16} weight="600" style={styles.slotText}>
                 {progress.awaitingConfirm
                   ? "Press again to confirm"
-                  : `Press the ${SPOT_NAMES[progress.currentSpot!]} target (${
-                      boundCount + 1
-                    }/${progress.total})`}
+                  : `Press the ${SPOT_NAMES[progress.currentSpot!]} target`}
               </AppText>
             ) : running ? (
               <AppText center size={16} weight="600" style={styles.slotText}>
@@ -287,7 +182,7 @@ export const PairingPanel = ({
                 color={colors.textMuted}
                 style={styles.slotText}
               >
-                Pick a count, then place each target during pairing
+                Tap Start, then place each target on the court
               </AppText>
             )}
           </View>
@@ -300,96 +195,86 @@ export const PairingPanel = ({
             )}
           </View>
 
-          {/* Actions stack vertically — primary on top, Undo always at the
-                very bottom — so the block reads top-to-bottom in one place. */}
           <View style={styles.actionCol}>
             {running ? (
-              <CustomPressable onPress={cancel} style={styles.button}>
-                <AppText center size={16} weight="600">
-                  Cancel
-                </AppText>
-              </CustomPressable>
-            ) : (
               <>
-                <CustomPressable onPress={start} style={styles.button}>
-                  <AppText center size={16} weight="600">
-                    {done ? "Re-pair" : "Start pairing"}
-                  </AppText>
-                </CustomPressable>
-                {/* DEV-only: bind everything at once so testing needn't tap
-                      each spot. Present only with the mock transport. */}
-                {transport.completePairingNow && (
-                  <CustomPressable
-                    testID="dev-complete-pairing"
-                    onPress={devComplete}
-                    style={styles.devButton}
+                {/* Cancel (destructive, red outline) sits left; Undo is a
+                    compact icon to its right, on the same row. Both Undo and
+                    Finish are shown from the start of the round and only enable
+                    once there is a bind to act on (and never mid-prompt). */}
+                <View style={styles.controlRow}>
+                  <Button
+                    testID="cancel-pairing"
+                    label="Cancel"
+                    danger
+                    onPress={() => setCancelAsk(true)}
+                    style={styles.cancelButton}
+                  />
+                  <Button
+                    testID="undo-pairing"
+                    accessibilityLabel="Undo last bind"
+                    size="icon"
+                    disabled={!canCorrect}
+                    onPress={undo}
                   >
-                    <AppText
-                      center
-                      size={13}
-                      weight="600"
-                      color={colors.textMuted}
-                    >
-                      Complete pairing (dev)
-                    </AppText>
-                  </CustomPressable>
+                    <UndoIcon />
+                  </Button>
+                </View>
+                <Button
+                  testID="finish-pairing"
+                  label="Finish"
+                  disabled={!canCorrect}
+                  onPress={() => setFinishAsk(true)}
+                />
+              </>
+            ) : done ? null : (
+              <>
+                <Button
+                  testID="start-pairing"
+                  label="Start"
+                  onPress={start}
+                />
+                {/* DEV-only: bind everything at once so testing needn't tap each
+                    spot. Present only with the mock transport. */}
+                {transport.completePairingNow && (
+                  <Button
+                    testID="dev-complete-pairing"
+                    label="Complete (dev)"
+                    dashed
+                    textColor={colors.textMuted}
+                    textSize={13}
+                    onPress={devComplete}
+                  />
                 )}
               </>
             )}
-            {/* Undo is only offered between binds (choosing) or after done —
-                  never mid-prompt, matching the central's refusal. The slot
-                  keeps the row's height when the button is hidden. */}
-            <View testID="undo-slot" style={styles.undoSlot}>
-              {(choosing || done) && boundCount > 0 && (
-                <CustomPressable
-                  accessibilityLabel="Undo last bind"
-                  onPress={undo}
-                  style={styles.button}
-                >
-                  <AppText center size={16} weight="600">
-                    Undo
-                  </AppText>
-                </CustomPressable>
-              )}
-            </View>
           </View>
         </>
       </CourtMap>
 
-      {/* Count-change confirms — shown centered on screen like every confirm. */}
-      {confirming &&
-        (pendingTotal! > (progress?.total ?? 0) ? (
-          // Growing keeps every bound target — no destructive reset needed.
-          <ConfirmModal
-            visible
-            onDismiss={() => setPendingTotal(null)}
-            testID="count-extend"
-            title={`Add ${pendingTotal! - (progress?.total ?? 0)} more ${
-              pendingTotal! - (progress?.total ?? 0) === 1
-                ? "target"
-                : "targets"
-            }?`}
-            body={`The ${progress?.total} paired ${
-              progress?.total === 1 ? "target stays" : "targets stay"
-            }`}
-            actions={[
-              { label: "No", onPress: () => setPendingTotal(null) },
-              { label: "Add", onPress: extendRound },
-            ]}
-          />
-        ) : (
-          <ConfirmModal
-            visible
-            onDismiss={() => setPendingTotal(null)}
-            testID="count-confirm"
-            title={`Change target count to ${pendingTotal}?`}
-            body="This resets the pairing"
-            actions={[
-              { label: "No", onPress: () => setPendingTotal(null) },
-              { label: "Yes", danger: true, onPress: confirmCountChange },
-            ]}
-          />
-        ))}
+      {/* Confirms — shown centered on screen like every confirm. */}
+      <ConfirmModal
+        visible={cancelAsk}
+        onDismiss={() => setCancelAsk(false)}
+        testID="cancel-confirm"
+        title="Cancel pairing?"
+        body="This discards the round and every target bound so far."
+        actions={[
+          { label: "Keep going", onPress: () => setCancelAsk(false) },
+          { label: "Cancel", danger: true, onPress: cancel },
+        ]}
+      />
+      <ConfirmModal
+        visible={finishAsk}
+        onDismiss={() => setFinishAsk(false)}
+        testID="finish-confirm"
+        title={`Finish with ${boundCount} of ${MAX_TARGETS} targets?`}
+        body="The remaining spots stay unpaired — you can re-pair later."
+        actions={[
+          { label: "Keep going", onPress: () => setFinishAsk(false) },
+          { label: "Finish", onPress: finish },
+        ]}
+      />
     </View>
   );
 };
@@ -400,74 +285,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    zIndex: 10, // the wheel dropdown must overlay the map below
-  },
   actionCol: {
     alignItems: "stretch",
     alignSelf: "stretch",
     gap: 10,
   },
-  heading: {
-    letterSpacing: 2,
-    textTransform: "uppercase",
-  },
-  pillAnchor: {
-    // Anchor for the absolute dropdown; matches the pill's footprint.
-    width: 44,
-    height: PILL_H,
-  },
-  pill: {
-    height: PILL_H,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 12,
+  controlRow: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-  },
-  pillActive: {
-    borderColor: colors.accent,
-    backgroundColor: colors.accentSurface,
-  },
-  wheelBackdrop: {
-    // Far-oversized invisible catcher — the panel doesn't clip, so this covers
-    // the whole screen and closes the wheel on any outside tap.
-    position: "absolute",
-    top: -1000,
-    bottom: -1000,
-    left: -1000,
-    right: -1000,
-  },
-  wheelDropdown: {
-    // Centered on the pill so the selected wheel item lands where the pill is
-    // (offset accounts for the vertical padding + border).
-    position: "absolute",
-    top: -((WHEEL_H - PILL_H) / 2 + WHEEL_PAD_V + 1),
-    left: "50%",
-    marginLeft: -(WHEEL_W / 2 + 1), // half width + border
-    paddingVertical: WHEEL_PAD_V,
-    // Button-matched chrome: page fill, same border and full rounding, with a
-    // soft drop shadow so the digits lift off the page.
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 999,
-    overflow: "hidden",
-    ...glowShadow,
-  },
-  // WheelPicker's itemTextStyle is a third-party style prop — AppText (and its
-  // size/color props) can't reach inside the lib's items.
-  wheelText: {
-    color: colors.text,
-    fontSize: 18,
-  },
-  wheelOverlay: {
-    backgroundColor: colors.surfaceAlt,
-    borderRadius: 8,
+    gap: 10,
   },
   // Fixed-height slots: their size never depends on which child (if any) is
   // rendered, so the info block can't jump between phases.
@@ -482,34 +308,14 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     justifyContent: "center",
   },
-  undoSlot: {
-    height: BUTTON_H,
-    alignSelf: "stretch",
-  },
   // Shared by every status-slot text: the fixed slot height assumes this
   // lineHeight regardless of which text (and size) is showing.
   slotText: {
     lineHeight: 20,
   },
-  button: {
-    height: BUTTON_H,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.background,
-    paddingHorizontal: 32,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  // Dev shortcut: dashed + muted so it never reads as a real control.
-  devButton: {
-    height: BUTTON_H,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderStyle: "dashed",
-    borderColor: colors.border,
-    paddingHorizontal: 32,
-    alignItems: "center",
-    justifyContent: "center",
+  // Cancel fills the row beside the fixed-width undo icon; the red outline is
+  // the Button `danger` prop.
+  cancelButton: {
+    flex: 1,
   },
 });

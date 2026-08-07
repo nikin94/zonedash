@@ -53,6 +53,15 @@ bool PairingRound::extend(uint8_t num_positions) {
   return true;
 }
 
+bool PairingRound::finish() {
+  // Only an active round with at least one bind can finish: idle, already done,
+  // or nothing-bound-yet all no-op.
+  if (!active() || map_.count == 0) return false;
+  target_ = map_.count; // done() now true; binds untouched
+  have_candidate_ = false;
+  return true;
+}
+
 int PairingRound::undo_last() {
   if (map_.count > 0) {
     --map_.count;

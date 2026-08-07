@@ -2,11 +2,12 @@ import { StyleSheet, View } from "react-native";
 
 import { colors } from "../theme";
 import { AppText } from "./AppText";
-import { CustomPressable } from "./CustomPressable";
+import { Button } from "./Button";
 
 /**
- * The app's confirm box — the same one used for the pairing count change.
- * Renders inline (the parent decides where: court centre, header overlay).
+ * The app's confirm box — the same one used for every destructive prompt.
+ * Renders inline (the parent decides where: a centered modal card). Its actions
+ * route through the shared Button, so they match every other control.
  */
 export const ConfirmDialog = ({
   testID,
@@ -30,15 +31,12 @@ export const ConfirmDialog = ({
     )}
     <View style={styles.row}>
       {actions.map((a) => (
-        <CustomPressable
+        <Button
           key={a.label}
+          label={a.label}
+          danger={a.danger}
           onPress={a.onPress}
-          style={[styles.button, a.danger && styles.buttonDanger]}
-        >
-          <AppText center size={16} weight="600">
-            {a.label}
-          </AppText>
-        </CustomPressable>
+        />
       ))}
     </View>
   </View>
@@ -55,17 +53,5 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     gap: 12,
-  },
-  // Fingertip-sized (~48 px tall), matching the app's action buttons.
-  button: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.background,
-    paddingHorizontal: 32,
-    paddingVertical: 14,
-  },
-  buttonDanger: {
-    borderColor: colors.dangerBorder,
   },
 });

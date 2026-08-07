@@ -85,6 +85,12 @@ export interface CentralTransport {
    *  round resumes waiting for the next selectPairingSpot. Shrinking is not a
    *  thing: which bound target would go? That path is a full re-pair. */
   extendPairing(numTargets: number): Promise<void>;
+  /** ControlOp.FinishPairing (serial `finish`, no payload). Ends an in-progress
+   *  round early at however many targets are already bound — trims the round to
+   *  the bound count and completes it, keeping every bind (PairingRound::finish).
+   *  The complement of extendPairing. Only valid between binds (not mid-prompt),
+   *  and with at least one target bound. */
+  finishPairing(): Promise<void>;
   /** ControlOp.UndoPairBind (no payload). Unbinds the most recent target and
    *  reopens its pick — the operator's correction path when the wrong physical
    *  unit got confirmed. Works on a completed round too (it resumes). Only

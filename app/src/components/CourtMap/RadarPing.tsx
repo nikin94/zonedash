@@ -1,28 +1,19 @@
-import { useEffect, useRef } from "react";
-import { Animated, Easing, StyleSheet } from "react-native";
+import { useEffect } from "react";
+import { Animated, StyleSheet } from "react-native";
 
 import { DOT } from "../../helpers/court";
 import { colors } from "../../theme";
+import { pulseClock, startPulseClock } from "./pulseClock";
 
-// A diverging ring that expands and fades on a loop, drawn behind a lit
-// exercise target — the "react now" cue (a spinner would read as loading).
-const PING_MS = 1200;
-
-/** Expanding radar ring behind a lit exercise target (the "armed" dot state). */
-export const RadarPing = () => {
-  const t = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.timing(t, {
-        toValue: 1,
-        duration: PING_MS,
-        easing: Easing.out(Easing.quad),
-        useNativeDriver: true,
-      }),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [t]);
+/**
+ * Expanding radar ring drawn behind a dot. Used two ways: a bright accent ping
+ * on a lit exercise target ("armed" — react now), and a soft dim breath on the
+ * unbound pairing spots ("pulse" — tap here). `color` picks between them. Every
+ * ring reads the same shared clock (pulseClock), so a dot that starts pulsing
+ * later — e.g. one re-opened by Undo — stays in phase with the rest.
+ */
+export const RadarPing = ({ color = colors.accent }: { color?: string }) => {
+  useEffect(() => startPulseClock(), []);
   return (
     <Animated.View
       pointerEvents="none"
@@ -30,9 +21,18 @@ export const RadarPing = () => {
       style={[
         styles.ping,
         {
-          opacity: t.interpolate({ inputRange: [0, 1], outputRange: [0.55, 0] }),
+          borderColor: color,
+          opacity: pulseClock.interpolate({
+            inputRange: [0, 1],
+            outputRange: [0.55, 0],
+          }),
           transform: [
-            { scale: t.interpolate({ inputRange: [0, 1], outputRange: [1, 2.1] }) },
+            {
+              scale: pulseClock.interpolate({
+                inputRange: [0, 1],
+                outputRange: [1, 1.7],
+              }),
+            },
           ],
         },
       ]}
@@ -47,6 +47,6 @@ const styles = StyleSheet.create({
     height: DOT,
     borderRadius: DOT / 2,
     borderWidth: 2,
-    borderColor: colors.accent,
+    // borderColor comes from the `color` prop above.
   },
 });

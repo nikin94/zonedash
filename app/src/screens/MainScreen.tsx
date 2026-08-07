@@ -50,12 +50,26 @@ export const MainScreen = () => {
     let handoff: ReturnType<typeof setTimeout> | null = null;
     const unsub = transport.onStatus((e) => {
       if (e.kind === "pairing" && e.progress.done && handoff === null) {
-        handoff = setTimeout(() => setView("drill"), HANDOFF_DELAY_MS);
+        handoff = setTimeout(() => {
+          setView("drill");
+          // Clear so a LATER completed round hands off again. Without this the
+          // guard would stay armed forever after the first round, and a second
+          // pairing (Re-pair, or reconnect) would finish but never reveal the
+          // drill controls — stuck on "Paired N". The null-guard still debounces
+          // the several done emits within one round.
+          handoff = null;
+        }, HANDOFF_DELAY_MS);
       }
       // A link drop invalidates any layout — fall back to the pairing surface
-      // for the next session (pairedSpots is cleared in AppState).
-      if (e.kind === "connection" && e.state !== "connected")
+      // for the next session (pairedSpots is cleared in AppState). Kill any
+      // in-flight handoff too, so a dropped round can't still flip to drill.
+      if (e.kind === "connection" && e.state !== "connected") {
+        if (handoff !== null) {
+          clearTimeout(handoff);
+          handoff = null;
+        }
         setView("pairing");
+      }
     });
     return () => {
       unsub();
@@ -71,14 +85,16 @@ export const MainScreen = () => {
 
   return (
     <View style={styles.screen}>
-      <Header onOpenSettings={() => setSettingsOpen(true)} />
+      <Header
+        onOpenSettings={() => setSettingsOpen(true)}
+        onRepair={() => setView("pairing")}
+      />
 
       {showDrill ? (
         <DrillPanel
           transport={transport}
           pairedSpots={pairedSpots}
           settings={settings}
-          onRepair={() => setView("pairing")}
         />
       ) : showPairing ? (
         <PairingPanel transport={transport} />

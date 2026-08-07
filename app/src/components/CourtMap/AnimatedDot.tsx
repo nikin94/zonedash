@@ -1,5 +1,5 @@
 import { memo, useLayoutEffect, useRef } from "react";
-import { ActivityIndicator, Animated, StyleSheet, View } from "react-native";
+import { Animated, StyleSheet, View } from "react-native";
 
 import { DOT, type SpotVisual } from "../../helpers/court";
 import { alpha, colors } from "../../theme";
@@ -7,12 +7,15 @@ import { CheckIcon } from "../Icons";
 import { RadarPing } from "./RadarPing";
 
 // Fill + outline per state. "off" fades to a zero-alpha fill (outline only)
-// instead of snapping away. "active" (pairing) is a neutral surface fill under
-// a spinner — it means "loading". "armed" (a lit exercise target) is a bright
-// accent fill under a radar ping — it means "react now", never a spinner.
+// instead of snapping away. "active"/"confirm" (the prompted pairing spot) and
+// "armed" (a lit exercise target) breathe with an accent radar ping — "this
+// one now"; the other unbound pairing spots ("pulse") get a soft muted breath.
 const DOT_STYLE: Record<SpotVisual, { fill: string; ring: string }> = {
   off: { fill: alpha(colors.border, 0), ring: colors.border },
   available: { fill: colors.dim, ring: alpha(colors.border, 0) },
+  // Same resting fill as "available" — the breathing ring (below) is what sets
+  // a pulsing pairing spot apart, so it reads as "tap here" while binding.
+  pulse: { fill: colors.dim, ring: alpha(colors.border, 0) },
   active: { fill: colors.surface, ring: colors.border },
   armed: { fill: colors.accent, ring: alpha(colors.border, 0) },
   confirm: { fill: colors.warning, ring: alpha(colors.border, 0) },
@@ -84,12 +87,14 @@ export const AnimatedDot = memo(({ visual }: { visual: SpotVisual }) => {
         ]}
       />
       {/* Glyphs sit above the fade overlay so they appear with the new state:
-          a spinner while a pairing spot is prompted (loading), a radar ping on
-          a lit exercise target (react now), a check on bound/hit. */}
-      {toRef.current === "active" && (
-        <ActivityIndicator testID="dot-spinner" size="small" color={colors.text} />
-      )}
-      {toRef.current === "armed" && <RadarPing />}
+          an accent radar ping on the prompted pairing spot (active/confirm —
+          "press this one now") and on a lit exercise target (armed — "react"),
+          a soft muted breath on the other unbound pairing spots (pulse — "tap
+          here"), and a check on bound/hit. */}
+      {(toRef.current === "active" ||
+        toRef.current === "confirm" ||
+        toRef.current === "armed") && <RadarPing />}
+      {toRef.current === "pulse" && <RadarPing color={colors.textMuted} />}
       {(toRef.current === "bound" || toRef.current === "hit") && (
         <View testID="dot-check" style={styles.dotGlyph}>
           <CheckIcon />

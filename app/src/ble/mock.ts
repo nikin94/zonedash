@@ -194,6 +194,22 @@ export class MockCentralTransport implements CentralTransport {
     this.after(this.latencyMs, () => this.emitPairing(false));
   }
 
+  async finishPairing(): Promise<void> {
+    this.assertConnected();
+    const p = this.pairing;
+    if (!p || this.session !== "pairing") throw new Error("no pairing round");
+    // Same mid-prompt gate as undo/extend: let an in-flight bind resolve first.
+    if (p.current !== null) throw new Error("prompt in flight");
+    if (p.bound.length === 0) throw new Error("nothing bound");
+    // Mirror PairingRound::finish: trim the target to the bound count and
+    // complete the round, keeping every bind.
+    p.total = p.bound.length;
+    this.paired = p.total;
+    this.session = "idle";
+    this.emitPairing(false); // done snapshot at the current bound count
+    this.emitSession();
+  }
+
   async undoPairing(): Promise<void> {
     this.assertConnected();
     const p = this.pairing;

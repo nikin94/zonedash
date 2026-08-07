@@ -8,8 +8,8 @@ import type {
   SessionState,
 } from "../../ble/transport";
 import { AppText } from "../AppText";
+import { Button } from "../Button";
 import { CourtMap, SpotIcon } from "../CourtMap";
-import { CustomPressable } from "../CustomPressable";
 import { msOptions, WheelField } from "../WheelField";
 import { SPOT_CODES, SPOT_NAMES } from "../../domain/spot";
 import { type SpotVisual } from "../../helpers/court";
@@ -35,7 +35,6 @@ const fmtSec = (ms: number) => `${(ms / 1000).toFixed(2)} ${UNIT}`;
 // shifts the layout.
 const TEXT_SLOT_H = 60; // 3 lines at lineHeight 20
 const ERROR_SLOT_H = 18;
-const BUTTON_H = 48;
 
 /** UI modes. The engine's `random` and `time` differ only in the stop
  *  condition (rep count vs duration window), so the UI folds them into one
@@ -88,15 +87,10 @@ export const DrillPanel = ({
   transport,
   pairedSpots,
   settings,
-  onRepair,
 }: {
   transport: CentralTransport;
   pairedSpots: number[]; // canonical spots in bind order (slot order)
   settings: DrillSettings;
-  /** Re-open the pairing surface to rebind the layout. Rendered as a control
-   *  under the court; lives in the (run-locked) config block, so a re-pair
-   *  can't be triggered mid-run. */
-  onRepair?: () => void;
 }) => {
   // Read the central's session ONCE at mount and, if a run is in progress, seed
   // state from it — so a remount over a live run reflects it (running, armed
@@ -373,21 +367,14 @@ export const DrillPanel = ({
         </View>
 
         {running ? (
-          <CustomPressable onPress={stop} style={styles.button}>
-            <AppText size={16} weight="600">
-              Stop
-            </AppText>
-          </CustomPressable>
+          <Button label="Stop" onPress={stop} style={styles.runButton} />
         ) : (
-          <CustomPressable
+          <Button
+            label={showDone ? "Run again" : "Start"}
             disabled={!canStart}
             onPress={start}
-            style={[styles.button, !canStart && styles.buttonDisabled]}
-          >
-            <AppText size={16} weight="600">
-              {showDone ? "Run again" : "Start"}
-            </AppText>
-          </CustomPressable>
+            style={styles.runButton}
+          />
         )}
       </CourtMap>
 
@@ -403,25 +390,16 @@ export const DrillPanel = ({
           </AppText>
           <View style={styles.stopChips}>
             {MODES.map((m) => (
-              <CustomPressable
+              <Button
                 key={m.key}
+                label={m.label}
+                size="small"
+                textSize={14}
                 noFeedback
-                accessibilityState={{ selected: uiMode === m.key }}
+                selected={uiMode === m.key}
+                textColor={colors.textSecondary}
                 onPress={() => setUiMode(m.key)}
-                style={[
-                  styles.modeChip,
-                  uiMode === m.key && styles.modeChipActive,
-                ]}
-              >
-                <AppText
-                  weight="600"
-                  color={
-                    uiMode === m.key ? colors.accentText : colors.textSecondary
-                  }
-                >
-                  {m.label}
-                </AppText>
-              </CustomPressable>
+              />
             ))}
           </View>
         </View>
@@ -442,27 +420,16 @@ export const DrillPanel = ({
                     { key: "time", label: "Time" },
                   ] as const
                 ).map((s) => (
-                  <CustomPressable
+                  <Button
                     key={s.key}
+                    label={s.label}
+                    size="small"
+                    textSize={14}
                     noFeedback
-                    accessibilityState={{ selected: stopBy === s.key }}
+                    selected={stopBy === s.key}
+                    textColor={colors.textSecondary}
                     onPress={() => setStopBy(s.key)}
-                    style={[
-                      styles.stopChip,
-                      stopBy === s.key && styles.modeChipActive,
-                    ]}
-                  >
-                    <AppText
-                      weight="600"
-                      color={
-                        stopBy === s.key
-                          ? colors.accentText
-                          : colors.textSecondary
-                      }
-                    >
-                      {s.label}
-                    </AppText>
-                  </CustomPressable>
+                  />
                 ))}
               </View>
             </View>
@@ -498,22 +465,18 @@ export const DrillPanel = ({
                 {path.map((s) => SPOT_NAMES[s]).join(" → ")}
               </AppText>
               <View style={styles.pathActions}>
-                <CustomPressable
+                <Button
+                  label="Undo"
+                  size="small"
+                  textSize={15}
                   onPress={() => setPath(path.slice(0, -1))}
-                  style={styles.smallButton}
-                >
-                  <AppText size={15} weight="600">
-                    Undo
-                  </AppText>
-                </CustomPressable>
-                <CustomPressable
+                />
+                <Button
+                  label="Clear"
+                  size="small"
+                  textSize={15}
                   onPress={() => setPath([])}
-                  style={styles.smallButton}
-                >
-                  <AppText size={15} weight="600">
-                    Clear
-                  </AppText>
-                </CustomPressable>
+                />
               </View>
             </>
           ) : (
@@ -521,18 +484,6 @@ export const DrillPanel = ({
               Tap paired spots on the map in the order to run
             </AppText>
           ))}
-
-        {onRepair && (
-          <CustomPressable
-            testID="repair-button"
-            onPress={onRepair}
-            style={styles.repairButton}
-          >
-            <AppText center size={14} weight="600" color={colors.textSecondary}>
-              Re-pair targets
-            </AppText>
-          </CustomPressable>
-        )}
       </View>
 
       {showDone && records !== null && (
@@ -631,18 +582,10 @@ const styles = StyleSheet.create({
     height: ERROR_SLOT_H,
     justifyContent: "center",
   },
-  button: {
-    height: BUTTON_H,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.background,
-    paddingHorizontal: 32,
-    justifyContent: "center",
+  // The in-court Start/Stop/Run again button — the shared Button owns its
+  // chrome and disabled state; this only spaces it below the status slots.
+  runButton: {
     marginTop: 8,
-  },
-  buttonDisabled: {
-    opacity: 0.4,
   },
   dimmed: {
     opacity: 0.4,
@@ -685,17 +628,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
     marginTop: 2,
   },
-  modeChip: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  modeChipActive: {
-    borderColor: colors.accent,
-    backgroundColor: colors.accentSurface,
-  },
   stopRow: {
     alignSelf: "stretch",
     flexDirection: "row",
@@ -707,13 +639,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
   },
-  stopChip: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
   paramLabel: {
     flexShrink: 1,
   },
@@ -722,22 +647,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     marginTop: 8,
-  },
-  smallButton: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-  },
-  // A quiet secondary control — the layout is set, re-pairing is the exception.
-  repairButton: {
-    alignSelf: "center",
-    marginTop: 4,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
   },
 });

@@ -177,6 +177,7 @@ ParsedCommand parse_command(const std::string& line) {
     c.position = static_cast<uint8_t>(s);
     return c;
   }
+  if (verb == "finish") { c.type = CmdType::Finish; return c; }
   if (verb == "undo")  { c.type = CmdType::Undo;  return c; }
   if (verb == "nodes") { c.type = CmdType::Nodes; return c; }
   if (verb == "start") { c.type = CmdType::Start; return c; }
