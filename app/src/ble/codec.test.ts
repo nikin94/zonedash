@@ -7,11 +7,20 @@
  * Every write leads with CONTROL_VERSION (currently 1) — the first byte of each
  * vector below.
  */
-import { CONTROL_VERSION, encodeControl } from "./codec";
+import {
+  CONTROL_VERSION,
+  decodeResults,
+  decodeStatus,
+  encodeControl,
+  RESULTS_VERSION,
+  STATUS_VERSION,
+} from "./codec";
 import { ControlOp } from "./contract";
 
 // Compare as plain number[] so a failure prints readable bytes, not a typed-array.
 const bytes = (u: Uint8Array) => Array.from(u);
+// Build a notification buffer from its literal wire bytes.
+const buf = (arr: number[]) => Uint8Array.from(arr);
 
 const V = CONTROL_VERSION; // 1 — the leading version byte on every write
 
@@ -128,4 +137,146 @@ test("a path entry at or beyond num_positions throws", () => {
       config: { mode: "path", numPositions: 4, path: [0, 4] }, // 4 is out of [0,3]
     }),
   ).toThrow(/path\[1\] out of range/);
+});
+
+// ── Status decode ────────────────────────────────────────────────────────────
+// Same golden-vector discipline in the brain->app direction: these bytes ARE the
+// contract the brain's Status encoder must produce. SV/RV are the leading version
+// byte on every notification.
+const SV = STATUS_VERSION; // 1
+const RV = RESULTS_VERSION; // 1
+
+// Decode + narrow the union to the expected kind, so a field access is typed
+// (and a wrong kind fails loudly rather than reading undefined).
+const sessionOf = (b: number[]) => {
+  const e = decodeStatus(buf(b));
+  if (e.kind !== "session") throw new Error(`expected session, got ${e.kind}`);
+  return e;
+};
+const pairingOf = (b: number[]) => {
+  const e = decodeStatus(buf(b));
+  if (e.kind !== "pairing") throw new Error(`expected pairing, got ${e.kind}`);
+  return e.progress;
+};
+
+test("session decodes state (wire order) and the online-target count", () => {
+  expect(decodeStatus(buf([SV, 1, 2, 3]))).toEqual({
+    kind: "session",
+    state: "running", // wire 2 = running (idle 0, pairing 1, running 2, done 3)
+    targetsOnline: 3,
+  });
+  expect(sessionOf([SV, 1, 0, 0]).state).toBe("idle");
+  expect(sessionOf([SV, 1, 3, 8]).state).toBe("done");
+});
+
+test("pairing decodes bound spots, the prompted spot, and the flag bits", () => {
+  // total 3, boundCount 2, currentSpot 5, flags 0 (nothing set), spots [0, 2].
+  expect(decodeStatus(buf([SV, 2, 3, 2, 5, 0, 0, 2]))).toEqual({
+    kind: "pairing",
+    progress: {
+      total: 3,
+      boundSpots: [0, 2],
+      currentSpot: 5,
+      awaitingConfirm: false,
+      done: false,
+    },
+  });
+  // currentSpot 0xFF = none; flags bit1 = done; three spots.
+  expect(pairingOf([SV, 2, 3, 3, 0xff, 0b10, 0, 2, 6])).toMatchObject({
+    currentSpot: null,
+    done: true,
+    awaitingConfirm: false,
+    boundSpots: [0, 2, 6],
+  });
+  // flags bit0 = awaitingConfirm.
+  expect(pairingOf([SV, 2, 2, 1, 4, 0b01, 4])).toMatchObject({
+    awaitingConfirm: true,
+    currentSpot: 4,
+  });
+});
+
+test("progress and resolved decode seq (u16 LE), position, and reaction", () => {
+  expect(decodeStatus(buf([SV, 3, 44, 1, 5]))).toEqual({
+    kind: "progress",
+    seq: 300, // 0x012C little-endian
+    position: 5,
+  });
+  // seq 2, position 4, flags 0 (hit), reactionMs 820 (0x0334).
+  expect(decodeStatus(buf([SV, 4, 2, 0, 4, 0, 52, 3, 0, 0]))).toEqual({
+    kind: "resolved",
+    seq: 2,
+    position: 4,
+    miss: false,
+    reactionMs: 820,
+  });
+  // flags bit0 = miss.
+  expect(decodeStatus(buf([SV, 4, 9, 0, 1, 1, 136, 19, 0, 0]))).toMatchObject({
+    miss: true,
+    reactionMs: 5000, // 0x1388
+  });
+});
+
+test("decodeStatus rejects a wrong version, an unknown kind, and a short buffer", () => {
+  expect(() => decodeStatus(buf([2, 1, 0, 0]))).toThrow(/status version/);
+  expect(() => decodeStatus(buf([SV, 99, 0, 0]))).toThrow(/unknown status kind/);
+  expect(() => decodeStatus(buf([SV, 1, 0]))).toThrow(/need 4 bytes/); // session truncated
+  expect(() => decodeStatus(buf([SV, 3, 44]))).toThrow(/need 5 bytes/); // progress truncated
+});
+
+// ── Results decode ───────────────────────────────────────────────────────────
+
+test("decodeResults reads a whole hit record, u64 timestamps and the sensor", () => {
+  const records = decodeResults(
+    buf([
+      RV,
+      1, 0, // count u16 = 1
+      // one record (29 bytes):
+      0, 0, // seq u16 = 0
+      4, // position
+      0, 0, 0, 0, 0, 0, 0, 0, // t_lit_us u64 = 0
+      32, 131, 12, 0, 0, 0, 0, 0, // t_hit_us u64 = 820000 (0xC8320)
+      52, 3, 0, 0, // reaction_ms u32 = 820
+      0, 0, 0, 0, // movement_ms u32 = 0
+      0, // flags: hit
+      0, // sensor: tof
+    ]),
+  );
+  expect(records).toEqual([
+    {
+      seq: 0,
+      position: 4,
+      tLitUs: 0,
+      tHitUs: 820000,
+      reactionMs: 820,
+      movementMs: 0,
+      miss: false,
+      sensor: "tof",
+    },
+  ]);
+});
+
+test("decodeResults handles an empty set, a miss + piezo, and multiple records", () => {
+  expect(decodeResults(buf([RV, 0, 0]))).toEqual([]); // count 0 — no records
+
+  // A miss record (flags bit0, sensor 1 = piezo), t_hit_us = 0 on a miss.
+  const miss = decodeResults(
+    buf([
+      RV, 1, 0,
+      7, 0, // seq 7
+      2, // position
+      0, 0, 0, 0, 0, 0, 0, 0, // t_lit_us
+      0, 0, 0, 0, 0, 0, 0, 0, // t_hit_us = 0 (miss)
+      136, 19, 0, 0, // reaction_ms = 5000 (timeout)
+      0, 0, 0, 0, // movement_ms
+      1, // flags: miss
+      1, // sensor: piezo
+    ]),
+  );
+  expect(miss[0]).toMatchObject({ seq: 7, miss: true, sensor: "piezo", tHitUs: 0 });
+});
+
+test("decodeResults rejects a wrong version and a truncated record", () => {
+  expect(() => decodeResults(buf([9, 0, 0]))).toThrow(/results version/);
+  // count says 1 but only a partial record follows.
+  expect(() => decodeResults(buf([RV, 1, 0, 0, 0, 4]))).toThrow(/need 32 bytes/);
 });

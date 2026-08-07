@@ -1,8 +1,11 @@
 /**
- * BLE Control-characteristic codec — the byte encoding for every command the
- * app writes to the central unit (contract.ts CHAR.control). This is the
- * app-side half of the one cross-language seam: the firmware brain must decode
- * these exact bytes (its BLE receive path is still a TODO — src/brain/main.cpp).
+ * BLE codec — the byte encoding for all three characteristics of the one
+ * cross-language seam (contract.ts CHAR): the app WRITES Control (encodeControl)
+ * and DECODES Status + Results notifications (decodeStatus / decodeResults). The
+ * firmware brain does the mirror: decode Control, encode Status/Results. Its BLE
+ * path is still a TODO (src/brain/main.cpp), so these bytes ARE the spec it must
+ * match — pinned by the golden vectors in codec.test.ts, the way protocol.h pins
+ * its ESP-NOW structs with static_asserts.
  *
  * There is no existing byte format to mirror: contract.ts only names the opcodes
  * and the payload each carries in prose, and protocol.h is the *ESP-NOW* wire
@@ -55,8 +58,9 @@
  * config silently truncates. Flagged here so it surfaces at design time, not on
  * the DK bench. (The ESP-NOW side pins its own bound via static_assert.)
  */
+import type { HitRecord } from "./contract";
 import { ControlOp } from "./contract";
-import type { DrillConfig } from "./transport";
+import type { DrillConfig, SessionState, StatusEvent } from "./transport";
 
 /** Control wire-format revision — the leading byte of every write. Bump when
  *  the byte layout changes on purpose (and update the brain's decoder). */
@@ -174,3 +178,167 @@ const encodeBody = (msg: ControlMessage): Uint8Array => {
  */
 export const encodeControl = (msg: ControlMessage): Uint8Array =>
   Uint8Array.of(CONTROL_VERSION, ...encodeBody(msg));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Notification decoders (the brain -> app direction).
+//
+// The app READS two notifying characteristics. Each notification LEADS with its
+// own version byte — same drift guard as CONTROL_VERSION — so a stale brain and
+// a newer app fail loud instead of decoding garbage. A malformed or short buffer
+// throws; the transport treats a throw as "drop this notification", never as a
+// wrongly-shaped StatusEvent handed to the UI.
+//
+// NOTE: the `connection` StatusEvent is NOT on the wire — link up/down is a
+// BLE-stack fact the transport synthesises, not something the brain notifies. So
+// decodeStatus only produces session / pairing / progress / resolved.
+//
+// Status (CHAR.status)  `[STATUS_VERSION, kind, ...payload]`, LE:
+//   Session  (1)  [1, state, targetsOnline]                   state u8, count u8
+//   Pairing  (2)  [2, total, boundCount, currentSpot, flags, ...boundSpots]
+//                   currentSpot 0xFF = none; flags bit0 awaitingConfirm, bit1 done
+//   Progress (3)  [3, seq(u16), position]                     armed target changed
+//   Resolved (4)  [4, seq(u16), position, flags, reactionMs(u32)]  flags bit0 miss
+//
+// Results (CHAR.results)  `[RESULTS_VERSION, count(u16), ...records]`:
+//   record (29 bytes, mirrors firmware HitRecord + the spliced Pressed.sensor):
+//     seq(u16) position(u8) tLitUs(u64) tHitUs(u64) reactionMs(u32)
+//     movementMs(u32) flags(u8: bit0 miss) sensor(u8: 0 tof, 1 piezo)
+
+/** Status/Results wire revisions — each notification's leading byte. Independent
+ *  of CONTROL_VERSION (separate characteristics can move separately), but bump
+ *  in lock-step with the brain's encoder for that characteristic. */
+export const STATUS_VERSION = 1;
+export const RESULTS_VERSION = 1;
+
+/** Status notification kinds (byte 1, after the version). */
+enum StatusKind {
+  Session = 1,
+  Pairing = 2,
+  Progress = 3,
+  Resolved = 4,
+}
+
+/**
+ * Wire byte -> SessionState. App-defined order (there is no firmware
+ * SessionState enum yet — the brain's BLE encoder must adopt this order). Bump
+ * STATUS_VERSION if it ever changes.
+ */
+const SESSION_STATE: readonly SessionState[] = ["idle", "pairing", "running", "done"];
+
+/** Wire byte -> sensor, matching protocol.h `enum class Sensor { ToF=0, Piezo=1 }`. */
+const SENSOR: readonly HitRecord["sensor"][] = ["tof", "piezo"];
+
+const CURRENT_SPOT_NONE = 0xff; // pairing: no spot prompted right now
+const FLAG_AWAITING = 1 << 0; // pairing flags
+const FLAG_DONE = 1 << 1;
+const FLAG_MISS = 1 << 0; // resolved / hit-record flags
+const RECORD_BYTES = 29;
+
+/** Guard a buffer is at least `n` bytes before reading `what`, else throw. */
+const need = (bytes: Uint8Array, n: number, what: string): void => {
+  if (bytes.length < n) {
+    throw new RangeError(`${what}: need ${n} bytes, got ${bytes.length}`);
+  }
+};
+
+/** Look up an enum-like table by wire byte, throwing on an unknown value rather
+ *  than yielding `undefined` that would slip into a StatusEvent. */
+const lookup = <T>(table: readonly T[], i: number, what: string): T => {
+  const v = table[i];
+  if (v === undefined) throw new RangeError(`unknown ${what} wire value: ${i}`);
+  return v;
+};
+
+/**
+ * Decode one Status-characteristic notification into the StatusEvent the UI
+ * consumes — the exact shape MockCentralTransport emits, so the BLE transport is
+ * a drop-in. Throws on a wrong version, unknown kind, or a truncated buffer.
+ */
+export const decodeStatus = (bytes: Uint8Array): StatusEvent => {
+  need(bytes, 2, "status");
+  if (bytes[0] !== STATUS_VERSION) {
+    throw new RangeError(`status version ${bytes[0]} != ${STATUS_VERSION}`);
+  }
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const kind = bytes[1];
+  switch (kind) {
+    case StatusKind.Session: {
+      need(bytes, 4, "session");
+      return {
+        kind: "session",
+        state: lookup(SESSION_STATE, bytes[2], "session state"),
+        targetsOnline: bytes[3],
+      };
+    }
+    case StatusKind.Pairing: {
+      need(bytes, 6, "pairing");
+      const total = bytes[2];
+      const boundCount = bytes[3];
+      const currentSpot = bytes[4];
+      const flags = bytes[5];
+      need(bytes, 6 + boundCount, "pairing bound spots");
+      return {
+        kind: "pairing",
+        progress: {
+          total,
+          boundSpots: Array.from(bytes.subarray(6, 6 + boundCount)),
+          currentSpot: currentSpot === CURRENT_SPOT_NONE ? null : currentSpot,
+          awaitingConfirm: (flags & FLAG_AWAITING) !== 0,
+          done: (flags & FLAG_DONE) !== 0,
+        },
+      };
+    }
+    case StatusKind.Progress: {
+      need(bytes, 5, "progress");
+      return { kind: "progress", seq: view.getUint16(2, true), position: bytes[4] };
+    }
+    case StatusKind.Resolved: {
+      need(bytes, 9, "resolved");
+      return {
+        kind: "resolved",
+        seq: view.getUint16(2, true),
+        position: bytes[4],
+        miss: (bytes[5] & FLAG_MISS) !== 0,
+        reactionMs: view.getUint32(6, true),
+      };
+    }
+    default:
+      throw new RangeError(`unknown status kind: ${kind}`);
+  }
+};
+
+/**
+ * Decode the Results characteristic into hit records — the DumpResults reply.
+ * Each record mirrors the firmware HitRecord (drill_engine.h) with the sensor
+ * the brain splices in from the ESP-NOW Pressed packet. Throws on a wrong
+ * version, a length that isn't a whole number of records, or a short buffer.
+ *
+ * tLitUs / tHitUs are u64 on the wire but returned as Number: a session's µs
+ * timestamps stay far under 2^53 (~285 years of µs), so the narrowing is exact
+ * for any real value.
+ */
+export const decodeResults = (bytes: Uint8Array): HitRecord[] => {
+  need(bytes, 3, "results header");
+  if (bytes[0] !== RESULTS_VERSION) {
+    throw new RangeError(`results version ${bytes[0]} != ${RESULTS_VERSION}`);
+  }
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const count = view.getUint16(1, true);
+  need(bytes, 3 + count * RECORD_BYTES, "results records");
+
+  const records: HitRecord[] = [];
+  for (let i = 0; i < count; i++) {
+    const o = 3 + i * RECORD_BYTES;
+    records.push({
+      seq: view.getUint16(o, true),
+      position: bytes[o + 2],
+      tLitUs: Number(view.getBigUint64(o + 3, true)),
+      tHitUs: Number(view.getBigUint64(o + 11, true)),
+      reactionMs: view.getUint32(o + 19, true),
+      movementMs: view.getUint32(o + 23, true),
+      miss: (bytes[o + 27] & FLAG_MISS) !== 0,
+      sensor: lookup(SENSOR, bytes[o + 28], "sensor"),
+    });
+  }
+  return records;
+};
