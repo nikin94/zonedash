@@ -10,6 +10,7 @@ import {
 
 import { MockCentralTransport } from "../ble/mock";
 import type { CentralTransport, ConnectionState } from "../ble/transport";
+import { loadPrefs, savePrefs } from "./prefs";
 
 /**
  * Session-wide drill settings, edited on the Settings screen and consumed by
@@ -48,10 +49,12 @@ interface AppState {
 const Ctx = createContext<AppState | null>(null);
 
 /**
- * App-wide state shared across the navigation stack: the transport seam, the
- * connection it reports, the drill settings, and the paired layout lifted from
- * pairing events. `transport` is injectable for tests; the app default is the
- * in-app mock until real BLE lands.
+ * App-wide state: the transport seam, the connection it reports, the drill
+ * settings, the paired layout lifted from pairing events, and the court view
+ * orientation. The durable prefs (settings, orientation) are hydrated from and
+ * saved to device storage (prefs.ts) so they survive a restart; the link, the
+ * layout, and the session are always fresh each launch. `transport` is
+ * injectable for tests; the app default is the in-app mock until real BLE lands.
  */
 export const AppStateProvider = ({
   transport: injected,
@@ -66,6 +69,36 @@ export const AppStateProvider = ({
   const [settings, setSettings] = useState<DrillSettings>(DEFAULT_SETTINGS);
   const [pairedSpots, setPairedSpots] = useState<number[]>([]);
   const [courtRotation, setCourtRotation] = useState(0);
+  // Persisted prefs load asynchronously, so the UI starts at defaults for a
+  // frame, then adopts the stored values. `hydrated` gates the save effect
+  // below so this initial load never echoes straight back as a redundant write
+  // (and a pre-hydration render can't persist defaults over the stored blob).
+  const [hydrated, setHydrated] = useState(false);
+
+  // Hydrate device-local prefs once on mount. Only the durable bits (settings,
+  // court orientation) — never the link, the paired layout, or the session,
+  // which are all fresh each launch.
+  useEffect(() => {
+    let cancelled = false;
+    loadPrefs().then((p) => {
+      if (cancelled) return;
+      if (p.settings) setSettings(p.settings);
+      if (typeof p.courtRotation === "number") {
+        setCourtRotation(((p.courtRotation % 4) + 4) % 4); // clamp a corrupt value to 0–3
+      }
+      setHydrated(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Persist the durable prefs whenever they change — but only after hydration,
+  // so the load above isn't clobbered by a first-render defaults write.
+  useEffect(() => {
+    if (!hydrated) return;
+    savePrefs({ settings, courtRotation });
+  }, [hydrated, settings, courtRotation]);
 
   useEffect(() => {
     const unsub = transport.onStatus((e) => {

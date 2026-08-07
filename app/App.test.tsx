@@ -1,15 +1,23 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 
 import App from "./App";
 
-beforeEach(() => jest.useFakeTimers());
+// Persisted prefs live in one process-wide store, so a test that saves an
+// orientation would otherwise leak into the next test's hydration. Clear it
+// before each so every test starts from a clean, upright default.
+beforeEach(async () => {
+  await AsyncStorage.clear();
+  jest.useFakeTimers();
+});
 afterEach(() => jest.useRealTimers());
 
 const renderApp = async () => {
-  render(<App />);
+  const utils = render(<App />);
   await act(async () => {
     await jest.runAllTimersAsync();
   });
+  return utils;
 };
 
 // The header chip connects while disconnected — the whole app lives on one
@@ -69,6 +77,22 @@ test("the court rotate control turns the view and the orientation persists acros
   fireEvent.press(rotate());
   fireEvent.press(rotate());
   expect(rotate().props.accessibilityState.selected).toBe(false);
+});
+
+// The orientation is device-local and durable: a quarter turn survives an app
+// restart (a full unmount → fresh mount, where storage is the only carry-over).
+test("court orientation persists across an app restart", async () => {
+  const first = await renderApp();
+  fireEvent.press(screen.getByTestId("court-rotate")); // 0° → 90°, persisted
+  await act(async () => {
+    await jest.runAllTimersAsync(); // let the save effect flush to storage
+  });
+  expect(screen.getByTestId("court-rotate").props.accessibilityState.selected).toBe(true);
+
+  first.unmount(); // "quit" the app — in-memory state is gone, storage remains
+  await renderApp();
+  // Rehydrated from storage: the court comes back rotated, not upright.
+  expect(screen.getByTestId("court-rotate").props.accessibilityState.selected).toBe(true);
 });
 
 // Connecting turns the court into the pairing surface — Start pairing over the
