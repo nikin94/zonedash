@@ -31,8 +31,12 @@ const A11Y_STATE: Record<SpotVisual, string> = {
   hit: "hit",
 };
 
-const STRIP_H = 22; // top/bottom net-line strip; also the rotate control's level
-const NET_GAP = 30; // top net line stops this far from the corner, clearing the icon
+const STRIP_H = 22; // top/bottom net-line strip
+const ICON_BOX = 20; // rotate control's touch box
+// The rotate control sits diagonally OUT from the court's top-right corner, an
+// equal gap in x and y — clear of both the corner dot and the (now full) net
+// line, so nothing overlaps.
+const ICON_OUT = 10;
 
 /** Rotate a normalised (x, y) by `r` clockwise quarter turns. One turn maps
  *  (x, y) → (1 − y, x); the 8 perimeter spots stay on the perimeter, so a dot
@@ -81,15 +85,15 @@ export const CourtMap = ({
   const r = (((rotation % 4) + 4) % 4);
   const edge = NET_EDGE[r];
 
-  // Horizontal net (line ─ NET ─ line) for the top/bottom edges. The top one
-  // insets its right side so the line stops clear of the rotate control.
-  const hNet = (atTop: boolean) => (
+  // Horizontal net (line ─ NET ─ line) for the top/bottom edges — a full line
+  // both ways; the rotate control sits out past the corner, so nothing to clear.
+  const hNet = (
     <View style={styles.netRow}>
       <View style={styles.netLine} />
       <AppText size={10} color={colors.textMuted} style={styles.netLabel}>
         NET
       </AppText>
-      <View style={[styles.netLine, atTop && styles.netLineIconGap]} />
+      <View style={styles.netLine} />
     </View>
   );
 
@@ -98,7 +102,7 @@ export const CourtMap = ({
       {/* Two fixed-height strips frame the court so the layout — and the rotate
           control's level — never shift. NET occupies the strip on its current
           edge; the side edges get a small rotated label in the margin. */}
-      <View style={styles.strip}>{edge === "top" && hNet(true)}</View>
+      <View style={styles.strip}>{edge === "top" && hNet}</View>
 
       <View style={styles.courtWrap}>
         {edge === "left" && (
@@ -156,7 +160,7 @@ export const CourtMap = ({
         </View>
       </View>
 
-      <View style={styles.strip}>{edge === "bottom" && hNet(false)}</View>
+      <View style={styles.strip}>{edge === "bottom" && hNet}</View>
 
       {onRotate && (
         <CustomPressable
@@ -196,10 +200,6 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 2,
     backgroundColor: colors.border,
-  },
-  // Keeps the top net line clear of the rotate control tucked in the corner.
-  netLineIconGap: {
-    marginRight: NET_GAP,
   },
   netLabel: {
     letterSpacing: 2,
@@ -248,15 +248,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  // Bare icon (no outline/fill) on the net-line level in the top-right corner —
-  // same colour as the net line. It's a control, so it never moves with the
-  // view; the top net line insets to leave it a clear gap.
+  // Bare icon (no outline/fill), same colour as the net line, carried
+  // diagonally OUT from the court's top-right corner — an equal gap up and
+  // right (see ICON_OUT), so it clears the corner dot and the full net line.
+  // Corner is at (top: STRIP_H, right edge); centre lands ICON_OUT beyond it
+  // on both axes. It's a control, so it never moves with the view.
   rotate: {
     position: "absolute",
-    top: 0,
-    right: 0,
-    height: STRIP_H,
-    width: STRIP_H,
+    top: STRIP_H - ICON_OUT - ICON_BOX / 2,
+    right: -(ICON_OUT + ICON_BOX / 2),
+    height: ICON_BOX,
+    width: ICON_BOX,
     alignItems: "center",
     justifyContent: "center",
   },
