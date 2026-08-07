@@ -71,14 +71,16 @@ export const MainScreen = () => {
 
   return (
     <View style={styles.screen}>
-      <Header onOpenSettings={() => setSettingsOpen(true)} />
+      <Header
+        onOpenSettings={() => setSettingsOpen(true)}
+        onRepair={() => setView("pairing")}
+      />
 
       {showDrill ? (
         <DrillPanel
           transport={transport}
           pairedSpots={pairedSpots}
           settings={settings}
-          onRepair={() => setView("pairing")}
         />
       ) : showPairing ? (
         <PairingPanel transport={transport} />

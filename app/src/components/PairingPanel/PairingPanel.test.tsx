@@ -49,7 +49,7 @@ test("a round opens at the max — every unbound spot pulses, inviting a tap", a
   expect(screen.queryAllByTestId(/spot-\d-pulse/)).toHaveLength(8);
 });
 
-test("placing a target: pulse → prompt (spinner) → confirm → bound", async () => {
+test("placing a target: pulse → prompt (ping) → confirm → bound", async () => {
   const t = await connectedTransport();
   render(<PairingPanel transport={t} />);
   await startRound();

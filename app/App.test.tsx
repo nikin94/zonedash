@@ -67,7 +67,9 @@ test("a completed round reveals the drill controls under the court", async () =>
 
   expect(screen.getByText("Random")).toBeTruthy();
   expect(screen.getByText("Start")).toBeTruthy();
-  expect(screen.getByTestId("repair-button")).toBeTruthy();
+  // Re-pair now lives in the chip menu (not under the court), so it isn't
+  // visible until the menu is opened.
+  expect(screen.queryByTestId("repair-button")).toBeNull();
   // Pairing UI is gone — the surface swapped in place, no leftover pairing UI.
   expect(screen.queryByTestId("start-pairing")).toBeNull();
 });
@@ -85,14 +87,15 @@ test("the dev complete-pairing shortcut reveals the drill controls", async () =>
   expect(screen.getByText("Start")).toBeTruthy();
 });
 
-// Re-pair is a control under the court; it returns to the pairing surface
-// without dropping the link.
-test("re-pair from the controls returns to the pairing surface", async () => {
+// Re-pair lives in the chip menu (next to Disconnect); it returns to the
+// pairing surface without dropping the link.
+test("re-pair from the chip menu returns to the pairing surface", async () => {
   await renderApp();
   await connect();
   await pairTwo();
   expect(screen.getByText("Random")).toBeTruthy();
 
+  fireEvent.press(screen.getByTestId("status-chip")); // open the chip menu
   fireEvent.press(screen.getByTestId("repair-button"));
   await act(async () => {
     await jest.runAllTimersAsync();

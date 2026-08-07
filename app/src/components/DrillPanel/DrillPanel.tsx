@@ -10,7 +10,6 @@ import type {
 import { AppText } from "../AppText";
 import { Button } from "../Button";
 import { CourtMap, SpotIcon } from "../CourtMap";
-import { CustomPressable } from "../CustomPressable";
 import { msOptions, WheelField } from "../WheelField";
 import { SPOT_CODES, SPOT_NAMES } from "../../domain/spot";
 import { type SpotVisual } from "../../helpers/court";
@@ -88,15 +87,10 @@ export const DrillPanel = ({
   transport,
   pairedSpots,
   settings,
-  onRepair,
 }: {
   transport: CentralTransport;
   pairedSpots: number[]; // canonical spots in bind order (slot order)
   settings: DrillSettings;
-  /** Re-open the pairing surface to rebind the layout. Rendered as a control
-   *  under the court; lives in the (run-locked) config block, so a re-pair
-   *  can't be triggered mid-run. */
-  onRepair?: () => void;
 }) => {
   // Read the central's session ONCE at mount and, if a run is in progress, seed
   // state from it — so a remount over a live run reflects it (running, armed
@@ -396,25 +390,16 @@ export const DrillPanel = ({
           </AppText>
           <View style={styles.stopChips}>
             {MODES.map((m) => (
-              <CustomPressable
+              <Button
                 key={m.key}
+                label={m.label}
+                size="small"
+                textSize={14}
                 noFeedback
-                accessibilityState={{ selected: uiMode === m.key }}
+                selected={uiMode === m.key}
+                textColor={colors.textSecondary}
                 onPress={() => setUiMode(m.key)}
-                style={[
-                  styles.modeChip,
-                  uiMode === m.key && styles.modeChipActive,
-                ]}
-              >
-                <AppText
-                  weight="600"
-                  color={
-                    uiMode === m.key ? colors.accentText : colors.textSecondary
-                  }
-                >
-                  {m.label}
-                </AppText>
-              </CustomPressable>
+              />
             ))}
           </View>
         </View>
@@ -435,27 +420,16 @@ export const DrillPanel = ({
                     { key: "time", label: "Time" },
                   ] as const
                 ).map((s) => (
-                  <CustomPressable
+                  <Button
                     key={s.key}
+                    label={s.label}
+                    size="small"
+                    textSize={14}
                     noFeedback
-                    accessibilityState={{ selected: stopBy === s.key }}
+                    selected={stopBy === s.key}
+                    textColor={colors.textSecondary}
                     onPress={() => setStopBy(s.key)}
-                    style={[
-                      styles.stopChip,
-                      stopBy === s.key && styles.modeChipActive,
-                    ]}
-                  >
-                    <AppText
-                      weight="600"
-                      color={
-                        stopBy === s.key
-                          ? colors.accentText
-                          : colors.textSecondary
-                      }
-                    >
-                      {s.label}
-                    </AppText>
-                  </CustomPressable>
+                  />
                 ))}
               </View>
             </View>
@@ -510,18 +484,6 @@ export const DrillPanel = ({
               Tap paired spots on the map in the order to run
             </AppText>
           ))}
-
-        {onRepair && (
-          <Button
-            testID="repair-button"
-            label="Re-pair targets"
-            size="small"
-            textSize={14}
-            textColor={colors.textSecondary}
-            onPress={onRepair}
-            style={styles.repairButton}
-          />
-        )}
       </View>
 
       {showDone && records !== null && (
@@ -666,17 +628,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
     marginTop: 2,
   },
-  modeChip: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  modeChipActive: {
-    borderColor: colors.accent,
-    backgroundColor: colors.accentSurface,
-  },
   stopRow: {
     alignSelf: "stretch",
     flexDirection: "row",
@@ -688,13 +639,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
   },
-  stopChip: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
   paramLabel: {
     flexShrink: 1,
   },
@@ -703,11 +647,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     marginTop: 8,
-  },
-  // A quiet secondary control — the layout is set, re-pairing is the exception.
-  // Chrome comes from Button; this only positions it.
-  repairButton: {
-    alignSelf: "center",
-    marginTop: 4,
   },
 });

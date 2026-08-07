@@ -18,8 +18,14 @@ export interface ButtonProps {
   danger?: boolean;
   /** Dashed outline — a quiet/secondary affordance (e.g. the dev shortcut). */
   dashed?: boolean;
+  /** Selected/toggle state — accent fill + border + label (Mode / length chips). */
+  selected?: boolean;
+  /** Skip the pressed-surface flash — for selection chips that carry their own
+   *  state, so a press doesn't wash their fill. */
+  noFeedback?: boolean;
   size?: ButtonSize;
-  /** Override the label colour (defaults to text, or red when `danger`). */
+  /** Override the label colour (defaults to text, or red when `danger`).
+   *  Ignored when `selected` — a selected chip always wears the accent label. */
   textColor?: string;
   textSize?: number;
   testID?: string;
@@ -29,11 +35,12 @@ export interface ButtonProps {
 }
 
 /**
- * The single button primitive every action button in the app routes through.
- * Wraps CustomPressable (pressed feedback, button role) with the shared pill
- * chrome and a real `disabled` state — greyed out and non-interactive from one
- * prop, so no call site re-implements it. Chips/toggles and header chrome are a
- * separate selection pattern and intentionally do NOT go through here.
+ * The single button primitive every action button AND selection chip in the app
+ * routes through. Wraps CustomPressable (pressed feedback, button role) with the
+ * shared chrome, a real `disabled` state (greyed out and non-interactive from
+ * one prop), and a `selected` toggle state (accent fill) — so no call site
+ * re-implements any of them. Only the header status chip stays separate (it has
+ * its own connect/connecting/error states).
  */
 export const Button = ({
   onPress,
@@ -42,6 +49,8 @@ export const Button = ({
   disabled = false,
   danger = false,
   dashed = false,
+  selected = false,
+  noFeedback = false,
   size = "regular",
   textColor,
   textSize = 16,
@@ -50,9 +59,10 @@ export const Button = ({
   style,
 }: ButtonProps) => (
   <CustomPressable
+    noFeedback={noFeedback}
     testID={testID}
     accessibilityLabel={accessibilityLabel}
-    accessibilityState={{ disabled }}
+    accessibilityState={{ disabled, selected }}
     disabled={disabled}
     onPress={onPress}
     style={[
@@ -60,6 +70,7 @@ export const Button = ({
       styles[size],
       danger && styles.danger,
       dashed && styles.dashed,
+      selected && styles.selected,
       disabled && styles.disabled,
       style,
     ]}
@@ -70,7 +81,11 @@ export const Button = ({
         numberOfLines={1}
         size={textSize}
         weight="600"
-        color={textColor ?? (danger ? colors.danger : colors.text)}
+        color={
+          selected
+            ? colors.accentText
+            : (textColor ?? (danger ? colors.danger : colors.text))
+        }
       >
         {label}
       </AppText>
@@ -89,10 +104,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  regular: { height: 48, paddingHorizontal: 14 },
-  small: { paddingHorizontal: 14, paddingVertical: 10 },
-  icon: { width: 48, height: 48 },
+  // Compact vertical footprint — the label's own line height plus a small pad,
+  // no oversized fixed height.
+  regular: { paddingVertical: 8, paddingHorizontal: 14 },
+  small: { paddingVertical: 5, paddingHorizontal: 14 },
+  icon: { width: 44, paddingVertical: 8 }, // height tracks the icon + regular pad
   danger: { borderColor: colors.danger },
   dashed: { borderStyle: "dashed" },
+  selected: { borderColor: colors.accent, backgroundColor: colors.accentSurface },
   disabled: { opacity: 0.4 },
 });

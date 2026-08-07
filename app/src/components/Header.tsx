@@ -20,17 +20,26 @@ const CHIP_LABEL: Record<ConnectionState, string> = {
 /**
  * The single app header: the title on the left, the central-unit status chip
  * and the settings gear on the right. A chip tap connects while disconnected;
- * while connected it opens a dropdown holding Disconnect (behind a confirm).
- * The gear opens the settings modal — the app has one screen, so nothing here
- * navigates.
+ * while connected it opens a dropdown holding Re-pair (only with a layout to
+ * rebind) and Disconnect (behind a confirm). The gear opens the settings modal
+ * — the app has one screen, so nothing here navigates.
  */
-export const Header = ({ onOpenSettings }: { onOpenSettings: () => void }) => {
-  const { transport, connection } = useAppState();
+export const Header = ({
+  onOpenSettings,
+  onRepair,
+}: {
+  onOpenSettings: () => void;
+  /** Re-open the pairing surface to rebind the layout. Offered in the chip
+   *  menu only once a layout exists. */
+  onRepair?: () => void;
+}) => {
+  const { transport, connection, pairedSpots } = useAppState();
   const [menuOpen, setMenuOpen] = useState(false);
   const [disconnectAsk, setDisconnectAsk] = useState(false);
 
   const connected = connection === "connected";
   const busy = connection === "connecting";
+  const paired = pairedSpots.length > 0;
 
   const onChipPress = () => {
     if (connected) {
@@ -40,6 +49,11 @@ export const Header = ({ onOpenSettings }: { onOpenSettings: () => void }) => {
     // The catch stops a routine BLE reject (Bluetooth off, not found) from
     // being unhandled; the state flip to "error" arrives via onStatus.
     transport.connect().catch(() => {});
+  };
+
+  const repair = () => {
+    setMenuOpen(false);
+    onRepair?.();
   };
 
   const askDisconnect = () => {
@@ -93,6 +107,20 @@ export const Header = ({ onOpenSettings }: { onOpenSettings: () => void }) => {
                 style={styles.menuBackdrop}
               />
               <View testID="chip-menu" style={styles.menu}>
+                {/* Re-pair rebinds the layout — only meaningful once one
+                    exists (i.e. on the drill surface). */}
+                {paired && onRepair && (
+                  <>
+                    <CustomPressable
+                      testID="repair-button"
+                      onPress={repair}
+                      style={styles.menuItem}
+                    >
+                      <AppText weight="600">Re-pair targets</AppText>
+                    </CustomPressable>
+                    <View style={styles.menuDivider} />
+                  </>
+                )}
                 <CustomPressable
                   onPress={askDisconnect}
                   style={styles.menuItem}
@@ -213,5 +241,10 @@ const styles = StyleSheet.create({
     height: 48, // fingertip-sized
     justifyContent: "center",
     paddingHorizontal: 20,
+  },
+  menuDivider: {
+    height: 1,
+    marginHorizontal: 12,
+    backgroundColor: colors.border,
   },
 });
