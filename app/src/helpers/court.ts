@@ -34,5 +34,5 @@ export const INSET = 10;
 // than the old block (which cleared HIT+24 = 76 px each side): a tighter block
 // frees the perimeter for the larger targets, but wide enough that the Cancel +
 // Undo row fits on one line. Derived from MAP_W so the ratio holds across widths.
-const CENTRE_CONTENT = Math.round((MAP_W - 2 * 76) / 1.3);
+const CENTRE_CONTENT = Math.round((MAP_W - 2 * 76) / 1.15);
 export const CENTRE_PAD = Math.round((MAP_W - CENTRE_CONTENT) / 2);

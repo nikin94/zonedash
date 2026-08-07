@@ -1,51 +1,17 @@
-import { StyleSheet, View } from "react-native";
+import Svg, { Path } from "react-native-svg";
 
 import { colors } from "../../theme";
 
-// A counter-clockwise circular arrow — the undo affordance. A 3/4 ring (the top
-// border dropped for the gap) plus a solid left-pointing arrowhead at the
-// top-left end of the gap, so the arc reads as looping back to the left = undo.
-const R = 16; // ring diameter
-const STROKE = 2;
+// Material Design "undo" glyph (Apache-2.0, material-icons `undo`) — a filled
+// arrow curving back to the left, unambiguous as undo. Authored on a 24×24
+// viewBox; the Svg scales it to `size`.
+const UNDO_PATH =
+  "M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 " +
+  "5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z";
 
-/** Circular "undo" arrow, sized for the ~44 px action buttons. */
-export const UndoIcon = () => (
-  <View style={styles.box} accessible={false}>
-    <View style={styles.ring} />
-    <View style={styles.head} />
-  </View>
+/** Undo arrow (Material icon), sized for the action buttons. */
+export const UndoIcon = ({ size = 22 }: { size?: number }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" accessibilityElementsHidden>
+    <Path d={UNDO_PATH} fill={colors.text} />
+  </Svg>
 );
-
-const styles = StyleSheet.create({
-  box: {
-    width: 20,
-    height: 20,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  // 3/4 circle: the top border is dropped, leaving a gap across the top whose
-  // ends sit at ~10:30 (top-left) and ~1:30 (top-right).
-  ring: {
-    width: R,
-    height: R,
-    borderRadius: R / 2,
-    borderWidth: STROKE,
-    borderColor: colors.text,
-    borderTopColor: "transparent",
-  },
-  // A left-pointing triangle (border trick) at the top-left end of the gap —
-  // the arrowhead the arc curls back toward. Points left = undo, not redo.
-  head: {
-    position: "absolute",
-    top: 0,
-    left: 1,
-    width: 0,
-    height: 0,
-    borderTopWidth: 4,
-    borderBottomWidth: 4,
-    borderRightWidth: 6,
-    borderTopColor: "transparent",
-    borderBottomColor: "transparent",
-    borderRightColor: colors.text,
-  },
-});

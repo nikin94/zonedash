@@ -129,9 +129,12 @@ export const PairingPanel = ({ transport }: { transport: CentralTransport }) => 
     if (progress.currentSpot === i) {
       return progress.awaitingConfirm ? "confirm" : "active";
     }
-    // Unbound spots breathe for the WHOLE active round, inviting the next tap;
-    // once the round finishes they go dark (nothing left to place here).
-    return running && !done ? "pulse" : "off";
+    // Unbound spots breathe to invite the next tap — but ONLY while choosing
+    // (no spot prompted). Once a target is being placed the rest go static so
+    // the eye stays on the one prompt; they resume pulsing the moment it binds
+    // (the check appears) and the round is choosing again. Off once done.
+    if (!running || done) return "off";
+    return progress.currentSpot === null ? "pulse" : "available";
   });
 
   const boundCount = progress?.boundSpots.length ?? 0;
@@ -236,7 +239,7 @@ export const PairingPanel = ({ transport }: { transport: CentralTransport }) => 
                 {transport.completePairingNow && (
                   <Button
                     testID="dev-complete-pairing"
-                    label="Complete pairing (dev)"
+                    label="Complete (dev)"
                     dashed
                     textColor={colors.textMuted}
                     textSize={13}

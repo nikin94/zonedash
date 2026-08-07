@@ -67,6 +67,7 @@ export const Button = ({
     {label != null ? (
       <AppText
         center
+        numberOfLines={1}
         size={textSize}
         weight="600"
         color={textColor ?? (danger ? colors.danger : colors.text)}
@@ -88,8 +89,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  regular: { height: 48, paddingHorizontal: 16 },
-  small: { paddingHorizontal: 16, paddingVertical: 10 },
+  regular: { height: 48, paddingHorizontal: 14 },
+  small: { paddingHorizontal: 14, paddingVertical: 10 },
   icon: { width: 48, height: 48 },
   danger: { borderColor: colors.danger },
   dashed: { borderStyle: "dashed" },

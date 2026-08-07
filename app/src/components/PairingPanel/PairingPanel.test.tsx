@@ -68,16 +68,28 @@ test("placing a target: pulse → prompt (spinner) → confirm → bound", async
   expect(screen.getByTestId("spot-0-bound")).toBeTruthy();
 });
 
-test("unbound spots keep pulsing while a prompt is up — no dip to off", async () => {
+test("the other spots freeze (static, not off) while a prompt is up, then pulse again once it binds", async () => {
   const t = await connectedTransport();
   render(<PairingPanel transport={t} />);
   await startRound();
 
+  // Choosing: all 8 breathe, inviting the first tap.
+  expect(screen.queryAllByTestId(/spot-\d-pulse/)).toHaveLength(8);
+
   fireEvent.press(screen.getByTestId("spot-0-pulse"));
   await act(() => jest.advanceTimersByTimeAsync(0)); // prompt phase
   expect(screen.getByTestId("spot-0-active")).toBeTruthy();
-  expect(screen.queryAllByTestId(/spot-\d-pulse/)).toHaveLength(7);
+  // Focus is on the one being placed: the other 7 go static (available), not
+  // pulsing and not dark.
+  expect(screen.queryAllByTestId(/spot-\d-pulse/)).toHaveLength(0);
+  expect(screen.queryAllByTestId(/spot-\d-available/)).toHaveLength(7);
   expect(screen.queryAllByTestId(/spot-\d-off/)).toHaveLength(0);
+
+  // Bound (check shown) → choosing again → the remaining unbound spots resume
+  // pulsing.
+  await act(() => jest.runAllTimersAsync());
+  expect(screen.getByTestId("spot-0-bound")).toBeTruthy();
+  expect(screen.queryAllByTestId(/spot-\d-pulse/)).toHaveLength(7);
 });
 
 test("Finish enables after the first bind and ends the round early, keeping binds", async () => {
