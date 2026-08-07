@@ -1,0 +1,110 @@
+{
+  "_note": "SHARED, LANGUAGE-NEUTRAL golden vectors for the BLE seam (app <-> brain). This file — NOT a TS or C++ literal — is the single source of truth for the Control/Status/Results byte layout, the way firmware/lib/protocol/protocol.h is the single source for the ESP-NOW packets. app/src/ble/codec.test.ts loads and asserts against it today; the future C++ brain-decoder test (firmware/) MUST load and assert against this SAME file. Then editing a byte here breaks BOTH language builds at once — the cross-language drift guard the monorepo exists for (docs/architecture.md 'Single monorepo'). Never transcribe these bytes into one language's test; point that test here. Every vector leads with its characteristic's version byte; bump the version fields below (and in codec.ts) in lock-step when a layout changes on purpose.",
+  "controlVersion": 1,
+  "statusVersion": 1,
+  "resultsVersion": 1,
+  "control": [
+    { "name": "startSession", "message": { "op": 1 }, "bytes": [1, 1] },
+    { "name": "stopSession", "message": { "op": 2 }, "bytes": [1, 2] },
+    { "name": "dumpResults", "message": { "op": 4 }, "bytes": [1, 4] },
+    { "name": "undoPairBind", "message": { "op": 8 }, "bytes": [1, 8] },
+    { "name": "finishPairing", "message": { "op": 10 }, "bytes": [1, 10] },
+    { "name": "startPairing.8", "message": { "op": 3, "numTargets": 8 }, "bytes": [1, 3, 8] },
+    { "name": "extendPairing.3", "message": { "op": 7, "numTargets": 3 }, "bytes": [1, 7, 3] },
+    { "name": "selectPairSpot.5", "message": { "op": 6, "spot": 5 }, "bytes": [1, 6, 5] },
+    { "name": "armLiveTarget.2", "message": { "op": 9, "position": 2 }, "bytes": [1, 9, 2] },
+    {
+      "name": "loadDrill.random",
+      "message": { "op": 5, "config": { "mode": "random", "numPositions": 8, "count": 20, "delayMs": 500 } },
+      "bytes": [1, 5, 0, 8, 20, 0, 96, 234, 0, 0, 244, 1, 0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    {
+      "name": "loadDrill.path",
+      "message": { "op": 5, "config": { "mode": "path", "numPositions": 6, "path": [2, 0, 5] } },
+      "bytes": [1, 5, 1, 6, 10, 0, 96, 234, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 2, 0, 5]
+    },
+    {
+      "name": "loadDrill.time",
+      "message": { "op": 5, "config": { "mode": "time", "numPositions": 4, "durationMs": 45000, "allowImmediateRepeat": true } },
+      "bytes": [1, 5, 3, 4, 10, 0, 200, 175, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0]
+    }
+  ],
+  "status": [
+    {
+      "name": "session.idle",
+      "bytes": [1, 1, 0, 0],
+      "event": { "kind": "session", "state": "idle", "targetsOnline": 0 }
+    },
+    {
+      "name": "session.running",
+      "bytes": [1, 1, 2, 3],
+      "event": { "kind": "session", "state": "running", "targetsOnline": 3 }
+    },
+    {
+      "name": "pairing.awaiting",
+      "bytes": [1, 2, 3, 2, 5, 1, 0, 2],
+      "event": {
+        "kind": "pairing",
+        "progress": { "total": 3, "boundSpots": [0, 2], "currentSpot": 5, "awaitingConfirm": true, "done": false }
+      }
+    },
+    {
+      "name": "pairing.done",
+      "bytes": [1, 2, 2, 2, 255, 2, 0, 2],
+      "event": {
+        "kind": "pairing",
+        "progress": { "total": 2, "boundSpots": [0, 2], "currentSpot": null, "awaitingConfirm": false, "done": true }
+      }
+    },
+    {
+      "name": "progress",
+      "bytes": [1, 3, 7, 0, 4],
+      "event": { "kind": "progress", "seq": 7, "position": 4 }
+    },
+    {
+      "name": "resolved.hit",
+      "bytes": [1, 4, 5, 0, 2, 0, 94, 1, 0, 0],
+      "event": { "kind": "resolved", "seq": 5, "position": 2, "miss": false, "reactionMs": 350 }
+    },
+    {
+      "name": "resolved.miss",
+      "bytes": [1, 4, 6, 0, 3, 1, 232, 3, 0, 0],
+      "event": { "kind": "resolved", "seq": 6, "position": 3, "miss": true, "reactionMs": 1000 }
+    }
+  ],
+  "results": [
+    { "name": "empty", "bytes": [1, 0, 0], "records": [] },
+    {
+      "name": "single.hit.tof",
+      "bytes": [
+        1, 1, 0,
+        0, 0, 2, 64, 66, 15, 0, 0, 0, 0, 0, 112, 153, 20, 0, 0, 0, 0, 0, 94, 1, 0, 0, 0, 0, 0, 0, 0, 0
+      ],
+      "records": [
+        { "seq": 0, "position": 2, "tLitUs": 1000000, "tHitUs": 1350000, "reactionMs": 350, "movementMs": 0, "miss": false, "sensor": "tof" }
+      ]
+    },
+    {
+      "name": "single.miss.piezo",
+      "bytes": [
+        1, 1, 0,
+        1, 0, 3, 128, 132, 30, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 232, 3, 0, 0, 0, 0, 0, 0, 1, 1
+      ],
+      "records": [
+        { "seq": 1, "position": 3, "tLitUs": 2000000, "tHitUs": 0, "reactionMs": 1000, "movementMs": 0, "miss": true, "sensor": "piezo" }
+      ]
+    },
+    {
+      "name": "multiple",
+      "bytes": [
+        1, 2, 0,
+        0, 0, 2, 64, 66, 15, 0, 0, 0, 0, 0, 112, 153, 20, 0, 0, 0, 0, 0, 94, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+        1, 0, 3, 128, 132, 30, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 232, 3, 0, 0, 0, 0, 0, 0, 1, 1
+      ],
+      "records": [
+        { "seq": 0, "position": 2, "tLitUs": 1000000, "tHitUs": 1350000, "reactionMs": 350, "movementMs": 0, "miss": false, "sensor": "tof" },
+        { "seq": 1, "position": 3, "tLitUs": 2000000, "tHitUs": 0, "reactionMs": 1000, "movementMs": 0, "miss": true, "sensor": "piezo" }
+      ]
+    }
+  ]
+}

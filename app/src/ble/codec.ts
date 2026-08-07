@@ -10,10 +10,15 @@
  * There is no existing byte format to mirror: contract.ts only names the opcodes
  * and the payload each carries in prose, and protocol.h is the *ESP-NOW* wire
  * (brain <-> targets), not BLE. So this file DEFINES the Control wire format.
- * The pin is the golden-vector table below (and codec.test.ts): the future
- * brain/DK decoder asserts the same bytes, the way protocol.h pins its structs
- * with static_asserts. Keep both sides in lock-step; bump CONTROL_VERSION when
- * the format moves.
+ *
+ * The pin is a SHARED, language-neutral fixture — docs/ble-vectors.json — NOT a
+ * literal in one language's test. codec.test.ts loads and asserts against it, and
+ * the future C++ brain/DK decoder test MUST load and assert against the same file,
+ * so a byte edit breaks both builds at once — the cross-language drift guard the
+ * monorepo exists for, the same one protocol.h + static_asserts give the ESP-NOW
+ * side (a shared header physically compiled into both). Keep both sides in
+ * lock-step; bump CONTROL_VERSION (and the fixture's controlVersion) when the
+ * format moves.
  *
  * Versioning — every Control write LEADS with CONTROL_VERSION, exactly as every
  * ESP-NOW packet leads with protocol.h Header.version and peek_header rejects a
@@ -173,8 +178,8 @@ const encodeBody = (msg: ControlMessage): Uint8Array => {
 
 /**
  * Encode a Control message to the bytes written to CHAR.control. Deterministic
- * and side-effect free — the golden vectors in codec.test.ts pin every case.
- * Every write leads with CONTROL_VERSION (see the versioning note above).
+ * and side-effect free — the shared golden vectors (docs/ble-vectors.json) pin
+ * every case. Every write leads with CONTROL_VERSION (see the versioning note).
  */
 export const encodeControl = (msg: ControlMessage): Uint8Array =>
   Uint8Array.of(CONTROL_VERSION, ...encodeBody(msg));
@@ -191,6 +196,12 @@ export const encodeControl = (msg: ControlMessage): Uint8Array =>
 // NOTE: the `connection` StatusEvent is NOT on the wire — link up/down is a
 // BLE-stack fact the transport synthesises, not something the brain notifies. So
 // decodeStatus only produces session / pairing / progress / resolved.
+//
+// NOTE on `miss`: these decoders faithfully carry the miss bit (resolved.miss,
+// HitRecord.miss) even though the app dropped misses UI-wide (#17, hits-only). A
+// serial/bench-driven brain with a configured timeout can still emit a miss, so
+// the decoder must not lie about the wire; the hits-only UI simply ignores it.
+// Decode faithfully, render selectively — the miss path is live, not dead code.
 //
 // Status (CHAR.status)  `[STATUS_VERSION, kind, ...payload]`, LE:
 //   Session  (1)  [1, state, targetsOnline]                   state u8, count u8
@@ -222,6 +233,14 @@ enum StatusKind {
  * Wire byte -> SessionState. App-defined order (there is no firmware
  * SessionState enum yet — the brain's BLE encoder must adopt this order). Bump
  * STATUS_VERSION if it ever changes.
+ *
+ * BLE SessionState is NOT the engine's `enum class State` (drill_engine.h) and
+ * has no 1:1 mapping: the engine's Armed/Delaying/WaitOperator all collapse to
+ * `running`, and `pairing` is a PairingRound phase the engine never sees. The
+ * brain SYNTHESISES this state from both sources — that translation table (which
+ * engine State + pairing phase -> which BLE SessionState) is documented in
+ * docs/architecture.md "BLE SessionState translation", so the brain's (TODO)
+ * encoder implements a spec, not a re-invented mapping.
  */
 const SESSION_STATE: readonly SessionState[] = ["idle", "pairing", "running", "done"];
 
