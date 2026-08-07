@@ -37,11 +37,12 @@ interface AppState {
   setSettings: (next: DrillSettings) => void;
   /** Canonical spots bound by the last completed round, in bind (slot) order. */
   pairedSpots: number[];
-  /** Court view flipped 180° — the operator moved to the other side of the hall.
-   *  Purely a display transform: spot identity (SPOT_XY / the wire) is untouched,
-   *  so it stays independent of the link and survives a re-pair or reconnect. */
-  courtFlipped: boolean;
-  toggleCourtFlip: () => void;
+  /** Court view rotation in clockwise quarter turns (0–3) — the operator moved
+   *  around the hall. Purely a display transform: spot identity (SPOT_XY / the
+   *  wire) is untouched, so it stays independent of the link and survives a
+   *  re-pair or reconnect. */
+  courtRotation: number;
+  rotateCourt: () => void;
 }
 
 const Ctx = createContext<AppState | null>(null);
@@ -64,7 +65,7 @@ export const AppStateProvider = ({
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [settings, setSettings] = useState<DrillSettings>(DEFAULT_SETTINGS);
   const [pairedSpots, setPairedSpots] = useState<number[]>([]);
-  const [courtFlipped, setCourtFlipped] = useState(false);
+  const [courtRotation, setCourtRotation] = useState(0);
 
   useEffect(() => {
     const unsub = transport.onStatus((e) => {
@@ -91,7 +92,7 @@ export const AppStateProvider = ({
     };
   }, [transport]);
 
-  const toggleCourtFlip = useCallback(() => setCourtFlipped((v) => !v), []);
+  const rotateCourt = useCallback(() => setCourtRotation((r) => (r + 1) % 4), []);
 
   const value = useMemo(
     () => ({
@@ -101,10 +102,10 @@ export const AppStateProvider = ({
       settings,
       setSettings,
       pairedSpots,
-      courtFlipped,
-      toggleCourtFlip,
+      courtRotation,
+      rotateCourt,
     }),
-    [transport, connection, connectionError, settings, pairedSpots, courtFlipped, toggleCourtFlip],
+    [transport, connection, connectionError, settings, pairedSpots, courtRotation, rotateCourt],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 };

@@ -31,95 +31,144 @@ const A11Y_STATE: Record<SpotVisual, string> = {
   hit: "hit",
 };
 
+const STRIP_H = 22; // top/bottom net-line strip; also the rotate control's level
+const NET_GAP = 30; // top net line stops this far from the corner, clearing the icon
+
+/** Rotate a normalised (x, y) by `r` clockwise quarter turns. One turn maps
+ *  (x, y) → (1 − y, x); the 8 perimeter spots stay on the perimeter, so a dot
+ *  keeps its identity while its drawn position turns with the view. */
+const rotate = (x: number, y: number, r: number) => {
+  let rx = x;
+  let ry = y;
+  for (let k = 0; k < (((r % 4) + 4) % 4); k++) {
+    const nx = 1 - ry;
+    const ny = rx;
+    rx = nx;
+    ry = ny;
+  }
+  return { x: rx, y: ry };
+};
+
+// Which court edge the NET sits on per rotation — the top row of spots turns
+// clockwise with the view: top → right → bottom → left.
+const NET_EDGE = ["top", "right", "bottom", "left"] as const;
+
 /**
  * Half-court map. Pure renderer: the parent supplies each canonical spot's
  * visual state; taps (when enabled) report the canonical spot index.
  * `children` render centered inside the court — the perimeter is all dots, so
  * the middle is free real estate for the round's status text and action.
  *
- * `flipped` rotates the VIEW 180° (the operator standing at the other end of
- * the hall): each dot is drawn at its mirrored position and the NET label moves
- * to the bottom, but the reported spot index is unchanged — orientation is a
- * display transform, never a spot-identity one. `onToggleFlip`, when given,
- * renders a small rotate control in the court's top corner.
+ * `rotation` turns the VIEW in clockwise quarter turns (0–3) — the operator
+ * moving around the hall. Each dot is drawn at its rotated position and the NET
+ * label tracks to the matching edge, but the reported spot index is unchanged:
+ * orientation is a display transform, never a spot-identity one. `onRotate`,
+ * when given, renders a small rotate control in the court's top-right corner.
  */
 export const CourtMap = ({
   spots,
   onPressSpot,
   children,
-  flipped = false,
-  onToggleFlip,
+  rotation = 0,
+  onRotate,
 }: {
   spots: SpotVisual[]; // length 8, canonical order
   onPressSpot?: (index: number) => void;
   children?: ReactNode;
-  flipped?: boolean;
-  onToggleFlip?: () => void;
+  rotation?: number;
+  onRotate?: () => void;
 }) => {
-  const net = (
+  const r = (((rotation % 4) + 4) % 4);
+  const edge = NET_EDGE[r];
+
+  // Horizontal net (line ─ NET ─ line) for the top/bottom edges. The top one
+  // insets its right side so the line stops clear of the rotate control.
+  const hNet = (atTop: boolean) => (
     <View style={styles.netRow}>
       <View style={styles.netLine} />
       <AppText size={10} color={colors.textMuted} style={styles.netLabel}>
         NET
       </AppText>
-      <View style={styles.netLine} />
+      <View style={[styles.netLine, atTop && styles.netLineIconGap]} />
     </View>
   );
 
   return (
     <View style={styles.wrap}>
-      {/* Two fixed-height strips frame the court so the layout (and the rotate
-          control's clear corner) never shifts. NET sits in the top strip by
-          default; a flip moves the whole view — and the net with it — to read
-          from the operator's new vantage. */}
-      <View style={styles.strip}>{!flipped && net}</View>
-      <View style={styles.court}>
-        {children != null && (
-          // box-none: the centre content is interactive, the empty area around
-          // it stays transparent to touches so the perimeter spots keep working.
-          <View pointerEvents="box-none" style={styles.centre}>
-            {children}
-          </View>
-        )}
-        {SPOT_XY.map((p, i) => {
-          // A flip mirrors the drawn position only — dot `i` still reports spot
-          // `i`, so the wire/identity is untouched.
-          const x = flipped ? 1 - p.x : p.x;
-          const y = flipped ? 1 - p.y : p.y;
-          return (
-            <CustomPressable
-              key={i}
-              noFeedback
-              disabled={!onPressSpot}
-              hitSlop={HIT_SLOP}
-              testID={`spot-${i}-${spots[i]}`}
-              accessibilityLabel={`${SPOT_NAMES[i]} spot, ${A11Y_STATE[spots[i]]}`}
-              accessibilityState={{ disabled: !onPressSpot, selected: spots[i] !== "off" }}
-              onPress={() => onPressSpot?.(i)}
-              style={[
-                styles.hit,
-                {
-                  left: INSET + x * (MAP_W - HIT - 2 * INSET),
-                  top: INSET + y * (MAP_H - HIT - 2 * INSET),
-                },
-              ]}
-            >
-              <AnimatedDot visual={spots[i]} />
-            </CustomPressable>
-          );
-        })}
-      </View>
-      <View style={styles.strip}>{flipped && net}</View>
+      {/* Two fixed-height strips frame the court so the layout — and the rotate
+          control's level — never shift. NET occupies the strip on its current
+          edge; the side edges get a small rotated label in the margin. */}
+      <View style={styles.strip}>{edge === "top" && hNet(true)}</View>
 
-      {onToggleFlip && (
+      <View style={styles.courtWrap}>
+        {edge === "left" && (
+          <AppText
+            size={10}
+            color={colors.textMuted}
+            style={[styles.sideNet, styles.sideNetLeft]}
+          >
+            NET
+          </AppText>
+        )}
+        {edge === "right" && (
+          <AppText
+            size={10}
+            color={colors.textMuted}
+            style={[styles.sideNet, styles.sideNetRight]}
+          >
+            NET
+          </AppText>
+        )}
+        <View style={styles.court}>
+          {children != null && (
+            // box-none: the centre content is interactive, the empty area around
+            // it stays transparent to touches so the perimeter spots keep working.
+            <View pointerEvents="box-none" style={styles.centre}>
+              {children}
+            </View>
+          )}
+          {SPOT_XY.map((p, i) => {
+            // Rotation moves the drawn position only — dot `i` still reports spot
+            // `i`, so the wire/identity is untouched.
+            const { x, y } = rotate(p.x, p.y, r);
+            return (
+              <CustomPressable
+                key={i}
+                noFeedback
+                disabled={!onPressSpot}
+                hitSlop={HIT_SLOP}
+                testID={`spot-${i}-${spots[i]}`}
+                accessibilityLabel={`${SPOT_NAMES[i]} spot, ${A11Y_STATE[spots[i]]}`}
+                accessibilityState={{ disabled: !onPressSpot, selected: spots[i] !== "off" }}
+                onPress={() => onPressSpot?.(i)}
+                style={[
+                  styles.hit,
+                  {
+                    left: INSET + x * (MAP_W - HIT - 2 * INSET),
+                    top: INSET + y * (MAP_H - HIT - 2 * INSET),
+                  },
+                ]}
+              >
+                <AnimatedDot visual={spots[i]} />
+              </CustomPressable>
+            );
+          })}
+        </View>
+      </View>
+
+      <View style={styles.strip}>{edge === "bottom" && hNet(false)}</View>
+
+      {onRotate && (
         <CustomPressable
+          noFeedback
+          hitSlop={10}
           testID="court-rotate"
           accessibilityLabel="Rotate the court view"
-          accessibilityState={{ selected: flipped }}
-          onPress={onToggleFlip}
+          accessibilityState={{ selected: r !== 0 }}
+          onPress={onRotate}
           style={styles.rotate}
         >
-          <RotateIcon />
+          <RotateIcon size={14} color={colors.border} />
         </CustomPressable>
       )}
     </View>
@@ -130,11 +179,11 @@ const styles = StyleSheet.create({
   wrap: {
     alignItems: "center",
   },
-  // Equal top/bottom strips: one carries the NET label, the other is an empty
-  // mirror, so the court never shifts vertically on a flip and the rotate
-  // control keeps a clear corner in both orientations.
+  // Equal top/bottom strips: whichever holds the NET line, the court never
+  // shifts vertically as the view rotates, and the rotate control keeps a
+  // fixed level.
   strip: {
-    height: 22,
+    height: STRIP_H,
     width: MAP_W,
     justifyContent: "center",
   },
@@ -148,8 +197,29 @@ const styles = StyleSheet.create({
     height: 2,
     backgroundColor: colors.border,
   },
+  // Keeps the top net line clear of the rotate control tucked in the corner.
+  netLineIconGap: {
+    marginRight: NET_GAP,
+  },
   netLabel: {
     letterSpacing: 2,
+  },
+  courtWrap: {
+    width: MAP_W,
+  },
+  // Small rotated NET label sitting just off a side edge (overflows into the
+  // screen margin the centred court leaves free), for the 90°/270° views.
+  sideNet: {
+    position: "absolute",
+    top: MAP_H / 2 - 8,
+    letterSpacing: 2,
+    transform: [{ rotate: "-90deg" }],
+  },
+  sideNetLeft: {
+    left: -20,
+  },
+  sideNetRight: {
+    right: -20,
   },
   court: {
     width: MAP_W,
@@ -178,20 +248,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  // Small control tucked into the court block's top-right corner (all four
-  // court corners hold dots, so it sits in the net strip beside them). A page
-  // fill + border lift it off the lines; it doesn't move with a flip — it's a
-  // control, not court content.
+  // Bare icon (no outline/fill) on the net-line level in the top-right corner —
+  // same colour as the net line. It's a control, so it never moves with the
+  // view; the top net line insets to leave it a clear gap.
   rotate: {
     position: "absolute",
     top: 0,
     right: 0,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.background,
+    height: STRIP_H,
+    width: STRIP_H,
     alignItems: "center",
     justifyContent: "center",
   },

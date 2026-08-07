@@ -48,24 +48,27 @@ test("renders the disconnected surface — an idle court and a connect hint", as
   expect(screen.queryAllByTestId(/spot-\d-off/)).toHaveLength(8); // court is present, idle
 });
 
-// The rotate control lives in the court corner on every surface; it flips the
-// view orientation, and the choice persists as the surface changes (connect).
-test("the court rotate control flips the view and the flip persists across surfaces", async () => {
+// The rotate control lives in the court corner on every surface; it turns the
+// view a quarter at a time and the orientation persists as the surface changes.
+test("the court rotate control turns the view and the orientation persists across surfaces", async () => {
   await renderApp();
   const rotate = () => screen.getByTestId("court-rotate");
-  expect(rotate().props.accessibilityState.selected).toBe(false); // starts upright
+  expect(rotate().props.accessibilityState.selected).toBe(false); // starts upright (0°)
 
   fireEvent.press(rotate());
-  expect(rotate().props.accessibilityState.selected).toBe(true); // flipped
+  expect(rotate().props.accessibilityState.selected).toBe(true); // 90° — rotated
 
-  // Connecting swaps to the pairing surface — the flip carries over (it's an
+  // Connecting swaps to the pairing surface — the orientation carries over (an
   // app-wide view pref, not tied to the surface or the link).
   await connect();
   expect(screen.getByTestId("start-pairing")).toBeTruthy();
   expect(rotate().props.accessibilityState.selected).toBe(true);
 
+  // Three more quarter turns bring it back to upright (0°) — a 90° step, not a flip.
   fireEvent.press(rotate());
-  expect(rotate().props.accessibilityState.selected).toBe(false); // flips back
+  fireEvent.press(rotate());
+  fireEvent.press(rotate());
+  expect(rotate().props.accessibilityState.selected).toBe(false);
 });
 
 // Connecting turns the court into the pairing surface — Start pairing over the

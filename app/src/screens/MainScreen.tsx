@@ -37,8 +37,8 @@ export const MainScreen = () => {
     pairedSpots,
     settings,
     setSettings,
-    courtFlipped,
-    toggleCourtFlip,
+    courtRotation,
+    rotateCourt,
   } = useAppState();
   const connected = connection === "connected";
   const paired = pairedSpots.length > 0;
@@ -97,21 +97,21 @@ export const MainScreen = () => {
           transport={transport}
           pairedSpots={pairedSpots}
           settings={settings}
-          flipped={courtFlipped}
-          onToggleFlip={toggleCourtFlip}
+          rotation={courtRotation}
+          onRotate={rotateCourt}
         />
       ) : showPairing ? (
         <PairingPanel
           transport={transport}
-          flipped={courtFlipped}
-          onToggleFlip={toggleCourtFlip}
+          rotation={courtRotation}
+          onRotate={rotateCourt}
         />
       ) : (
         <View style={styles.idle}>
           <CourtMap
             spots={OFF_SPOTS}
-            flipped={courtFlipped}
-            onToggleFlip={toggleCourtFlip}
+            rotation={courtRotation}
+            onRotate={rotateCourt}
           >
             <AppText
               center

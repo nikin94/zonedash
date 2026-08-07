@@ -34,13 +34,13 @@ const ERROR_SLOT_H = 18;
  */
 export const PairingPanel = ({
   transport,
-  flipped,
-  onToggleFlip,
+  rotation,
+  onRotate,
 }: {
   transport: CentralTransport;
-  /** Court view orientation + its toggle, threaded to the map (see CourtMap). */
-  flipped?: boolean;
-  onToggleFlip?: () => void;
+  /** Court view orientation + its rotate control, threaded to the map (see CourtMap). */
+  rotation?: number;
+  onRotate?: () => void;
 }) => {
   const [progress, setProgress] = useState<PairingProgress | null>(null);
   const [running, setRunning] = useState(false);
@@ -156,8 +156,8 @@ export const PairingPanel = ({
       <CourtMap
         spots={visuals}
         onPressSpot={choosing ? pickSpot : undefined}
-        flipped={flipped}
-        onToggleFlip={onToggleFlip}
+        rotation={rotation}
+        onRotate={onRotate}
       >
         <>
           {/* Every slot has a FIXED footprint — the text area, the error line,

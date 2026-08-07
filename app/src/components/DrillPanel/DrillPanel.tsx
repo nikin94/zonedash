@@ -87,15 +87,15 @@ export const DrillPanel = ({
   transport,
   pairedSpots,
   settings,
-  flipped,
-  onToggleFlip,
+  rotation,
+  onRotate,
 }: {
   transport: CentralTransport;
   pairedSpots: number[]; // canonical spots in bind order (slot order)
   settings: DrillSettings;
-  /** Court view orientation + its toggle, threaded to the map (see CourtMap). */
-  flipped?: boolean;
-  onToggleFlip?: () => void;
+  /** Court view orientation + its rotate control, threaded to the map (see CourtMap). */
+  rotation?: number;
+  onRotate?: () => void;
 }) => {
   // Read the central's session ONCE at mount and, if a run is in progress, seed
   // state from it — so a remount over a live run reflects it (running, armed
@@ -320,8 +320,8 @@ export const DrillPanel = ({
             ? onCourtTap
             : undefined
         }
-        flipped={flipped}
-        onToggleFlip={onToggleFlip}
+        rotation={rotation}
+        onRotate={onRotate}
       >
         <View style={styles.textSlot}>
           {running ? (
