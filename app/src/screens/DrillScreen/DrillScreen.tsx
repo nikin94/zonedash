@@ -16,14 +16,16 @@ export const DrillScreen = () => {
   const connected = connection === "connected";
   const paired = pairedSpots.length > 0;
 
-  // Mirror the central's running flag so the screen can't be left mid-run. A
-  // fresh DrillPanel mount starts at "idle" and never rehydrates a live session
-  // (the central only re-emits `running` on StartSession), so leaving and
-  // coming back would show an idle screen over a run with no way to stop it —
-  // the same UI-cache-vs-truth class as the pairedSpots fix. Guard the exit
-  // instead of trusting a remount: hide the back chevron AND the iOS swipe-back
-  // gesture while running; the only way out is Stop (in the panel).
-  const [running, setRunning] = useState(false);
+  // Mirror the central's running flag so the screen can't be left mid-run.
+  // Seed from the session snapshot (not a bare false) so a remount over a live
+  // run locks the exit on the first frame, then keep it in sync with events —
+  // the central only re-emits `running` on StartSession, never on (re)mount.
+  // Hide the back chevron AND the iOS swipe-back gesture while running; the
+  // only way out is Stop (in the panel). Same UI-cache-vs-truth fix as
+  // pairedSpots, on the session axis.
+  const [running, setRunning] = useState(
+    () => transport.sessionSnapshot.state === "running",
+  );
   useEffect(() => {
     const unsub = transport.onStatus((e) => {
       if (e.kind === "session") setRunning(e.state === "running");

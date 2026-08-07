@@ -14,6 +14,7 @@ import type {
   CentralTransport,
   ConnectionState,
   DrillConfig,
+  SessionSnapshot,
   SessionState,
   StatusEvent,
   Unsubscribe,
@@ -62,6 +63,7 @@ export class MockCentralTransport implements CentralTransport {
   private paired = 0; // targets bound by the last pairing round
   private pairing: { total: number; bound: number[]; current: number | null } | null = null;
   private hits: HitRecord[] = [];
+  private armedPosition: number | null = null; // slot lit now, for the snapshot
   private liveArmed = false; // a live target is lit or in flight — ignore taps
   private liveSeq = 0; // step counter for the current live session
 
@@ -71,6 +73,18 @@ export class MockCentralTransport implements CentralTransport {
     this.tapDelayMs = opts.tapDelayMs;
     this.missEvery = opts.missEvery ?? 4;
     this.failConnect = opts.failConnect ?? false;
+  }
+
+  get sessionSnapshot(): SessionSnapshot {
+    return {
+      state: this.session,
+      mode: this.drill.mode,
+      armedPosition: this.armedPosition,
+      resolvedCount: this.hits.length, // each resolved step (hit or miss) pushes one
+      count: this.drill.count,
+      durationMs: this.drill.durationMs,
+      path: this.drill.path,
+    };
   }
 
   connect(): Promise<void> {
@@ -95,6 +109,7 @@ export class MockCentralTransport implements CentralTransport {
   async disconnect(): Promise<void> {
     this.clearTimers();
     this.session = "idle";
+    this.armedPosition = null;
     this.setConnection("disconnected");
   }
 
@@ -212,6 +227,7 @@ export class MockCentralTransport implements CentralTransport {
     if (this.session === "running") return;
     this.session = "running";
     this.hits = [];
+    this.armedPosition = null;
     this.liveArmed = false;
     this.liveSeq = 0;
     this.emitSession();
@@ -239,6 +255,7 @@ export class MockCentralTransport implements CentralTransport {
       const armAt = this.latencyMs + seq * this.stepMs;
 
       this.after(armAt, () => {
+        this.armedPosition = position;
         this.emit({ kind: "progress", seq, position });
       });
       // The step closes mid-slot: hit record lands and `resolved` fires before
@@ -264,6 +281,7 @@ export class MockCentralTransport implements CentralTransport {
           miss,
         });
         if (!miss) prevHitUs = tHitUs;
+        this.armedPosition = null;
         this.emit({ kind: "resolved", seq, position, miss, reactionMs });
 
         if (seq === steps - 1) {
@@ -286,6 +304,7 @@ export class MockCentralTransport implements CentralTransport {
     const pos = ((Math.floor(position) % n) + n) % n;
     const seq = this.liveSeq++;
     this.liveArmed = true;
+    this.armedPosition = pos;
     // The target lights up the instant the operator picks it — no arm delay
     // (the real central lights its LED on the write). The athlete's hit
     // resolves it a human beat later (tapDelay).
@@ -303,6 +322,7 @@ export class MockCentralTransport implements CentralTransport {
         miss: false,
       });
       this.liveArmed = false;
+      this.armedPosition = null;
       this.emit({ kind: "resolved", seq, position: pos, miss: false, reactionMs });
     });
   }
@@ -310,6 +330,7 @@ export class MockCentralTransport implements CentralTransport {
   async stopSession(): Promise<void> {
     this.assertConnected();
     this.clearTimers();
+    this.armedPosition = null; // aborting disarms the lit target
     // A cancelled pairing round leaves no session to summarize — back to idle;
     // an aborted drill keeps its partial records and reads as done.
     if (this.session === "pairing") {

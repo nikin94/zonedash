@@ -27,6 +27,31 @@ export type ConnectionState =
 
 export type SessionState = "idle" | "pairing" | "running" | "done";
 
+/**
+ * A synchronous read of the central's current session, for rehydrating a
+ * freshly-mounted screen instead of trusting it to catch future Status events.
+ * The `session`/`progress` events fire once, at their moment; a screen that
+ * (re)mounts after them would otherwise start blank over a live run. Same
+ * reason `connectionState` is exposed as a readable — see DrillPanel.
+ */
+export interface SessionSnapshot {
+  state: SessionState;
+  /** The drill mode of the loaded/running config — restores the right UI. */
+  mode: DrillConfig["mode"];
+  /** Slot index of the currently-lit target, or null when nothing is armed. */
+  armedPosition: number | null;
+  /** Steps resolved so far this session (hits + misses) — the Step counter. */
+  resolvedCount: number;
+  // The config that shaped the run, so a remount restores its parameters too —
+  // not just its progress. Without these a rehydrated run reads its numbers off
+  // the defaults: `Run again` breaks for path (empty sequence) and shows the
+  // wrong count/duration for random/time. Path is in slot-index (wire) form,
+  // like DrillConfig.path — the panel maps it back onto canonical spots.
+  count?: number;
+  durationMs?: number;
+  path?: number[];
+}
+
 /** Decoded Status-characteristic notifications. */
 export type StatusEvent =
   | { kind: "connection"; state: ConnectionState; reason?: string }
@@ -41,6 +66,9 @@ export type Unsubscribe = () => void;
 
 export interface CentralTransport {
   readonly connectionState: ConnectionState;
+  /** Current session, read on (re)mount so the UI reflects a run already in
+   *  progress rather than trusting future Status events it may have missed. */
+  readonly sessionSnapshot: SessionSnapshot;
 
   connect(): Promise<void>;
   disconnect(): Promise<void>;
