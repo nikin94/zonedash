@@ -1,16 +1,17 @@
 import { StyleSheet, Switch, View } from "react-native";
 
-import { AppText } from "../../components/AppText";
-import { msOptions, WheelField } from "../../components/WheelField";
-import { type DrillSettings } from "../../state/AppState";
-import { colors } from "../../theme";
+import { type DrillSettings } from "../state/AppState";
+import { colors } from "../theme";
+import { AppText } from "./AppText";
+import { msOptions, WheelField } from "./WheelField";
 
 // 0.1 s resolution for fine-tuning; 0 keeps its named meaning.
 const DELAY_OPTIONS = msOptions(0, 5000, 100, "none");
 
 /**
- * Drill settings panel (pushed from the header's settings button). No timeout
- * setting on purpose — the app never arms auto-miss, so a run counts hits only.
+ * Drill settings panel — shown in a modal opened from the header's settings
+ * gear. No timeout setting on purpose: the app never arms auto-miss, so a run
+ * counts hits only.
  */
 export const SettingsPanel = ({
   settings,

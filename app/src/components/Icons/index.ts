@@ -5,5 +5,4 @@
  */
 export { SlidersIcon } from "./SlidersIcon";
 export { CloseIcon } from "./CloseIcon";
-export { BackIcon } from "./BackIcon";
 export { CheckIcon } from "./CheckIcon";

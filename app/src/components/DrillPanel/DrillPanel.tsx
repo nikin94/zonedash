@@ -7,10 +7,10 @@ import type {
   DrillConfig,
   SessionState,
 } from "../../ble/transport";
-import { AppText } from "../../components/AppText";
-import { CourtMap, SpotIcon } from "../../components/CourtMap";
-import { CustomPressable } from "../../components/CustomPressable";
-import { msOptions, WheelField } from "../../components/WheelField";
+import { AppText } from "../AppText";
+import { CourtMap, SpotIcon } from "../CourtMap";
+import { CustomPressable } from "../CustomPressable";
+import { msOptions, WheelField } from "../WheelField";
 import { SPOT_CODES, SPOT_NAMES } from "../../domain/spot";
 import { type SpotVisual } from "../../helpers/court";
 import { type DrillSettings } from "../../state/AppState";
@@ -59,7 +59,9 @@ const MODE_DESC: Record<UiMode, string> = {
 
 /** Inverse of `wireMode`: the UI mode + stop-by a wire config resolves back to,
  *  so a mount over a running/finished session restores the matching controls. */
-const uiFromWire = (mode: DrillConfig["mode"]): { uiMode: UiMode; stopBy: StopBy } => {
+const uiFromWire = (
+  mode: DrillConfig["mode"],
+): { uiMode: UiMode; stopBy: StopBy } => {
   if (mode === "time") return { uiMode: "random", stopBy: "time" };
   if (mode === "path") return { uiMode: "path", stopBy: "count" };
   if (mode === "live") return { uiMode: "live", stopBy: "count" };
@@ -86,10 +88,15 @@ export const DrillPanel = ({
   transport,
   pairedSpots,
   settings,
+  onRepair,
 }: {
   transport: CentralTransport;
   pairedSpots: number[]; // canonical spots in bind order (slot order)
   settings: DrillSettings;
+  /** Re-open the pairing surface to rebind the layout. Rendered as a control
+   *  under the court; lives in the (run-locked) config block, so a re-pair
+   *  can't be triggered mid-run. */
+  onRepair?: () => void;
 }) => {
   // Read the central's session ONCE at mount and, if a run is in progress, seed
   // state from it — so a remount over a live run reflects it (running, armed
@@ -110,13 +117,19 @@ export const DrillPanel = ({
   // sequence) and random/time show the defaults, not what's on the wire. The
   // snapshot path is slot indices; the panel holds canonical spots, so map back.
   const [count, setCount] = useState(live ? (snap.count ?? 10) : 10);
-  const [durationMs, setDurationMs] = useState(live ? (snap.durationMs ?? 30000) : 30000);
+  const [durationMs, setDurationMs] = useState(
+    live ? (snap.durationMs ?? 30000) : 30000,
+  );
   const [path, setPath] = useState<number[]>(
     live && snap.path
-      ? snap.path.map((p) => pairedSpots[p]).filter((s): s is number => s != null)
+      ? snap.path
+          .map((p) => pairedSpots[p])
+          .filter((s): s is number => s != null)
       : [],
   ); // canonical spots, in order
-  const [session, setSession] = useState<SessionState>(live ? "running" : "idle");
+  const [session, setSession] = useState<SessionState>(
+    live ? "running" : "idle",
+  );
   // The mode the current records belong to, so a finished run's stats show
   // only while that mode is selected — switching modes hides them.
   const [runMode, setRunMode] = useState<UiMode>(live ? ui.uiMode : "random");
@@ -126,7 +139,9 @@ export const DrillPanel = ({
       : null,
   ); // canonical
   const [flashSpot, setFlashSpot] = useState<number | null>(null);
-  const [resolvedCount, setResolvedCount] = useState(live ? snap.resolvedCount : 0);
+  const [resolvedCount, setResolvedCount] = useState(
+    live ? snap.resolvedCount : 0,
+  );
   const [lastReactionMs, setLastReactionMs] = useState<number | null>(null);
   // Live mode: a target is armed or in flight after the operator's tap, so
   // further taps are ignored until it resolves. Seed busy from a lit target so
@@ -279,8 +294,7 @@ export const DrillPanel = ({
   const showDone = done && uiMode === runMode;
   const attempts = records ?? [];
   const totalMs = attempts.reduce((s, r) => s + r.reactionMs, 0);
-  const avgMs =
-    attempts.length > 0 ? totalMs / attempts.length : null;
+  const avgMs = attempts.length > 0 ? totalMs / attempts.length : null;
 
   // Secondary status line during a run. Auto modes narrate the athlete's
   // reaction; live mode narrates the operator's turn: tap → armed → time.
@@ -303,7 +317,9 @@ export const DrillPanel = ({
       <CourtMap
         spots={visuals}
         onPressSpot={
-          liveRunning || (!running && uiMode === "path") ? onCourtTap : undefined
+          liveRunning || (!running && uiMode === "path")
+            ? onCourtTap
+            : undefined
         }
       >
         <View style={styles.textSlot}>
@@ -328,11 +344,21 @@ export const DrillPanel = ({
               Session complete
             </AppText>
           ) : showDone ? (
-            <AppText center size={13} color={colors.textMuted} style={styles.slotText}>
+            <AppText
+              center
+              size={13}
+              color={colors.textMuted}
+              style={styles.slotText}
+            >
               Fetching results…
             </AppText>
           ) : (
-            <AppText center size={13} color={colors.textMuted} style={styles.slotText}>
+            <AppText
+              center
+              size={13}
+              color={colors.textMuted}
+              style={styles.slotText}
+            >
               Pick a drill below, then Start
             </AppText>
           )}
@@ -382,11 +408,16 @@ export const DrillPanel = ({
                 noFeedback
                 accessibilityState={{ selected: uiMode === m.key }}
                 onPress={() => setUiMode(m.key)}
-                style={[styles.modeChip, uiMode === m.key && styles.modeChipActive]}
+                style={[
+                  styles.modeChip,
+                  uiMode === m.key && styles.modeChipActive,
+                ]}
               >
                 <AppText
                   weight="600"
-                  color={uiMode === m.key ? colors.accentText : colors.textSecondary}
+                  color={
+                    uiMode === m.key ? colors.accentText : colors.textSecondary
+                  }
                 >
                   {m.label}
                 </AppText>
@@ -416,12 +447,17 @@ export const DrillPanel = ({
                     noFeedback
                     accessibilityState={{ selected: stopBy === s.key }}
                     onPress={() => setStopBy(s.key)}
-                    style={[styles.stopChip, stopBy === s.key && styles.modeChipActive]}
+                    style={[
+                      styles.stopChip,
+                      stopBy === s.key && styles.modeChipActive,
+                    ]}
                   >
                     <AppText
                       weight="600"
                       color={
-                        stopBy === s.key ? colors.accentText : colors.textSecondary
+                        stopBy === s.key
+                          ? colors.accentText
+                          : colors.textSecondary
                       }
                     >
                       {s.label}
@@ -453,7 +489,12 @@ export const DrillPanel = ({
         {uiMode === "path" &&
           (path.length > 0 ? (
             <>
-              <AppText center size={13} color={colors.accentText} testID="path-sequence">
+              <AppText
+                center
+                size={13}
+                color={colors.accentText}
+                testID="path-sequence"
+              >
                 {path.map((s) => SPOT_NAMES[s]).join(" → ")}
               </AppText>
               <View style={styles.pathActions}>
@@ -465,7 +506,10 @@ export const DrillPanel = ({
                     Undo
                   </AppText>
                 </CustomPressable>
-                <CustomPressable onPress={() => setPath([])} style={styles.smallButton}>
+                <CustomPressable
+                  onPress={() => setPath([])}
+                  style={styles.smallButton}
+                >
                   <AppText size={15} weight="600">
                     Clear
                   </AppText>
@@ -477,11 +521,27 @@ export const DrillPanel = ({
               Tap paired spots on the map in the order to run
             </AppText>
           ))}
+
+        {onRepair && (
+          <CustomPressable
+            testID="repair-button"
+            onPress={onRepair}
+            style={styles.repairButton}
+          >
+            <AppText center size={14} weight="600" color={colors.textSecondary}>
+              Re-pair targets
+            </AppText>
+          </CustomPressable>
+        )}
       </View>
 
       {showDone && records !== null && (
         <View style={styles.stats} testID="stats-panel">
-          <AppText size={12} color={colors.textSecondary} style={styles.heading}>
+          <AppText
+            size={12}
+            color={colors.textSecondary}
+            style={styles.heading}
+          >
             Results
           </AppText>
           {attempts.length > 0 ? (
@@ -494,30 +554,32 @@ export const DrillPanel = ({
                 // the same way if it is ever out of range.
                 const spot = pairedSpots[r.position];
                 return (
-                <View key={r.seq} style={styles.statRow}>
-                  <View style={styles.attemptLead}>
-                    <AppText
-                      size={13}
-                      color={colors.textMuted}
-                      style={styles.attemptNum}
-                      accessibilityLabel={`Attempt ${i + 1}`}
-                    >
-                      {i + 1}
-                    </AppText>
-                    <SpotIcon spot={spot} />
-                    <AppText
-                      size={13}
-                      weight="600"
-                      color={colors.accentText}
-                      accessibilityLabel={spot != null ? SPOT_NAMES[spot] : "unknown spot"}
-                    >
-                      {spot != null ? SPOT_CODES[spot] : "—"}
+                  <View key={r.seq} style={styles.statRow}>
+                    <View style={styles.attemptLead}>
+                      <AppText
+                        size={13}
+                        color={colors.textMuted}
+                        style={styles.attemptNum}
+                        accessibilityLabel={`Attempt ${i + 1}`}
+                      >
+                        {i + 1}
+                      </AppText>
+                      <SpotIcon spot={spot} />
+                      <AppText
+                        size={13}
+                        weight="600"
+                        color={colors.accentText}
+                        accessibilityLabel={
+                          spot != null ? SPOT_NAMES[spot] : "unknown spot"
+                        }
+                      >
+                        {spot != null ? SPOT_CODES[spot] : "—"}
+                      </AppText>
+                    </View>
+                    <AppText size={13} weight="600">
+                      {fmtSec(r.reactionMs)}
                     </AppText>
                   </View>
-                  <AppText size={13} weight="600">
-                    {fmtSec(r.reactionMs)}
-                  </AppText>
-                </View>
                 );
               })}
             </View>
@@ -667,5 +729,15 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     paddingHorizontal: 18,
     paddingVertical: 10,
+  },
+  // A quiet secondary control — the layout is set, re-pairing is the exception.
+  repairButton: {
+    alignSelf: "center",
+    marginTop: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
   },
 });
