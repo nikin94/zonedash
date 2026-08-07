@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 999,
+    borderRadius: 14, // matches the closed pill (a small Button), so open/closed read the same
     overflow: "hidden",
     ...glowShadow,
   },

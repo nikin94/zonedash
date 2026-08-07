@@ -3,10 +3,11 @@ import { StyleSheet, Switch, View } from "react-native";
 import { type DrillSettings } from "../state/AppState";
 import { colors } from "../theme";
 import { AppText } from "./AppText";
-import { msOptions, WheelField } from "./WheelField";
+import { NumberField } from "./NumberField";
 
-// 0.1 s resolution for fine-tuning; 0 keeps its named meaning.
-const DELAY_OPTIONS = msOptions(0, 5000, 100, "none");
+// Delay is free-typed in seconds (0–3 s, 2 decimals) rather than scrolled — a
+// wheel of 0.1 s steps was tedious for what is a single quick tweak. Stored as ms.
+const DELAY_MAX_MS = 3000;
 
 /**
  * Drill settings panel — shown in a modal opened from the header's settings
@@ -24,11 +25,13 @@ export const SettingsPanel = ({
     <AppText size={12} color={colors.textSecondary} style={styles.heading}>
       Drill settings
     </AppText>
-    <WheelField
+    <NumberField
       value={settings.delayMs}
       label="Delay between targets"
       testID="setting-delay"
-      options={DELAY_OPTIONS}
+      unit="s"
+      min={0}
+      max={DELAY_MAX_MS}
       onChange={(delayMs) => onChange({ ...settings, delayMs })}
     />
     <View style={styles.paramRow}>
