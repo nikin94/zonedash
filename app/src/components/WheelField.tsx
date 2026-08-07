@@ -37,7 +37,10 @@ const ITEM_H = 36;
 const VISIBLE = 3;
 const WHEEL_H = ITEM_H * VISIBLE;
 const PAD_V = 6;
-const PILL_H = 36;
+// Match the small Button (the Mode / Hits chips it sits among): pad 5 + text +
+// 1px border ≈ 32. Used only for the dropdown's vertical offset; the pill sizes
+// to content so its rendered height equals a small button's exactly.
+const PILL_H = 32;
 
 /**
  * Labelled value field opening a wheel dropdown — the same pattern as the
@@ -132,11 +135,13 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   anchor: {
-    height: PILL_H,
+    // sizes to the pill (a small-button height); no fixed height so the field
+    // never looks taller than the chips beside it.
   },
   pill: {
-    height: PILL_H,
-    borderRadius: 999,
+    // Same construction as a small Button — matching height and corner radius.
+    paddingVertical: 5,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.border,
     alignItems: "center",

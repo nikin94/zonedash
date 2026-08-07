@@ -1,5 +1,5 @@
-import { act, render, screen } from "@testing-library/react-native";
-import { Animated } from "react-native";
+import { act, fireEvent, render, screen } from "@testing-library/react-native";
+import { Animated, StyleSheet } from "react-native";
 
 import { type SpotVisual } from "../../helpers/court";
 import { CourtMap } from "./CourtMap";
@@ -148,4 +148,46 @@ test("SpotIcon builds the court fragment from the spot geometry", () => {
 
   rerender(<SpotIcon spot={3} />); // MR mid side → one side line
   expect(screen.getByTestId("spot-icon-3").children).toHaveLength(2);
+});
+
+// The rotate control only appears when the parent supplies a handler, reflects
+// whether the view is rotated, and fires the quarter-turn on press.
+test("rotate control: hidden without a handler, reflects and fires it when given", () => {
+  const { rerender } = render(<CourtMap spots={allOff} />);
+  expect(screen.queryByTestId("court-rotate")).toBeNull();
+
+  const onRotate = jest.fn();
+  rerender(<CourtMap spots={allOff} onRotate={onRotate} />);
+  const btn = screen.getByTestId("court-rotate");
+  expect(btn.props.accessibilityState.selected).toBe(false); // 0° = upright
+
+  fireEvent.press(btn);
+  expect(onRotate).toHaveBeenCalledTimes(1);
+
+  // Any non-zero quarter turn reads as rotated.
+  rerender(<CourtMap spots={allOff} rotation={1} onRotate={onRotate} />);
+  expect(screen.getByTestId("court-rotate").props.accessibilityState.selected).toBe(true);
+});
+
+// Rotation moves WHERE each dot is drawn but never WHICH spot it is. One
+// clockwise quarter turn maps (x, y) → (1 − y, x): net-left (spot 0, top-left)
+// lands where net-right (spot 2, top-right) sat; a half turn lands it where
+// back-right (spot 4) sat. The reported spot index never changes.
+test("rotation moves a dot's position, not its identity", () => {
+  const pos = (i: number) => {
+    const s = StyleSheet.flatten(screen.getByTestId(`spot-${i}-off`).props.style);
+    return { left: s.left, top: s.top };
+  };
+
+  const { rerender } = render(<CourtMap spots={allOff} />);
+  const netRightNormal = pos(2);
+  const backRightNormal = pos(4);
+
+  rerender(<CourtMap spots={allOff} rotation={1} />);
+  expect(pos(0)).toEqual(netRightNormal); // 90°: drawn where net-right was
+  expect(screen.getByTestId("spot-0-off")).toBeTruthy(); // still reported as spot 0
+
+  rerender(<CourtMap spots={allOff} rotation={2} />);
+  expect(pos(0)).toEqual(backRightNormal); // 180°: drawn where back-right was
+  expect(screen.getByTestId("spot-0-off")).toBeTruthy();
 });

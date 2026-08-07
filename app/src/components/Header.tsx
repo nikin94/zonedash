@@ -255,10 +255,12 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     ...glowShadow,
   },
+  // Padding matched to the shared Button (regular) so a menu item and a button
+  // read as the same control.
   menuItem: {
-    height: 48, // fingertip-sized
     justifyContent: "center",
-    paddingHorizontal: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
   },
   menuDivider: {
     height: 1,
