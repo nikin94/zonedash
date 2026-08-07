@@ -7,9 +7,9 @@ import { SPOT_NAMES } from "../../domain/spot";
 import { type SpotVisual } from "../../helpers/court";
 import { colors } from "../../theme";
 import { AppText } from "../AppText";
+import { Button } from "../Button";
 import { ConfirmModal } from "../ConfirmModal";
 import { CourtMap } from "../CourtMap";
-import { CustomPressable } from "../CustomPressable";
 import { UndoIcon } from "../Icons";
 
 /** Every layout can bind up to this many targets; a round opens at the max and
@@ -21,7 +21,6 @@ const MAX_TARGETS = 8;
 // and the action rows keep their size across every round phase.
 const TEXT_SLOT_H = 60; // 3 lines at lineHeight 20
 const ERROR_SLOT_H = 18;
-const BUTTON_H = 48; // fingertip-sized; explicit so hidden slots match exactly
 
 /**
  * Pairing round UI (display-ui.md screen 2, phone side). There is no count to
@@ -197,71 +196,52 @@ export const PairingPanel = ({ transport }: { transport: CentralTransport }) => 
             {running ? (
               <>
                 {/* Cancel (destructive, red outline) sits left; Undo is a
-                    compact icon to its right, on the same row. */}
+                    compact icon to its right, on the same row. Both Undo and
+                    Finish are shown from the start of the round and only enable
+                    once there is a bind to act on (and never mid-prompt). */}
                 <View style={styles.controlRow}>
-                  <CustomPressable
+                  <Button
                     testID="cancel-pairing"
+                    label="Cancel"
+                    danger
                     onPress={() => setCancelAsk(true)}
-                    style={[styles.button, styles.cancelButton]}
+                    style={styles.cancelButton}
+                  />
+                  <Button
+                    testID="undo-pairing"
+                    accessibilityLabel="Undo last bind"
+                    size="icon"
+                    disabled={!canCorrect}
+                    onPress={undo}
                   >
-                    <AppText center size={16} weight="600" color={colors.danger}>
-                      Cancel
-                    </AppText>
-                  </CustomPressable>
-                  <View style={styles.undoSlot}>
-                    {canCorrect && (
-                      <CustomPressable
-                        testID="undo-pairing"
-                        accessibilityLabel="Undo last bind"
-                        onPress={undo}
-                        style={styles.iconButton}
-                      >
-                        <UndoIcon />
-                      </CustomPressable>
-                    )}
-                  </View>
+                    <UndoIcon />
+                  </Button>
                 </View>
-                {/* Finish appears once the first target is bound: end the round
-                    early at the current count. Keeps the slot height when it is
-                    hidden so the block doesn't jump. */}
-                <View testID="finish-slot" style={styles.finishSlot}>
-                  {canCorrect && (
-                    <CustomPressable
-                      testID="finish-pairing"
-                      onPress={() => setFinishAsk(true)}
-                      style={styles.button}
-                    >
-                      <AppText center size={16} weight="600">
-                        Finish
-                      </AppText>
-                    </CustomPressable>
-                  )}
-                </View>
+                <Button
+                  testID="finish-pairing"
+                  label="Finish"
+                  disabled={!canCorrect}
+                  onPress={() => setFinishAsk(true)}
+                />
               </>
             ) : done ? null : (
               <>
-                <CustomPressable onPress={start} style={styles.button}>
-                  <AppText center size={16} weight="600">
-                    Start pairing
-                  </AppText>
-                </CustomPressable>
+                <Button
+                  testID="start-pairing"
+                  label="Start"
+                  onPress={start}
+                />
                 {/* DEV-only: bind everything at once so testing needn't tap each
                     spot. Present only with the mock transport. */}
                 {transport.completePairingNow && (
-                  <CustomPressable
+                  <Button
                     testID="dev-complete-pairing"
+                    label="Complete pairing (dev)"
+                    dashed
+                    textColor={colors.textMuted}
+                    textSize={13}
                     onPress={devComplete}
-                    style={styles.devButton}
-                  >
-                    <AppText
-                      center
-                      size={13}
-                      weight="600"
-                      color={colors.textMuted}
-                    >
-                      Complete pairing (dev)
-                    </AppText>
-                  </CustomPressable>
+                  />
                 )}
               </>
             )}
@@ -325,54 +305,14 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     justifyContent: "center",
   },
-  undoSlot: {
-    width: BUTTON_H,
-    height: BUTTON_H,
-  },
-  finishSlot: {
-    height: BUTTON_H,
-    alignSelf: "stretch",
-  },
   // Shared by every status-slot text: the fixed slot height assumes this
   // lineHeight regardless of which text (and size) is showing.
   slotText: {
     lineHeight: 20,
   },
-  button: {
-    height: BUTTON_H,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.background,
-    paddingHorizontal: 32,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  // Cancel is destructive — a red outline sets it apart; flex fills the row
-  // beside the fixed-width undo icon.
+  // Cancel fills the row beside the fixed-width undo icon; the red outline is
+  // the Button `danger` prop.
   cancelButton: {
     flex: 1,
-    borderColor: colors.danger,
-  },
-  iconButton: {
-    width: BUTTON_H,
-    height: BUTTON_H,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.background,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  // Dev shortcut: dashed + muted so it never reads as a real control.
-  devButton: {
-    height: BUTTON_H,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderStyle: "dashed",
-    borderColor: colors.border,
-    paddingHorizontal: 32,
-    alignItems: "center",
-    justifyContent: "center",
   },
 });

@@ -8,6 +8,7 @@ import type {
   SessionState,
 } from "../../ble/transport";
 import { AppText } from "../AppText";
+import { Button } from "../Button";
 import { CourtMap, SpotIcon } from "../CourtMap";
 import { CustomPressable } from "../CustomPressable";
 import { msOptions, WheelField } from "../WheelField";
@@ -35,7 +36,6 @@ const fmtSec = (ms: number) => `${(ms / 1000).toFixed(2)} ${UNIT}`;
 // shifts the layout.
 const TEXT_SLOT_H = 60; // 3 lines at lineHeight 20
 const ERROR_SLOT_H = 18;
-const BUTTON_H = 48;
 
 /** UI modes. The engine's `random` and `time` differ only in the stop
  *  condition (rep count vs duration window), so the UI folds them into one
@@ -373,21 +373,14 @@ export const DrillPanel = ({
         </View>
 
         {running ? (
-          <CustomPressable onPress={stop} style={styles.button}>
-            <AppText size={16} weight="600">
-              Stop
-            </AppText>
-          </CustomPressable>
+          <Button label="Stop" onPress={stop} style={styles.runButton} />
         ) : (
-          <CustomPressable
+          <Button
+            label={showDone ? "Run again" : "Start"}
             disabled={!canStart}
             onPress={start}
-            style={[styles.button, !canStart && styles.buttonDisabled]}
-          >
-            <AppText size={16} weight="600">
-              {showDone ? "Run again" : "Start"}
-            </AppText>
-          </CustomPressable>
+            style={styles.runButton}
+          />
         )}
       </CourtMap>
 
@@ -498,22 +491,18 @@ export const DrillPanel = ({
                 {path.map((s) => SPOT_NAMES[s]).join(" → ")}
               </AppText>
               <View style={styles.pathActions}>
-                <CustomPressable
+                <Button
+                  label="Undo"
+                  size="small"
+                  textSize={15}
                   onPress={() => setPath(path.slice(0, -1))}
-                  style={styles.smallButton}
-                >
-                  <AppText size={15} weight="600">
-                    Undo
-                  </AppText>
-                </CustomPressable>
-                <CustomPressable
+                />
+                <Button
+                  label="Clear"
+                  size="small"
+                  textSize={15}
                   onPress={() => setPath([])}
-                  style={styles.smallButton}
-                >
-                  <AppText size={15} weight="600">
-                    Clear
-                  </AppText>
-                </CustomPressable>
+                />
               </View>
             </>
           ) : (
@@ -523,15 +512,15 @@ export const DrillPanel = ({
           ))}
 
         {onRepair && (
-          <CustomPressable
+          <Button
             testID="repair-button"
+            label="Re-pair targets"
+            size="small"
+            textSize={14}
+            textColor={colors.textSecondary}
             onPress={onRepair}
             style={styles.repairButton}
-          >
-            <AppText center size={14} weight="600" color={colors.textSecondary}>
-              Re-pair targets
-            </AppText>
-          </CustomPressable>
+          />
         )}
       </View>
 
@@ -631,18 +620,10 @@ const styles = StyleSheet.create({
     height: ERROR_SLOT_H,
     justifyContent: "center",
   },
-  button: {
-    height: BUTTON_H,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.background,
-    paddingHorizontal: 32,
-    justifyContent: "center",
+  // The in-court Start/Stop/Run again button — the shared Button owns its
+  // chrome and disabled state; this only spaces it below the status slots.
+  runButton: {
     marginTop: 8,
-  },
-  buttonDisabled: {
-    opacity: 0.4,
   },
   dimmed: {
     opacity: 0.4,
@@ -723,21 +704,10 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 8,
   },
-  smallButton: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-  },
   // A quiet secondary control — the layout is set, re-pairing is the exception.
+  // Chrome comes from Button; this only positions it.
   repairButton: {
     alignSelf: "center",
     marginTop: 4,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
   },
 });

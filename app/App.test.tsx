@@ -26,7 +26,7 @@ const connect = async () => {
 // confirm). A completed round waits out the handoff, then the drill controls
 // replace the pairing UI under the same court.
 const pairTwo = async () => {
-  fireEvent.press(screen.getByText("Start pairing"));
+  fireEvent.press(screen.getByTestId("start-pairing"));
   await act(() => jest.runAllTimersAsync());
   fireEvent.press(screen.getByTestId("spot-0-pulse"));
   await act(() => jest.runAllTimersAsync());
@@ -55,7 +55,7 @@ test("connecting reveals the pairing surface", async () => {
   await connect();
   expect(screen.getByText("mock")).toBeTruthy(); // connected chip label
   expect(screen.queryByTestId("count-pill")).toBeNull();
-  expect(screen.getByText("Start pairing")).toBeTruthy();
+  expect(screen.getByTestId("start-pairing")).toBeTruthy();
 });
 
 // A completed round doesn't navigate — the same court stays put and the drill
@@ -68,8 +68,8 @@ test("a completed round reveals the drill controls under the court", async () =>
   expect(screen.getByText("Random")).toBeTruthy();
   expect(screen.getByText("Start")).toBeTruthy();
   expect(screen.getByTestId("repair-button")).toBeTruthy();
-  // Pairing UI is gone — the surface swapped in place, no leftover pairing text.
-  expect(screen.queryByText("Start pairing")).toBeNull();
+  // Pairing UI is gone — the surface swapped in place, no leftover pairing UI.
+  expect(screen.queryByTestId("start-pairing")).toBeNull();
 });
 
 // The dev shortcut binds every target at once, then runs through the same
@@ -97,7 +97,7 @@ test("re-pair from the controls returns to the pairing surface", async () => {
   await act(async () => {
     await jest.runAllTimersAsync();
   });
-  expect(screen.getByText("Start pairing")).toBeTruthy(); // pairing surface again
+  expect(screen.getByTestId("start-pairing")).toBeTruthy(); // pairing surface again
   expect(screen.queryByText("Random")).toBeNull();
 });
 
@@ -152,7 +152,7 @@ test("an outside tap closes the chip menu without acting", async () => {
   expect(screen.getByTestId("chip-menu")).toBeTruthy();
   fireEvent.press(screen.getByTestId("chip-menu-backdrop"));
   expect(screen.queryByTestId("chip-menu")).toBeNull();
-  expect(screen.getByText("Start pairing")).toBeTruthy(); // still the pairing surface
+  expect(screen.getByTestId("start-pairing")).toBeTruthy(); // still the pairing surface
 });
 
 // Regression: pairedSpots is an app-side cache of state that lives on the
@@ -173,7 +173,7 @@ test("a disconnect clears the paired layout — reconnect returns to pairing", a
   await connect();
 
   // Back on the pairing surface with a clean map — no phantom drill controls.
-  expect(screen.getByText("Start pairing")).toBeTruthy();
+  expect(screen.getByTestId("start-pairing")).toBeTruthy();
   expect(screen.queryByText("Random")).toBeNull();
   expect(screen.queryAllByTestId(/spot-\d-bound/)).toHaveLength(0);
 });

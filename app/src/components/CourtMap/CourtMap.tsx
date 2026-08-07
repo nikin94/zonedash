@@ -2,7 +2,15 @@ import { type ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { SPOT_NAMES, SPOT_XY } from "../../domain/spot";
-import { HIT, HIT_SLOP, INSET, MAP_H, MAP_W, type SpotVisual } from "../../helpers/court";
+import {
+  CENTRE_PAD,
+  HIT,
+  HIT_SLOP,
+  INSET,
+  MAP_H,
+  MAP_W,
+  type SpotVisual,
+} from "../../helpers/court";
 import { colors } from "../../theme";
 import { AppText } from "../AppText";
 import { CustomPressable } from "../CustomPressable";
@@ -112,9 +120,10 @@ const styles = StyleSheet.create({
     right: 0,
     alignItems: "center",
     justifyContent: "center",
-    // Keep the centre content well clear of the perimeter dots' hit boxes —
-    // breathing room so the info block never crowds the spots.
-    padding: HIT + 24,
+    // A deliberately narrow info/controls column (see CENTRE_PAD): it clears
+    // the perimeter dots' hit boxes with room to spare, leaving the freed
+    // space to the bigger, further-inset targets.
+    padding: CENTRE_PAD,
   },
   hit: {
     position: "absolute",

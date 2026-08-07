@@ -18,7 +18,7 @@ beforeEach(() => jest.useFakeTimers());
 afterEach(() => jest.useRealTimers());
 
 const startRound = async () => {
-  fireEvent.press(screen.getByText("Start pairing"));
+  fireEvent.press(screen.getByTestId("start-pairing"));
   await act(() => jest.runAllTimersAsync()); // round opens, waiting for a pick
 };
 
@@ -32,10 +32,10 @@ test("idle: Start pairing over an empty court — no count picker", async () => 
   const t = await connectedTransport();
   render(<PairingPanel transport={t} />);
 
-  expect(screen.getByText("Start pairing")).toBeTruthy();
+  expect(screen.getByTestId("start-pairing")).toBeTruthy();
   expect(screen.queryByTestId("count-pill")).toBeNull(); // the wheel is gone
   expect(screen.queryAllByTestId(/spot-\d-off/)).toHaveLength(8);
-  // Nothing to correct or finish before a round opens.
+  // The round controls don't exist before a round opens (idle shows Start).
   expect(screen.queryByTestId("undo-pairing")).toBeNull();
   expect(screen.queryByTestId("finish-pairing")).toBeNull();
 });
@@ -80,18 +80,18 @@ test("unbound spots keep pulsing while a prompt is up — no dip to off", async 
   expect(screen.queryAllByTestId(/spot-\d-off/)).toHaveLength(0);
 });
 
-test("Finish appears after the first bind and ends the round early, keeping binds", async () => {
+test("Finish enables after the first bind and ends the round early, keeping binds", async () => {
   const t = await connectedTransport();
   render(<PairingPanel transport={t} />);
   await startRound();
 
-  // No Finish/Undo before anything is bound.
-  expect(screen.queryByTestId("finish-pairing")).toBeNull();
-  expect(screen.queryByTestId("undo-pairing")).toBeNull();
+  // Finish/Undo are shown from the start of the round, disabled until a bind.
+  expect(screen.getByTestId("finish-pairing")).toBeDisabled();
+  expect(screen.getByTestId("undo-pairing")).toBeDisabled();
 
   await bindSpot(0);
   await bindSpot(7);
-  expect(screen.getByTestId("finish-pairing")).toBeTruthy();
+  expect(screen.getByTestId("finish-pairing")).toBeEnabled();
 
   // Finishing with < 8 always confirms (auto-complete handles the full 8).
   fireEvent.press(screen.getByTestId("finish-pairing"));
@@ -146,7 +146,7 @@ test("Cancel confirms before discarding the round; Keep going aborts nothing", a
   fireEvent.press(screen.getByTestId("cancel-pairing"));
   fireEvent.press(screen.getAllByText("Cancel")[1]); // the danger action in the modal
   await act(() => jest.runAllTimersAsync());
-  expect(screen.getByText("Start pairing")).toBeTruthy();
+  expect(screen.getByTestId("start-pairing")).toBeTruthy();
   expect(screen.queryAllByTestId(/spot-\d-off/)).toHaveLength(8); // map reset
 });
 
@@ -155,13 +155,13 @@ test("Undo is offered between binds (never mid-prompt) and rolls back the last b
   render(<PairingPanel transport={t} />);
   await startRound();
 
-  // Mid-prompt: no Undo while a pick is in flight.
+  // Mid-prompt: Undo is present but disabled while a pick is in flight.
   fireEvent.press(screen.getByTestId("spot-0-pulse"));
   await act(() => jest.advanceTimersByTimeAsync(0));
-  expect(screen.queryByTestId("undo-pairing")).toBeNull();
+  expect(screen.getByTestId("undo-pairing")).toBeDisabled();
 
   await act(() => jest.runAllTimersAsync()); // spot 0 bound, choosing again
-  expect(screen.getByTestId("undo-pairing")).toBeTruthy();
+  expect(screen.getByTestId("undo-pairing")).toBeEnabled();
 
   fireEvent.press(screen.getByTestId("undo-pairing"));
   await act(() => jest.runAllTimersAsync());
@@ -186,11 +186,11 @@ test("startPairing rejection surfaces as an error, not a crash", async () => {
   t.startPairing = jest.fn().mockRejectedValue(new Error("write failed"));
   render(<PairingPanel transport={t} />);
 
-  fireEvent.press(screen.getByText("Start pairing"));
+  fireEvent.press(screen.getByTestId("start-pairing"));
   await act(() => jest.runAllTimersAsync());
 
   expect(screen.getByText("write failed")).toBeTruthy();
-  expect(screen.getByText("Start pairing")).toBeTruthy(); // back to idle
+  expect(screen.getByTestId("start-pairing")).toBeTruthy(); // back to idle
 });
 
 test("shows the net side for orientation", async () => {
@@ -212,13 +212,12 @@ test("info-block slots stay mounted through every round phase", async () => {
   await startRound();
   expect(screen.getByTestId("status-slot")).toBeTruthy();
   expect(screen.getByTestId("error-slot")).toBeTruthy();
-  expect(screen.getByTestId("finish-slot")).toBeTruthy(); // holds space pre-bind
+  expect(screen.getByTestId("finish-pairing")).toBeDisabled(); // shown pre-bind
 
   fireEvent.press(screen.getByTestId("spot-0-pulse"));
   await act(() => jest.advanceTimersByTimeAsync(0));
-  expect(screen.getByTestId("finish-slot")).toBeTruthy(); // prompting
+  expect(screen.getByTestId("finish-pairing")).toBeDisabled(); // prompting
 
   await act(() => jest.runAllTimersAsync());
-  expect(screen.getByTestId("finish-slot")).toBeTruthy(); // bound → Finish shows
-  expect(screen.getByTestId("finish-pairing")).toBeTruthy();
+  expect(screen.getByTestId("finish-pairing")).toBeEnabled(); // bound → enabled
 });
