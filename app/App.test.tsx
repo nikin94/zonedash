@@ -117,6 +117,34 @@ test("re-pair from the chip menu confirms, then returns to the pairing surface",
   expect(screen.queryByText("Random")).toBeNull();
 });
 
+// Regression: the pairing→drill handoff must re-arm for EVERY round, not just
+// the first. The timer's null-guard once stayed set after round one, so a
+// second round (via Re-pair) finished but never revealed the drill controls —
+// the operator was stranded on the pairing surface. Reachable by the shipped
+// Re-pair gesture, previously uncovered.
+test("a second round after Re-pair still hands off to the drill controls", async () => {
+  await renderApp();
+  await connect();
+  await pairTwo(); // first round → drill controls
+  expect(screen.getByText("Random")).toBeTruthy();
+
+  // Re-pair (confirmed) back to the pairing surface.
+  fireEvent.press(screen.getByTestId("status-chip"));
+  fireEvent.press(screen.getByTestId("repair-button"));
+  fireEvent.press(screen.getByText("Re-pair"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+  expect(screen.getByTestId("start-pairing")).toBeTruthy();
+  expect(screen.queryByText("Random")).toBeNull();
+
+  // Second round completes → the handoff fires again → drill controls return.
+  await pairTwo();
+  expect(screen.getByText("Random")).toBeTruthy();
+  expect(screen.getByText("Start")).toBeTruthy(); // drill's Start, not pairing's
+  expect(screen.queryByTestId("start-pairing")).toBeNull();
+});
+
 test("the settings gear opens the settings modal — no timeout setting exists", async () => {
   await renderApp();
 
