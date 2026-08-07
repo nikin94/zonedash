@@ -87,16 +87,29 @@ test("the dev complete-pairing shortcut reveals the drill controls", async () =>
   expect(screen.getByText("Start")).toBeTruthy();
 });
 
-// Re-pair lives in the chip menu (next to Disconnect); it returns to the
-// pairing surface without dropping the link.
-test("re-pair from the chip menu returns to the pairing surface", async () => {
+// Re-pair lives in the chip menu (next to Disconnect); behind a confirm, it
+// returns to the pairing surface without dropping the link.
+test("re-pair from the chip menu confirms, then returns to the pairing surface", async () => {
   await renderApp();
   await connect();
   await pairTwo();
   expect(screen.getByText("Random")).toBeTruthy();
 
+  // The menu item only arms the confirm — the layout is still up behind it.
   fireEvent.press(screen.getByTestId("status-chip")); // open the chip menu
   fireEvent.press(screen.getByTestId("repair-button"));
+  expect(screen.getByTestId("repair-confirm")).toBeTruthy();
+  expect(screen.getByText("Random")).toBeTruthy(); // not re-paired yet
+
+  // Keep going backs out with the layout intact.
+  fireEvent.press(screen.getByText("Keep going"));
+  expect(screen.queryByTestId("repair-confirm")).toBeNull();
+  expect(screen.getByText("Random")).toBeTruthy();
+
+  // Confirming Re-pair opens the pairing surface.
+  fireEvent.press(screen.getByTestId("status-chip"));
+  fireEvent.press(screen.getByTestId("repair-button"));
+  fireEvent.press(screen.getByText("Re-pair"));
   await act(async () => {
     await jest.runAllTimersAsync();
   });

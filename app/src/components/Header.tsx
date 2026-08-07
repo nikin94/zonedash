@@ -36,6 +36,7 @@ export const Header = ({
   const { transport, connection, pairedSpots } = useAppState();
   const [menuOpen, setMenuOpen] = useState(false);
   const [disconnectAsk, setDisconnectAsk] = useState(false);
+  const [repairAsk, setRepairAsk] = useState(false);
 
   const connected = connection === "connected";
   const busy = connection === "connecting";
@@ -51,8 +52,13 @@ export const Header = ({
     transport.connect().catch(() => {});
   };
 
-  const repair = () => {
+  const askRepair = () => {
     setMenuOpen(false);
+    setRepairAsk(true);
+  };
+
+  const repair = () => {
+    setRepairAsk(false);
     onRepair?.();
   };
 
@@ -113,7 +119,7 @@ export const Header = ({
                   <>
                     <CustomPressable
                       testID="repair-button"
-                      onPress={repair}
+                      onPress={askRepair}
                       style={styles.menuItem}
                     >
                       <AppText weight="600">Re-pair targets</AppText>
@@ -152,6 +158,18 @@ export const Header = ({
         actions={[
           { label: "No", onPress: () => setDisconnectAsk(false) },
           { label: "Yes", danger: true, onPress: disconnect },
+        ]}
+      />
+
+      <ConfirmModal
+        visible={repairAsk}
+        onDismiss={() => setRepairAsk(false)}
+        testID="repair-confirm"
+        title="Re-pair the targets?"
+        body="This starts a new pairing round and discards the current layout."
+        actions={[
+          { label: "Keep going", onPress: () => setRepairAsk(false) },
+          { label: "Re-pair", danger: true, onPress: repair },
         ]}
       />
     </View>
