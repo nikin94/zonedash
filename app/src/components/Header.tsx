@@ -1,15 +1,13 @@
-import { useNavigation } from "@react-navigation/native";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import type { ConnectionState } from "../ble/transport";
-import type { Nav } from "../navigation";
 import { useAppState } from "../state/AppState";
 import { colors, glowShadow } from "../theme";
 import { AppText } from "./AppText";
 import { ConfirmModal } from "./ConfirmModal";
 import { CustomPressable } from "./CustomPressable";
-import { BackIcon, SlidersIcon } from "./Icons";
+import { SlidersIcon } from "./Icons";
 
 /** Brief status-chip label per connection state. */
 const CHIP_LABEL: Record<ConnectionState, string> = {
@@ -20,25 +18,14 @@ const CHIP_LABEL: Record<ConnectionState, string> = {
 };
 
 /**
- * The app header, shared by every screen: title on the left (with a back
- * affordance on pushed screens), the central-unit status chip and the settings
- * button on the right. While connected the chip opens a dropdown menu —
- * Pairing (its own screen) and Disconnect (behind the confirm); while
- * disconnected a chip tap just connects (non-destructive, no menu needed).
+ * The single app header: the title on the left, the central-unit status chip
+ * and the settings gear on the right. A chip tap connects while disconnected;
+ * while connected it opens a dropdown holding Disconnect (behind a confirm).
+ * The gear opens the settings modal — the app has one screen, so nothing here
+ * navigates.
  */
-export const Header = ({
-  back,
-  lockBack,
-  hideChip,
-  title = "ZoneDash",
-}: {
-  back?: boolean;
-  lockBack?: boolean; // pushed screen, but the back way out is suppressed (e.g. a running drill)
-  hideChip?: boolean; // Settings is config-only — no connection controls there.
-  title?: string;
-}) => {
-  const navigation = useNavigation<Nav>();
-  const { transport, connection, pairedSpots } = useAppState();
+export const Header = ({ onOpenSettings }: { onOpenSettings: () => void }) => {
+  const { transport, connection } = useAppState();
   const [menuOpen, setMenuOpen] = useState(false);
   const [disconnectAsk, setDisconnectAsk] = useState(false);
 
@@ -55,16 +42,6 @@ export const Header = ({
     transport.connect().catch(() => {});
   };
 
-  const openPairing = () => {
-    setMenuOpen(false);
-    navigation.navigate("Pairing");
-  };
-
-  const openDrill = () => {
-    setMenuOpen(false);
-    navigation.navigate("Drill");
-  };
-
   const askDisconnect = () => {
     setMenuOpen(false);
     setDisconnectAsk(true);
@@ -72,102 +49,71 @@ export const Header = ({
 
   const disconnect = () => {
     setDisconnectAsk(false);
-    // Drop the link BEFORE popping: home redirects to Pairing while connected
-    // and unpaired, so it must regain focus already disconnected — otherwise
-    // the redirect would bounce right back here.
+    // Dropping the link clears the paired layout (AppState), so the single
+    // screen falls back to its disconnected surface on its own.
     transport.disconnect().catch(() => {});
-    // A drop invalidates any pushed screen's context — land back on home.
-    // Keyed on the stack, not the back prop: a pushed screen may hide its
-    // back button (Pairing before a layout exists) yet still need the pop.
-    if (navigation.canGoBack()) navigation.popToTop();
   };
 
   return (
     <View style={styles.header}>
-      <View style={styles.headerLeft}>
-        {back && !lockBack && (
-          <CustomPressable
-            testID="header-back"
-            accessibilityLabel="Go back"
-            onPress={() => navigation.goBack()}
-            style={styles.headerButton}
-          >
-            <BackIcon />
-          </CustomPressable>
-        )}
-        <AppText size={20} weight="700" style={styles.headerTitle}>
-          {title}
-        </AppText>
-      </View>
+      <AppText size={20} weight="700" style={styles.headerTitle}>
+        ZoneDash
+      </AppText>
 
       <View style={styles.headerRight}>
-        {!hideChip && (
-          <View>
-            <CustomPressable
-              disabled={busy}
-              testID="status-chip"
-              accessibilityLabel={`Central unit: ${CHIP_LABEL[connection]}`}
-              onPress={onChipPress}
-              style={[styles.chip, menuOpen && styles.chipActive]}
-            >
-              <View
-                style={[
-                  styles.dot,
-                  connected && styles.dotConnected,
-                  busy && styles.dotConnecting,
-                  connection === "error" && styles.dotError,
-                ]}
-              />
-              <AppText size={13} weight="600" color={colors.textSecondary}>
-                {CHIP_LABEL[connection]}
-              </AppText>
-            </CustomPressable>
-
-            {menuOpen && (
-              <>
-                {/* Oversized invisible catcher: any tap outside dismisses. */}
-                <CustomPressable
-                  noFeedback
-                  testID="chip-menu-backdrop"
-                  accessibilityLabel="Close central unit menu"
-                  onPress={() => setMenuOpen(false)}
-                  style={styles.menuBackdrop}
-                />
-                <View testID="chip-menu" style={styles.menu}>
-                  {/* Drill needs a paired layout — the item exists only then. */}
-                  {pairedSpots.length > 0 && (
-                    <>
-                      <CustomPressable onPress={openDrill} style={styles.menuItem}>
-                        <AppText weight="600">Drill</AppText>
-                      </CustomPressable>
-                      <View style={styles.menuDivider} />
-                    </>
-                  )}
-                  <CustomPressable onPress={openPairing} style={styles.menuItem}>
-                    <AppText weight="600">Pairing</AppText>
-                  </CustomPressable>
-                  <View style={styles.menuDivider} />
-                  <CustomPressable onPress={askDisconnect} style={styles.menuItem}>
-                    <AppText weight="600" color={colors.danger}>
-                      Disconnect
-                    </AppText>
-                  </CustomPressable>
-                </View>
-              </>
-            )}
-          </View>
-        )}
-
-        {!back && (
+        <View>
           <CustomPressable
-            testID="settings-button"
-            accessibilityLabel="Open settings"
-            onPress={() => navigation.navigate("Settings")}
-            style={styles.headerButton}
+            disabled={busy}
+            testID="status-chip"
+            accessibilityLabel={`Central unit: ${CHIP_LABEL[connection]}`}
+            onPress={onChipPress}
+            style={[styles.chip, menuOpen && styles.chipActive]}
           >
-            <SlidersIcon />
+            <View
+              style={[
+                styles.dot,
+                connected && styles.dotConnected,
+                busy && styles.dotConnecting,
+                connection === "error" && styles.dotError,
+              ]}
+            />
+            <AppText size={13} weight="600" color={colors.textSecondary}>
+              {CHIP_LABEL[connection]}
+            </AppText>
           </CustomPressable>
-        )}
+
+          {menuOpen && (
+            <>
+              {/* Oversized invisible catcher: any tap outside dismisses. */}
+              <CustomPressable
+                noFeedback
+                testID="chip-menu-backdrop"
+                accessibilityLabel="Close central unit menu"
+                onPress={() => setMenuOpen(false)}
+                style={styles.menuBackdrop}
+              />
+              <View testID="chip-menu" style={styles.menu}>
+                <CustomPressable
+                  onPress={askDisconnect}
+                  style={styles.menuItem}
+                >
+                  <AppText weight="600" color={colors.danger}>
+                    Disconnect
+                  </AppText>
+                </CustomPressable>
+              </View>
+            </>
+          )}
+        </View>
+
+        <CustomPressable
+          testID="settings-button"
+          accessibilityLabel="Open settings"
+          onPress={onOpenSettings}
+          style={styles.headerButton}
+        >
+          <SlidersIcon />
+        </CustomPressable>
       </View>
 
       <ConfirmModal
@@ -193,11 +139,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 8,
     zIndex: 20, // the menu and the disconnect dialog overlay the content below
-  },
-  headerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
   },
   headerTitle: {
     letterSpacing: 1,
@@ -272,10 +213,5 @@ const styles = StyleSheet.create({
     height: 48, // fingertip-sized
     justifyContent: "center",
     paddingHorizontal: 20,
-  },
-  menuDivider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginHorizontal: 12,
   },
 });

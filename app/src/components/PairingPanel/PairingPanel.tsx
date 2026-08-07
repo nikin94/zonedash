@@ -4,10 +4,10 @@ import { StyleSheet, View } from "react-native";
 
 import type { PairingProgress } from "../../ble/contract";
 import type { CentralTransport } from "../../ble/transport";
-import { AppText } from "../../components/AppText";
-import { ConfirmModal } from "../../components/ConfirmModal";
-import { CourtMap } from "../../components/CourtMap";
-import { CustomPressable } from "../../components/CustomPressable";
+import { AppText } from "../AppText";
+import { ConfirmModal } from "../ConfirmModal";
+import { CourtMap } from "../CourtMap";
+import { CustomPressable } from "../CustomPressable";
 import { SPOT_NAMES } from "../../domain/spot";
 import { type SpotVisual } from "../../helpers/court";
 import { colors, glowShadow } from "../../theme";
@@ -43,7 +43,11 @@ const BUTTON_H = 48; // fingertip-sized; explicit so hidden slots match exactly
  * No pairing state is owned here — the central unit drives the round; this
  * only mirrors its Status events.
  */
-export const PairingPanel = ({ transport }: { transport: CentralTransport }) => {
+export const PairingPanel = ({
+  transport,
+}: {
+  transport: CentralTransport;
+}) => {
   const [total, setTotal] = useState(8);
   const [wheelOpen, setWheelOpen] = useState(false);
   // A new count picked AFTER a completed round — held until the operator
@@ -158,12 +162,15 @@ export const PairingPanel = ({ transport }: { transport: CentralTransport }) => 
 
   // Round phases: "choosing" — waiting for the operator's map tap;
   // "prompting" — a spot is lit, waiting for the physical target's taps.
-  const choosing = running && progress !== null && !done && progress.currentSpot === null;
-  const prompting = running && progress !== null && !done && progress.currentSpot !== null;
+  const choosing =
+    running && progress !== null && !done && progress.currentSpot === null;
+  const prompting =
+    running && progress !== null && !done && progress.currentSpot !== null;
   const confirming = pendingTotal !== null;
 
   const pickSpot = (i: number) => {
-    if (!choosing || progress === null || progress.boundSpots.includes(i)) return;
+    if (!choosing || progress === null || progress.boundSpots.includes(i))
+      return;
     transport.selectPairingSpot(i).catch(() => {}); // a stale tap is a no-op
   };
 
@@ -183,157 +190,170 @@ export const PairingPanel = ({ transport }: { transport: CentralTransport }) => 
 
   return (
     <View style={styles.panel}>
-      <View style={styles.headerRow}>
-        <AppText size={12} color={colors.textSecondary} style={styles.heading}>
-          Targets
-        </AppText>
-        {/* The wheel drops down as an absolute overlay anchored on the pill, so
-            the selected item sits exactly where the pill is. */}
-        <View style={styles.pillAnchor}>
-          <CustomPressable
-            noFeedback
-            disabled={running || confirming}
-            testID="count-pill"
-            accessibilityLabel={`${total} targets, tap to change`}
-            onPress={() => setWheelOpen((v) => !v)}
-            style={[styles.pill, wheelOpen && styles.pillActive]}
-          >
-            <AppText
-              weight="600"
-              color={wheelOpen ? colors.accentText : colors.text}
-            >
-              {total}
-            </AppText>
-          </CustomPressable>
-          {wheelOpen && !running && (
-            <>
-              {/* Oversized invisible backdrop: any tap outside the dropdown
-                  dismisses it, even when the settled value didn't change. */}
-              <CustomPressable
-                noFeedback
-                testID="wheel-backdrop"
-                accessibilityLabel="Close count picker"
-                onPress={() => setWheelOpen(false)}
-                style={styles.wheelBackdrop}
-              />
-              <View testID="count-wheel" style={styles.wheelDropdown}>
-                <WheelPicker
-                  value={total}
-                  itemHeight={WHEEL_ITEM_H}
-                  visibleItemCount={WHEEL_VISIBLE}
-                  width={WHEEL_W}
-                  data={WHEEL_DATA}
-                  onValueChanged={({ item }) => onWheelValue(item.value)}
-                  itemTextStyle={styles.wheelText}
-                  overlayItemStyle={styles.wheelOverlay}
-                />
-              </View>
-            </>
-          )}
-        </View>
-      </View>
-
       <CourtMap spots={visuals} onPressSpot={choosing ? pickSpot : undefined}>
         <>
-            {/* Every slot below has a FIXED footprint — the text area, the
-                error line, and both button rows keep their size across all
-                round phases, so nothing shifts as states change. */}
-            <View testID="status-slot" style={styles.textSlot}>
-              {choosing ? (
-                <AppText center size={16} weight="600" style={styles.slotText}>
-                  Tap the map where target {boundCount + 1} of {progress.total} stands
-                </AppText>
-              ) : prompting ? (
-                <AppText center size={16} weight="600" style={styles.slotText}>
-                  {progress.awaitingConfirm
-                    ? "Press again to confirm"
-                    : `Press the ${SPOT_NAMES[progress.currentSpot!]} target (${
-                        boundCount + 1
-                      }/${progress.total})`}
-                </AppText>
-              ) : running ? (
-                <AppText center size={16} weight="600" style={styles.slotText}>
-                  Starting pairing…
-                </AppText>
-              ) : done ? (
+          {/* The count picker lives inside the court, above the status text,
+                so the whole pairing UI reads on one surface. The wheel drops
+                down as an absolute overlay anchored on the pill. */}
+          <View style={styles.headerRow}>
+            <AppText
+              size={12}
+              color={colors.textSecondary}
+              style={styles.heading}
+            >
+              Targets
+            </AppText>
+            <View style={styles.pillAnchor}>
+              <CustomPressable
+                noFeedback
+                disabled={running || confirming}
+                testID="count-pill"
+                accessibilityLabel={`${total} targets, tap to change`}
+                onPress={() => setWheelOpen((v) => !v)}
+                style={[styles.pill, wheelOpen && styles.pillActive]}
+              >
                 <AppText
-                  center
-                  size={15}
                   weight="600"
-                  color={colors.success}
-                  style={styles.slotText}
+                  color={wheelOpen ? colors.accentText : colors.text}
                 >
-                  Paired {progress.total} {progress.total === 1 ? "target" : "targets"}
+                  {total}
                 </AppText>
-              ) : (
-                <AppText
-                  center
-                  size={13}
-                  color={colors.textMuted}
-                  style={styles.slotText}
-                >
-                  Pick a count, then place each target during pairing
-                </AppText>
-              )}
-            </View>
-
-            <View testID="error-slot" style={styles.errorSlot}>
-              {error !== null && (
-                <AppText center size={13} numberOfLines={1} color={colors.danger}>
-                  {error}
-                </AppText>
-              )}
-            </View>
-
-            {/* Actions stack vertically — primary on top, Undo always at the
-                very bottom — so the block reads top-to-bottom in one place. */}
-            <View style={styles.actionCol}>
-              {running ? (
-                <CustomPressable onPress={cancel} style={styles.button}>
-                  <AppText center size={16} weight="600">
-                    Cancel
-                  </AppText>
-                </CustomPressable>
-              ) : (
+              </CustomPressable>
+              {wheelOpen && !running && (
                 <>
-                  <CustomPressable onPress={start} style={styles.button}>
-                    <AppText center size={16} weight="600">
-                      {done ? "Re-pair" : "Start pairing"}
-                    </AppText>
-                  </CustomPressable>
-                  {/* DEV-only: bind everything at once so testing needn't tap
-                      each spot. Present only with the mock transport. */}
-                  {transport.completePairingNow && (
-                    <CustomPressable
-                      testID="dev-complete-pairing"
-                      onPress={devComplete}
-                      style={styles.devButton}
-                    >
-                      <AppText center size={13} weight="600" color={colors.textMuted}>
-                        Complete pairing (dev)
-                      </AppText>
-                    </CustomPressable>
-                  )}
+                  {/* Oversized invisible backdrop: any tap outside the
+                        dropdown dismisses it, even when the settled value
+                        didn't change. */}
+                  <CustomPressable
+                    noFeedback
+                    testID="wheel-backdrop"
+                    accessibilityLabel="Close count picker"
+                    onPress={() => setWheelOpen(false)}
+                    style={styles.wheelBackdrop}
+                  />
+                  <View testID="count-wheel" style={styles.wheelDropdown}>
+                    <WheelPicker
+                      value={total}
+                      itemHeight={WHEEL_ITEM_H}
+                      visibleItemCount={WHEEL_VISIBLE}
+                      width={WHEEL_W}
+                      data={WHEEL_DATA}
+                      onValueChanged={({ item }) => onWheelValue(item.value)}
+                      itemTextStyle={styles.wheelText}
+                      overlayItemStyle={styles.wheelOverlay}
+                    />
+                  </View>
                 </>
               )}
-              {/* Undo is only offered between binds (choosing) or after done —
-                  never mid-prompt, matching the central's refusal. The slot
-                  keeps the row's height when the button is hidden. */}
-              <View testID="undo-slot" style={styles.undoSlot}>
-                {(choosing || done) && boundCount > 0 && (
+            </View>
+          </View>
+
+          {/* Every slot below has a FIXED footprint — the text area, the
+                error line, and both button rows keep their size across all
+                round phases, so nothing shifts as states change. */}
+          <View testID="status-slot" style={styles.textSlot}>
+            {choosing ? (
+              <AppText center size={16} weight="600" style={styles.slotText}>
+                Tap the map where target {boundCount + 1} of {progress.total}{" "}
+                stands
+              </AppText>
+            ) : prompting ? (
+              <AppText center size={16} weight="600" style={styles.slotText}>
+                {progress.awaitingConfirm
+                  ? "Press again to confirm"
+                  : `Press the ${SPOT_NAMES[progress.currentSpot!]} target (${
+                      boundCount + 1
+                    }/${progress.total})`}
+              </AppText>
+            ) : running ? (
+              <AppText center size={16} weight="600" style={styles.slotText}>
+                Starting pairing…
+              </AppText>
+            ) : done ? (
+              <AppText
+                center
+                size={15}
+                weight="600"
+                color={colors.success}
+                style={styles.slotText}
+              >
+                Paired {progress.total}{" "}
+                {progress.total === 1 ? "target" : "targets"}
+              </AppText>
+            ) : (
+              <AppText
+                center
+                size={13}
+                color={colors.textMuted}
+                style={styles.slotText}
+              >
+                Pick a count, then place each target during pairing
+              </AppText>
+            )}
+          </View>
+
+          <View testID="error-slot" style={styles.errorSlot}>
+            {error !== null && (
+              <AppText center size={13} numberOfLines={1} color={colors.danger}>
+                {error}
+              </AppText>
+            )}
+          </View>
+
+          {/* Actions stack vertically — primary on top, Undo always at the
+                very bottom — so the block reads top-to-bottom in one place. */}
+          <View style={styles.actionCol}>
+            {running ? (
+              <CustomPressable onPress={cancel} style={styles.button}>
+                <AppText center size={16} weight="600">
+                  Cancel
+                </AppText>
+              </CustomPressable>
+            ) : (
+              <>
+                <CustomPressable onPress={start} style={styles.button}>
+                  <AppText center size={16} weight="600">
+                    {done ? "Re-pair" : "Start pairing"}
+                  </AppText>
+                </CustomPressable>
+                {/* DEV-only: bind everything at once so testing needn't tap
+                      each spot. Present only with the mock transport. */}
+                {transport.completePairingNow && (
                   <CustomPressable
-                    accessibilityLabel="Undo last bind"
-                    onPress={undo}
-                    style={styles.button}
+                    testID="dev-complete-pairing"
+                    onPress={devComplete}
+                    style={styles.devButton}
                   >
-                    <AppText center size={16} weight="600">
-                      Undo
+                    <AppText
+                      center
+                      size={13}
+                      weight="600"
+                      color={colors.textMuted}
+                    >
+                      Complete pairing (dev)
                     </AppText>
                   </CustomPressable>
                 )}
-              </View>
+              </>
+            )}
+            {/* Undo is only offered between binds (choosing) or after done —
+                  never mid-prompt, matching the central's refusal. The slot
+                  keeps the row's height when the button is hidden. */}
+            <View testID="undo-slot" style={styles.undoSlot}>
+              {(choosing || done) && boundCount > 0 && (
+                <CustomPressable
+                  accessibilityLabel="Undo last bind"
+                  onPress={undo}
+                  style={styles.button}
+                >
+                  <AppText center size={16} weight="600">
+                    Undo
+                  </AppText>
+                </CustomPressable>
+              )}
             </View>
-          </>
+          </View>
+        </>
       </CourtMap>
 
       {/* Count-change confirms — shown centered on screen like every confirm. */}
@@ -345,7 +365,9 @@ export const PairingPanel = ({ transport }: { transport: CentralTransport }) => 
             onDismiss={() => setPendingTotal(null)}
             testID="count-extend"
             title={`Add ${pendingTotal! - (progress?.total ?? 0)} more ${
-              pendingTotal! - (progress?.total ?? 0) === 1 ? "target" : "targets"
+              pendingTotal! - (progress?.total ?? 0) === 1
+                ? "target"
+                : "targets"
             }?`}
             body={`The ${progress?.total} paired ${
               progress?.total === 1 ? "target stays" : "targets stay"
