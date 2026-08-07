@@ -580,7 +580,10 @@ const styles = StyleSheet.create({
   },
   textSlot: {
     height: TEXT_SLOT_H,
-    justifyContent: "center",
+    // Seat the status at the BOTTOM of its fixed slot so a short line (e.g.
+    // "Session complete") sits close to the button below instead of floating
+    // centred with a wide gap. The height stays fixed, so no cross-phase jump.
+    justifyContent: "flex-end",
   },
   slotText: {
     lineHeight: 20,

@@ -315,7 +315,10 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     height: TEXT_SLOT_H,
     alignItems: "center",
-    justifyContent: "center",
+    // Seat the status at the BOTTOM of its fixed slot so a short line sits close
+    // to the action row below instead of floating centred with a wide gap. The
+    // height stays fixed, so the info block still can't jump between phases.
+    justifyContent: "flex-end",
   },
   errorSlot: {
     height: ERROR_SLOT_H,
