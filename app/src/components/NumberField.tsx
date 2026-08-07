@@ -15,6 +15,12 @@ import { AppText } from "./AppText";
  * Chrome matches the WheelField pill / a small Button so the settings rows read
  * as one system.
  */
+// A number with at most `decimals` fractional digits, mid-edit friendly:
+// accepts "" / "1" / "1." / "1.25" / ".5", rejects letters, a second
+// separator, or a 3rd decimal. `.` and `,` are interchangeable as the point.
+const validInput = (t: string, decimals: number) =>
+  new RegExp(`^\\d*([.,]\\d{0,${decimals}})?$`).test(t);
+
 export const NumberField = ({
   value,
   label,
@@ -23,6 +29,7 @@ export const NumberField = ({
   scale = 1000,
   min = 0,
   max = 5000,
+  decimals = 2,
   onChange,
 }: {
   value: number; // base units (ms)
@@ -32,10 +39,11 @@ export const NumberField = ({
   scale?: number; // base units per display unit (1000 ms per second)
   min?: number; // base units
   max?: number; // base units
+  decimals?: number; // max fractional digits accepted / shown
   onChange: (v: number) => void;
 }) => {
   // Trim trailing zeros: 500 → "0.5", 1000 → "1", 0 → "0".
-  const toDisplay = (v: number) => String(Number((v / scale).toFixed(2)));
+  const toDisplay = (v: number) => String(Number((v / scale).toFixed(decimals)));
   const clamp = (v: number) => Math.min(max, Math.max(min, v));
 
   const [text, setText] = useState(() => toDisplay(value));
@@ -48,6 +56,10 @@ export const NumberField = ({
   const parse = (t: string) => parseFloat(t.replace(",", "."));
 
   const onText = (t: string) => {
+    // Numbers only, ≤ `decimals` places — drop any keystroke that breaks the
+    // shape (letters slip past a soft keyboard on some devices; the regex is
+    // the real guard, decimal-pad is just the nicer default).
+    if (!validInput(t, decimals)) return;
     setText(t);
     const n = parse(t);
     if (!Number.isNaN(n)) onChange(clamp(Math.round(n * scale)));
@@ -119,7 +131,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accentSurface,
   },
   input: {
-    minWidth: 44,
+    // FIXED width (not minWidth): the value is right-aligned in a stable box, so
+    // typing "1" → "1.25" never grows the pill or shifts the label/unit — the
+    // digits just fill leftward. Sized for the widest value ("3.00").
+    width: 44,
     padding: 0, // strip the platform default so height matches the pill
     textAlign: "right",
     fontSize: 16,

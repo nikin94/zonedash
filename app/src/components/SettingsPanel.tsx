@@ -5,9 +5,9 @@ import { colors } from "../theme";
 import { AppText } from "./AppText";
 import { NumberField } from "./NumberField";
 
-// Delay is free-typed in seconds (0–5 s) rather than scrolled — a wheel of 0.1 s
-// steps was tedious for what is a single quick tweak. Stored as ms.
-const DELAY_MAX_MS = 5000;
+// Delay is free-typed in seconds (0–3 s, 2 decimals) rather than scrolled — a
+// wheel of 0.1 s steps was tedious for what is a single quick tweak. Stored as ms.
+const DELAY_MAX_MS = 3000;
 
 /**
  * Drill settings panel — shown in a modal opened from the header's settings

@@ -10,7 +10,7 @@ const setup = (value = 500, onChange = jest.fn()) => {
       testID="delay"
       unit="s"
       min={0}
-      max={5000}
+      max={3000}
       onChange={onChange}
     />,
   );
@@ -33,8 +33,26 @@ test("a typed value commits live in ms", () => {
 test("an over-max entry is clamped on commit", () => {
   const { input, onChange } = setup(500);
   fireEvent(input, "focus");
-  fireEvent.changeText(input, "9"); // 9 s → clamped to the 5 s max
-  expect(onChange).toHaveBeenLastCalledWith(5000);
+  fireEvent.changeText(input, "9"); // 9 s → clamped to the 3 s max
+  expect(onChange).toHaveBeenLastCalledWith(3000);
+});
+
+test("non-numeric text is rejected — the value doesn't change", () => {
+  const { input, onChange } = setup(500);
+  fireEvent(input, "focus");
+  fireEvent.changeText(input, "1"); // sets 1000
+  fireEvent.changeText(input, "1a"); // letters dropped — keystroke ignored
+  expect(input.props.value).toBe("1"); // text unchanged, no "1a"
+  expect(onChange).toHaveBeenLastCalledWith(1000); // still 1 s, not corrupted
+});
+
+test("a third decimal place is rejected", () => {
+  const { input, onChange } = setup(500);
+  fireEvent(input, "focus");
+  fireEvent.changeText(input, "1.25");
+  fireEvent.changeText(input, "1.256"); // 3rd decimal — dropped
+  expect(input.props.value).toBe("1.25"); // held at two places
+  expect(onChange).toHaveBeenLastCalledWith(1250);
 });
 
 test("clearing the field reverts to the last value on blur, not to zero", () => {
