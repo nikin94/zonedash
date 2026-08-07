@@ -3,7 +3,7 @@ import { Animated, StyleSheet } from "react-native";
 
 import { DOT } from "../../helpers/court";
 import { colors } from "../../theme";
-import { pulseClock, startPulseClock } from "./pulseClock";
+import { acquirePulse, pulseClock, releasePulse } from "./pulseClock";
 
 /**
  * Expanding radar ring drawn behind a dot. Used two ways: a bright accent ping
@@ -13,7 +13,11 @@ import { pulseClock, startPulseClock } from "./pulseClock";
  * later — e.g. one re-opened by Undo — stays in phase with the rest.
  */
 export const RadarPing = ({ color = colors.accent }: { color?: string }) => {
-  useEffect(() => startPulseClock(), []);
+  // Join the shared breath while mounted; releasing the last ring stops the loop.
+  useEffect(() => {
+    acquirePulse();
+    return releasePulse;
+  }, []);
   return (
     <Animated.View
       pointerEvents="none"
