@@ -326,6 +326,19 @@ static void test_encoders_reject_bad_input() {
   ok.current_spot = 1;
   ZD_EQ(encode_status_pairing(ok, buf, 7), 0);          // needs 6 + 2 = 8
   ZD_EQ(encode_status_pairing(ok, buf, 8), 8);          // exact fit passes
+  // An unexpected negative current_spot (not the -1 sentinel) is rejected, not
+  // silently coded as "none".
+  PairingStatus neg = ok;
+  neg.current_spot = -2;
+  ZD_EQ(encode_status_pairing(neg, buf, sizeof(buf)), 0);
+  // total and each bound spot are gated the same as current_spot.
+  PairingStatus big_total = ok;
+  big_total.total = MAX_TARGETS + 1;
+  ZD_EQ(encode_status_pairing(big_total, buf, sizeof(buf)), 0);
+  const uint8_t off_layout[2] = {0, MAX_TARGETS}; // spot 8 is off the layout
+  PairingStatus bad_bound = ok;
+  bad_bound.bound_spots = off_layout;
+  ZD_EQ(encode_status_pairing(bad_bound, buf, sizeof(buf)), 0);
   // Results: a buffer one byte short of the whole logical buffer.
   HitRecord h;
   Sensor s = Sensor::ToF;

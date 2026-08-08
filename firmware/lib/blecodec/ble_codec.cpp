@@ -157,13 +157,19 @@ size_t encode_status_session(BleSessionState state, uint8_t targets_online,
 }
 
 size_t encode_status_pairing(const PairingStatus& p, uint8_t* out, size_t cap) {
-  // Bound spots must fit the active layout; a current_spot must be a real spot
-  // or the sentinel — never silently truncate a bad field onto the wire.
+  // Every spot field must fit the active layout — never silently truncate a bad
+  // value onto the wire (the same rule current_spot is held to, applied to its
+  // neighbours: total, bound_count, and each bound spot).
+  if (p.total > MAX_TARGETS) return 0;
   if (p.bound_count > MAX_TARGETS) return 0;
-  if (p.current_spot >= MAX_TARGETS) return 0; // -1 (none) and 0..7 are ok
+  // current_spot is -1 (none) or a real spot 0..MAX_TARGETS-1. Reject any other
+  // negative: an unexpected -2/-100 must fail loud, not masquerade as "none".
+  if (p.current_spot < -1 || p.current_spot >= MAX_TARGETS) return 0;
   const size_t n = 6 + p.bound_count;
   if (out == nullptr || cap < n) return 0;
   if (p.bound_count > 0 && p.bound_spots == nullptr) return 0;
+  for (uint8_t i = 0; i < p.bound_count; ++i)
+    if (p.bound_spots[i] >= MAX_TARGETS) return 0; // a bound spot off the layout
 
   out[0] = STATUS_VERSION;
   out[1] = STATUS_PAIRING;
