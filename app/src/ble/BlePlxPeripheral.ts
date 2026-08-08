@@ -66,10 +66,24 @@ export class BlePlxPeripheral implements GattPeripheral {
    *  permissions are needed — no location. Rejects if the user denies. */
   private async requestAndroidPermissions(): Promise<void> {
     if (Platform.OS !== "android") return;
-    const wanted = [
-      PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
-      PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-    ];
+    // The runtime permission a BLE scan needs changed at API 31 (Android 12):
+    //  - 31+  : BLUETOOTH_SCAN + BLUETOOTH_CONNECT (the new, location-free perms;
+    //           our app.json sets neverForLocation). This is the bench target.
+    //  - 24–30: a scan is treated as a location operation, so ACCESS_FINE_LOCATION
+    //           is what must be granted — the 12+ perms don't exist there.
+    // Requesting the wrong set for the OS version silently no-ops and the scan
+    // then fails as "Unauthorized", so gate on the API level. NOTE: full 24–30
+    // support also needs ACCESS_FINE_LOCATION declared in app.json — intentionally
+    // omitted so the app stays location-free (neverForLocation); until it's added
+    // the <=30 branch will surface a clear "permission denied" rather than a mute
+    // scan. minSdk is 24 but the app targets 12+ devices.
+    const wanted =
+      Number(Platform.Version) >= 31
+        ? [
+            PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+            PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+          ]
+        : [PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION];
     const result = await PermissionsAndroid.requestMultiple(wanted);
     const denied = wanted.some(
       (p) => result[p] !== PermissionsAndroid.RESULTS.GRANTED,
