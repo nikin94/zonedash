@@ -2,8 +2,10 @@
  * Transport seam between the app and the central unit. The UI only ever talks
  * to this interface; implementations encode it onto a wire:
  *  - MockCentralTransport (mock.ts) — in-app simulator, runs in Expo Go.
- *  - BleCentralTransport (later) — react-native-ble-plx over the GATT contract
- *    in contract.ts; each method maps 1:1 to a ControlOp write.
+ *  - BleCentralTransport (BleCentralTransport.ts) — encodes each method onto the
+ *    GATT contract via ble/codec.ts, over a GattPeripheral (gatt.ts). Its logic
+ *    is host-tested; the only board-dependent piece is the concrete ble-plx
+ *    peripheral adapter, written at the bench (kept out of the Expo Go bundle).
  */
 import type { HitRecord, PairingProgress } from "./contract";
 
