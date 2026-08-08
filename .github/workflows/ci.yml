@@ -19,6 +19,18 @@ jobs:
         working-directory: firmware
         run: ./test/run_native.sh
 
+  dk-wire-tests:
+    name: DK wire codec tests
+    # The Zephyr app itself can't build here (needs the nRF Connect SDK), but its
+    # byte-layout functions are pure C — host-compiled and pinned against the same
+    # shared fixture the app and brain codecs are, so a fixture byte edit breaks
+    # this too. See firmware-dk/README.md.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run DK wire codec test
+        run: ./firmware-dk/test/run_native.sh
+
   app-checks:
     name: app typecheck + tests
     runs-on: ubuntu-latest

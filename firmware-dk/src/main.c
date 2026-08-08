@@ -27,13 +27,14 @@
 #include <zephyr/logging/log.h>
 #include <string.h>
 
+#include "dk_wire.h" /* the pure byte layout — pinned against the shared fixture */
+
 LOG_MODULE_REGISTER(zonedash_dk, LOG_LEVEL_INF);
 
-/* ── Wire constants (keep in lock-step with codec.ts) ───────────────────────*/
-#define CONTROL_VERSION 1
-#define STATUS_VERSION 1
-#define RESULTS_VERSION 1
-
+/* Control opcodes (byte 1, after the version). Mirrors codec.ts ControlOp. The
+ * Status/Results byte layout and every wire constant now live in dk_wire.h,
+ * host-tested against docs/ble-vectors.json (test/test_dk_wire.cpp) — the DK is
+ * no longer a second, unpinned copy of the format. */
 enum control_op {
 	OP_START_SESSION = 1,
 	OP_STOP_SESSION = 2,
@@ -47,27 +48,15 @@ enum control_op {
 	OP_FINISH_PAIRING = 10,
 };
 
-/* Status kinds */
-#define ST_SESSION 1
-#define ST_PAIRING 2
-#define ST_PROGRESS 3
-#define ST_RESOLVED 4
-
-/* SessionState wire order (codec.ts SESSION_STATE) */
-#define SESS_IDLE 0
-#define SESS_PAIRING 1
-#define SESS_RUNNING 2
-#define SESS_DONE 3
-
-#define MAX_TARGETS 8
-#define RESULTS_HEADER 3
-#define RECORD_BYTES 29
-#define MAX_RECS 16 /* bench cap on scripted steps */
-#define PAIR_CURRENT_NONE 0xFF
+#define MAX_RECS 16	    /* bench cap on scripted steps */
+#define DUMP_MAX_RETRIES 50 /* ~1 s of -ENOMEM retries before the dump gives up */
 
 /* ── 128-bit UUIDs, exactly app/src/ble/contract.ts ─────────────────────────*/
-static const struct bt_uuid_128 service_uuid = BT_UUID_INIT_128(
-	BT_UUID_128_ENCODE(0x5a17e900, 0x0000, 0x1000, 0x8000, 0x00805f9b34fb));
+/* The service UUID appears twice — the GATT object and the advertising data —
+ * so its raw encoding is named once here to keep the two copies in step. */
+#define ZD_SERVICE_UUID_ENCODE                                                            \
+	BT_UUID_128_ENCODE(0x5a17e900, 0x0000, 0x1000, 0x8000, 0x00805f9b34fb)
+static const struct bt_uuid_128 service_uuid = BT_UUID_INIT_128(ZD_SERVICE_UUID_ENCODE);
 static const struct bt_uuid_128 control_uuid = BT_UUID_INIT_128(
 	BT_UUID_128_ENCODE(0x5a17e901, 0x0000, 0x1000, 0x8000, 0x00805f9b34fb));
 static const struct bt_uuid_128 status_uuid = BT_UUID_INIT_128(
@@ -80,7 +69,7 @@ static struct bt_conn *current_conn;
 
 /* Pairing round */
 static uint8_t pair_total;
-static uint8_t pair_bound[MAX_TARGETS];
+static uint8_t pair_bound[DK_MAX_TARGETS];
 static uint8_t pair_count;
 static int pair_current = -1; /* <0 = none prompted */
 static bool pair_awaiting;
@@ -88,31 +77,22 @@ static int pair_phase; /* 0 -> awaiting, 1 -> bind */
 
 /* Drill / session */
 static uint8_t drill_mode;
-static uint8_t drill_num_pos = MAX_TARGETS;
+static uint8_t drill_num_pos = DK_MAX_TARGETS;
 static uint16_t drill_steps = 1;
 static bool session_running;
 static uint16_t sess_step;
 static int sess_phase; /* 0 -> arm, 1 -> resolve */
 
-/* Recorded hits, for the dump */
-struct rec {
-	uint16_t seq;
-	uint8_t pos;
-	uint64_t tlit;
-	uint64_t thit;
-	uint32_t react;
-	uint32_t move;
-	bool miss;
-	uint8_t sensor;
-};
-static struct rec recs[MAX_RECS];
+/* Recorded hits, for the dump (the wire record struct from dk_wire.h). */
+static struct dk_hit recs[MAX_RECS];
 static uint16_t rec_count;
 
 /* Results dump, sent frame-by-frame from a work item (can't sleep in the BLE
  * RX callback). Built once at DumpResults, then drained. */
-static uint8_t dump_buf[RESULTS_HEADER + MAX_RECS * RECORD_BYTES];
+static uint8_t dump_buf[DK_RESULTS_HEADER + MAX_RECS * DK_RECORD_BYTES];
 static uint16_t dump_total;
 static uint16_t dump_off;
+static uint8_t dump_retries; /* -ENOMEM backoffs on the current frame */
 
 static struct k_work_delayable pair_work;
 static struct k_work_delayable sess_work;
@@ -122,24 +102,6 @@ static struct k_work_delayable hello_work;
 static uint8_t live_pos;
 
 /* ── Little-endian writers ──────────────────────────────────────────────────*/
-static void put_u16(uint8_t *p, uint16_t v)
-{
-	p[0] = (uint8_t)v;
-	p[1] = (uint8_t)(v >> 8);
-}
-static void put_u32(uint8_t *p, uint32_t v)
-{
-	for (int i = 0; i < 4; i++) {
-		p[i] = (uint8_t)(v >> (8 * i));
-	}
-}
-static void put_u64(uint8_t *p, uint64_t v)
-{
-	for (int i = 0; i < 8; i++) {
-		p[i] = (uint8_t)(v >> (8 * i));
-	}
-}
-
 /* Attribute layout of the service defined below. Notifies target the char VALUE
  * attribute (declaration index + 1):
  *   [0] primary          [1] control decl  [2] control value
@@ -163,43 +125,32 @@ static void notify_status(const uint8_t *d, uint16_t len)
 	}
 }
 
-/* ── Status emitters (byte layout = codec.ts decodeStatus) ──────────────────*/
+/* ── Status emitters — dk_wire.c builds the bytes (pinned to the fixture); this
+ *    layer only feeds live scenario state in and hands the frame to notify. ── */
 static void emit_session(uint8_t state, uint8_t online)
 {
-	uint8_t b[4] = {STATUS_VERSION, ST_SESSION, state, online};
-	notify_status(b, sizeof(b));
+	uint8_t b[DK_STATUS_MAX_LEN];
+	notify_status(b, (uint16_t)dk_encode_session(state, online, b));
 }
 
 static void emit_pairing(void)
 {
-	uint8_t b[6 + MAX_TARGETS];
-	bool done = pair_total > 0 && pair_count >= pair_total;
-
-	b[0] = STATUS_VERSION;
-	b[1] = ST_PAIRING;
-	b[2] = pair_total;
-	b[3] = pair_count;
-	b[4] = pair_current < 0 ? PAIR_CURRENT_NONE : (uint8_t)pair_current;
-	b[5] = (uint8_t)((pair_awaiting ? 0x01 : 0) | (done ? 0x02 : 0));
-	for (uint8_t i = 0; i < pair_count && i < MAX_TARGETS; i++) {
-		b[6 + i] = pair_bound[i];
-	}
-	notify_status(b, (uint16_t)(6 + pair_count));
+	uint8_t b[DK_STATUS_MAX_LEN];
+	size_t n = dk_encode_pairing(pair_total, pair_bound, pair_count, pair_current,
+				     pair_awaiting, b);
+	notify_status(b, (uint16_t)n);
 }
 
 static void emit_progress(uint16_t seq, uint8_t pos)
 {
-	uint8_t b[5] = {STATUS_VERSION, ST_PROGRESS, 0, 0, pos};
-	put_u16(b + 2, seq);
-	notify_status(b, sizeof(b));
+	uint8_t b[DK_STATUS_MAX_LEN];
+	notify_status(b, (uint16_t)dk_encode_progress(seq, pos, b));
 }
 
 static void emit_resolved(uint16_t seq, uint8_t pos, bool miss, uint32_t react)
 {
-	uint8_t b[10] = {STATUS_VERSION, ST_RESOLVED, 0, 0, pos, (uint8_t)(miss ? 0x01 : 0)};
-	put_u16(b + 2, seq);
-	put_u32(b + 6, react);
-	notify_status(b, sizeof(b));
+	uint8_t b[DK_STATUS_MAX_LEN];
+	notify_status(b, (uint16_t)dk_encode_resolved(seq, pos, miss, react, b));
 }
 
 /* ── Scenario helpers ───────────────────────────────────────────────────────*/
@@ -208,14 +159,14 @@ static void record_hit(uint16_t seq, uint8_t pos, uint32_t react)
 	if (rec_count >= MAX_RECS) {
 		return;
 	}
-	struct rec *r = &recs[rec_count++];
+	struct dk_hit *r = &recs[rec_count++];
 	r->seq = seq;
 	r->pos = pos;
 	r->tlit = (uint64_t)seq * 1000000ull;
 	r->thit = r->tlit + (uint64_t)react * 1000ull;
 	r->react = react;
 	r->move = 0;
-	r->miss = false;
+	r->miss = 0;
 	r->sensor = 0; /* ToF */
 }
 
@@ -225,7 +176,7 @@ static void start_session(void)
 	sess_step = 0;
 	sess_phase = 0;
 	rec_count = 0;
-	emit_session(SESS_RUNNING, pair_count);
+	emit_session(DK_SESS_RUNNING, pair_count);
 	k_work_reschedule(&sess_work, K_MSEC(500));
 }
 
@@ -233,26 +184,26 @@ static void stop_session(void)
 {
 	session_running = false;
 	k_work_cancel_delayable(&sess_work);
-	emit_session(SESS_DONE, pair_count);
+	emit_session(DK_SESS_DONE, pair_count);
 }
 
 static void parse_drill(const uint8_t *p, uint16_t n)
 {
-	if (n < 18) {
+	uint16_t steps;
+	/* dk_decode_drill reads the fields at the pinned offsets. `steps` is the
+	 * scripted step count: path_len for path mode, else the config `count`.
+	 * Note the bench simplification — a time-limited drill here runs `count`
+	 * steps, not a real duration_ms window. */
+	if (!dk_decode_drill(p, n, &drill_mode, &drill_num_pos, &steps)) {
 		return;
 	}
-	drill_mode = p[0];
-	drill_num_pos = p[1] ? p[1] : 1;
-	uint16_t count = (uint16_t)(p[2] | (p[3] << 8));
-	uint8_t path_len = p[17];
-
-	drill_steps = (drill_mode == 1 /* path */) ? path_len : count;
-	if (drill_steps == 0) {
-		drill_steps = 1;
+	if (steps == 0) {
+		steps = 1;
 	}
-	if (drill_steps > MAX_RECS) {
-		drill_steps = MAX_RECS;
+	if (steps > MAX_RECS) {
+		steps = MAX_RECS; /* bench cap on scripted steps */
 	}
+	drill_steps = steps;
 }
 
 /* ── Work handlers (run on the system workqueue — may sleep) ─────────────────*/
@@ -265,7 +216,7 @@ static void pair_work_fn(struct k_work *w)
 		pair_phase = 1;
 		k_work_reschedule(&pair_work, K_MSEC(400));
 	} else {
-		if (pair_current >= 0 && pair_count < MAX_TARGETS) {
+		if (pair_current >= 0 && pair_count < DK_MAX_TARGETS) {
 			pair_bound[pair_count++] = (uint8_t)pair_current;
 		}
 		pair_current = -1;
@@ -294,7 +245,7 @@ static void sess_work_fn(struct k_work *w)
 		sess_phase = 0;
 		if (sess_step >= drill_steps) {
 			session_running = false;
-			emit_session(SESS_DONE, pair_count);
+			emit_session(DK_SESS_DONE, pair_count);
 		} else {
 			k_work_reschedule(&sess_work, K_MSEC(500));
 		}
@@ -323,10 +274,17 @@ static void dump_work_fn(struct k_work *w)
 	int err = bt_gatt_notify(current_conn, &zonedash_svc.attrs[ATTR_RESULTS_VALUE],
 				 dump_buf + dump_off, n);
 	if (err == -ENOMEM) {
-		/* TX buffers full — retry this same frame shortly. */
+		/* TX buffers full — retry this same frame shortly, but bounded so a
+		 * wedged link can't spin the workqueue forever. */
+		if (++dump_retries > DUMP_MAX_RETRIES) {
+			LOG_WRN("results dump: TX stalled, giving up");
+			dump_off = dump_total; /* let the app's dump timeout fire */
+			return;
+		}
 		k_work_reschedule(&dump_work, K_MSEC(20));
 		return;
 	}
+	dump_retries = 0; /* a frame went out — reset the backoff */
 	dump_off += n;
 	if (dump_off < dump_total) {
 		k_work_reschedule(&dump_work, K_MSEC(15));
@@ -335,22 +293,11 @@ static void dump_work_fn(struct k_work *w)
 
 static void send_results(void)
 {
-	dump_buf[0] = RESULTS_VERSION;
-	put_u16(dump_buf + 1, rec_count);
-	for (uint16_t i = 0; i < rec_count; i++) {
-		uint8_t *r = dump_buf + RESULTS_HEADER + i * RECORD_BYTES;
-		struct rec *s = &recs[i];
-		put_u16(r, s->seq);
-		r[2] = s->pos;
-		put_u64(r + 3, s->tlit);
-		put_u64(r + 11, s->thit);
-		put_u32(r + 19, s->react);
-		put_u32(r + 23, s->move);
-		r[27] = (uint8_t)(s->miss ? 0x01 : 0);
-		r[28] = s->sensor;
-	}
-	dump_total = (uint16_t)(RESULTS_HEADER + rec_count * RECORD_BYTES);
+	/* dk_encode_results lays the whole [version, count, ...records] buffer out
+	 * at the pinned offsets; the work item then chunks it across notifications. */
+	dump_total = (uint16_t)dk_encode_results(recs, rec_count, dump_buf);
 	dump_off = 0;
+	dump_retries = 0;
 	k_work_reschedule(&dump_work, K_NO_WAIT);
 }
 
@@ -364,7 +311,7 @@ static ssize_t control_write(struct bt_conn *conn, const struct bt_gatt_attr *at
 	ARG_UNUSED(flags);
 
 	const uint8_t *b = buf;
-	if (len < 2 || b[0] != CONTROL_VERSION) {
+	if (len < 2 || b[0] != DK_CONTROL_VERSION) {
 		LOG_WRN("drop control write (len %u, ver %u)", len, len ? b[0] : 0);
 		return len; /* ack the write; a real central would drop it too */
 	}
@@ -379,6 +326,9 @@ static ssize_t control_write(struct bt_conn *conn, const struct bt_gatt_attr *at
 			pair_count = 0;
 			pair_current = -1;
 			pair_awaiting = false;
+			/* Move the session into `pairing` too (the mock does), so a
+			 * screen reading session state during a round stays in step. */
+			emit_session(DK_SESS_PAIRING, pair_count);
 			emit_pairing();
 		}
 		break;
@@ -426,7 +376,7 @@ static ssize_t control_write(struct bt_conn *conn, const struct bt_gatt_attr *at
 				session_running = true;
 				sess_step = 0;
 				rec_count = 0;
-				emit_session(SESS_RUNNING, pair_count);
+				emit_session(DK_SESS_RUNNING, pair_count);
 			}
 			live_pos = b[2];
 			emit_progress(sess_step, live_pos);
@@ -446,7 +396,14 @@ static ssize_t control_write(struct bt_conn *conn, const struct bt_gatt_attr *at
 static void status_ccc_changed(const struct bt_gatt_attr *attr, uint16_t value)
 {
 	ARG_UNUSED(attr);
-	LOG_INF("status notifications %s", value == BT_GATT_CCC_NOTIFY ? "on" : "off");
+	bool on = value == BT_GATT_CCC_NOTIFY;
+	LOG_INF("status notifications %s", on ? "on" : "off");
+	/* The app has just subscribed — this is the first moment a Status notify is
+	 * actually delivered, so send the initial session snapshot from HERE (off a
+	 * work item), not from a fixed post-connect timer that races the subscribe. */
+	if (on && current_conn) {
+		k_work_reschedule(&hello_work, K_NO_WAIT);
+	}
 }
 static void results_ccc_changed(const struct bt_gatt_attr *attr, uint16_t value)
 {
@@ -470,8 +427,7 @@ BT_GATT_SERVICE_DEFINE(
  *   the scan response. ───────────────────────────────────────────────────────*/
 static const struct bt_data ad[] = {
 	BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
-	BT_DATA_BYTES(BT_DATA_UUID128_ALL,
-		      BT_UUID_128_ENCODE(0x5a17e900, 0x0000, 0x1000, 0x8000, 0x00805f9b34fb)),
+	BT_DATA_BYTES(BT_DATA_UUID128_ALL, ZD_SERVICE_UUID_ENCODE),
 };
 static const struct bt_data sd[] = {
 	BT_DATA(BT_DATA_NAME_COMPLETE, "ZoneDash-DK", sizeof("ZoneDash-DK") - 1),
@@ -493,6 +449,7 @@ static void reset_scenario(void)
 	k_work_cancel_delayable(&sess_work);
 	k_work_cancel_delayable(&live_work);
 	k_work_cancel_delayable(&dump_work);
+	k_work_cancel_delayable(&hello_work);
 	pair_total = 0;
 	pair_count = 0;
 	pair_current = -1;
@@ -502,14 +459,16 @@ static void reset_scenario(void)
 	rec_count = 0;
 	dump_off = 0;
 	dump_total = 0;
+	dump_retries = 0;
 }
 
 static void hello_work_fn(struct k_work *w)
 {
 	ARG_UNUSED(w);
-	/* Nudge the app's session snapshot to idle once it has had time to
-	 * subscribe to the Status CCC after connect + discovery. */
-	emit_session(SESS_IDLE, 0);
+	/* Scheduled from status_ccc_changed the moment the app subscribes. Emit the
+	 * CURRENT session state (idle right after connect) so a subscribe — even a
+	 * late or repeat one mid-scenario — rehydrates the app snapshot correctly. */
+	emit_session(session_running ? DK_SESS_RUNNING : DK_SESS_IDLE, pair_count);
 }
 
 static void connected(struct bt_conn *conn, uint8_t err)
@@ -521,7 +480,8 @@ static void connected(struct bt_conn *conn, uint8_t err)
 	current_conn = bt_conn_ref(conn);
 	reset_scenario();
 	LOG_INF("connected");
-	k_work_reschedule(&hello_work, K_MSEC(600));
+	/* The initial idle snapshot is emitted from status_ccc_changed once the app
+	 * subscribes — not on a timer here (it would race the subscribe). */
 }
 
 static void disconnected(struct bt_conn *conn, uint8_t reason)

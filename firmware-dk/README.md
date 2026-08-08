@@ -33,8 +33,25 @@ only be validated on the DK. See "Status" at the bottom.
     test on hardware: a live MTU + a multi-frame Results reply.
 
 The **values** it emits are a freeform bench script; only the **byte layout** is
-contractual and mirrors `codec.ts` field for field. Change the layout in
-`codec.ts` + `ble-vectors.json` first, then mirror it in `src/main.c`.
+contractual. That layout lives in `src/dk_wire.c` (pure C, no Zephyr) and is
+**host-tested against the shared fixture `docs/ble-vectors.json`** by
+`test/test_dk_wire.cpp` — the same file the app (`codec.ts`) and the ESP32 brain
+(`firmware/lib/blecodec`) pin against. So a byte edited in the fixture breaks this
+build too, not just the other two: the DK is no longer an unpinned third copy of
+the format. Change the layout in `codec.ts` + `ble-vectors.json` first, then
+mirror it in `src/dk_wire.c` and the fixture test will confirm they agree.
+
+## Host test (runs in CI)
+
+The Zephyr app can't build without the nRF Connect SDK, but the wire codec can:
+
+```sh
+./firmware-dk/test/run_native.sh
+# pass an alternate fixture to prove the pin bites:
+# ./firmware-dk/test/run_native.sh /tmp/edited-vectors.json  -> fails
+```
+
+CI runs this as the `DK wire codec tests` job.
 
 ## Prerequisites
 
@@ -85,9 +102,12 @@ hanging).
 
 ## Status
 
-Board-dependent, **not in CI**, and not unit-tested — validated only on the DK.
-This is an intentional step outside the repo's "green before merge" rule (the
-app/firmware codec halves it drives ARE fully tested and pinned; this is the
-live-radio harness for them). If a `west build` errors on your NCS version, tell
-me the version and the error — the likely culprits are the board string (above)
-or a renamed advertising/MTU Kconfig, both quick fixes.
+The **wire codec** (`src/dk_wire.c`) is host-tested and CI-pinned against the
+shared fixture (see above). The **Zephyr integration** — the GATT server, the
+scenario timing, the radio — is board-dependent, **not in CI**, and validated
+only on the DK: an intentional step outside the repo's "green before merge" rule
+for that layer (the byte format it drives, and the app/brain codec halves, ARE
+fully tested and pinned; this is the live-radio harness for them). If a
+`west build` errors on your NCS version, tell me the version and the error — the
+likely culprits are the board string (above) or a renamed advertising/MTU
+Kconfig, both quick fixes.
