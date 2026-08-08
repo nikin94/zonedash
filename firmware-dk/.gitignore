@@ -1,0 +1,2 @@
+# Zephyr / west build output — never commit build artifacts.
+build/
