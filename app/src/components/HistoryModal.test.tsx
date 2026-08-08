@@ -55,6 +55,27 @@ test("the target count shows only for a reduced layout, not the full 8", async (
   expect(screen.queryByText(/8 targets/)).toBeNull();
 });
 
+test("badges the fastest-average session, and only that one", async () => {
+  await appendSession(summary(1, { avgMs: 500 }));
+  await appendSession(summary(2, { avgMs: 320 })); // fastest
+  await appendSession(summary(3, { avgMs: 410 }));
+
+  render(<HistoryModal visible onDismiss={() => {}} />);
+  await screen.findByTestId("history-row-2");
+
+  expect(screen.getByTestId("history-best-2")).toBeTruthy(); // the 320 ms run
+  expect(screen.queryByTestId("history-best-1")).toBeNull();
+  expect(screen.queryByTestId("history-best-3")).toBeNull();
+  expect(screen.getByText("★ best")).toBeTruthy();
+});
+
+test("a lone session gets no best badge — nothing to compare against", async () => {
+  await appendSession(summary(1, { avgMs: 350 }));
+  render(<HistoryModal visible onDismiss={() => {}} />);
+  await screen.findByTestId("history-row-1");
+  expect(screen.queryByText("★ best")).toBeNull();
+});
+
 test("a hidden modal loads nothing", () => {
   render(<HistoryModal visible={false} onDismiss={() => {}} />);
   expect(screen.queryByTestId("history-empty")).toBeNull();

@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Modal, ScrollView, StyleSheet, View } from "react-native";
 
 import { MAX_TARGETS } from "../ble/codec";
-import type { SessionSummary } from "../domain/session";
+import { bestAverageSessionId, type SessionSummary } from "../domain/session";
+import { formatRelativeTime } from "../helpers/time";
 import { clearHistory, loadHistory } from "../state/history";
 import { alpha, colors, glowShadow } from "../theme";
 import { AppText } from "./AppText";
@@ -18,19 +19,13 @@ const fmtSec = (ms: number | null) =>
 const fmtMode = (mode: string) =>
   mode.length > 0 ? mode[0].toUpperCase() + mode.slice(1) : mode;
 
-/** Short absolute stamp, e.g. "Mar 15, 14:30" — enough to tell sessions apart
- *  without a full date-time. */
-const fmtWhen = (endedAt: number) => {
-  const d = new Date(endedAt);
-  return `${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}, ${d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`;
-};
-
-/** The sub-line under a session's mode: when · [targets ·] hits. The target
- *  count is only worth noting when the layout was reduced — the full
- *  MAX_TARGETS layout is the default, so "8 targets" is noise. */
-const fmtMeta = (s: SessionSummary) => {
+/** The sub-line under a session's mode: when · [targets ·] hits. The time is
+ *  relative ("2m ago"), read against `now`. The target count is only worth
+ *  noting when the layout was reduced — the full MAX_TARGETS layout is the
+ *  default, so "8 targets" is noise. */
+const fmtMeta = (s: SessionSummary, now: number) => {
   const hits = `${s.attempts} ${s.attempts === 1 ? "hit" : "hits"}`;
-  const parts = [fmtWhen(s.endedAt)];
+  const parts = [formatRelativeTime(s.endedAt, now)];
   if (s.numPositions < MAX_TARGETS) parts.push(`${s.numPositions} targets`);
   parts.push(hits);
   return parts.join(" · ");
@@ -52,12 +47,16 @@ export const HistoryModal = ({
 }) => {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [clearAsk, setClearAsk] = useState(false);
+  // The clock the relative labels are read against — stamped when the modal
+  // opens (and its data loads), so "2m ago" reflects the moment it's shown.
+  const [now, setNow] = useState(() => Date.now());
 
   // Reload on each open — a session finished while this was closed should be
   // there next time it opens.
   useEffect(() => {
     if (!visible) return;
     let live = true;
+    setNow(Date.now());
     loadHistory().then((s) => {
       if (live) setSessions(s);
     });
@@ -65,6 +64,10 @@ export const HistoryModal = ({
       live = false;
     };
   }, [visible]);
+
+  // The fastest-average session gets a "best" badge — progression at a glance.
+  // null (and thus no badge) until there are two comparable sessions.
+  const bestId = bestAverageSessionId(sessions);
 
   const confirmClear = () => {
     setClearAsk(false);
@@ -111,11 +114,25 @@ export const HistoryModal = ({
               {sessions.map((s) => (
                 <View key={s.id} style={styles.row} testID={`history-row-${s.id}`}>
                   <View style={styles.rowLead}>
-                    <AppText size={14} weight="600">
-                      {fmtMode(s.mode)}
-                    </AppText>
+                    <View style={styles.modeLine}>
+                      <AppText size={14} weight="600">
+                        {fmtMode(s.mode)}
+                      </AppText>
+                      {s.id === bestId && (
+                        <AppText
+                          size={11}
+                          weight="700"
+                          color={colors.accentText}
+                          style={styles.bestBadge}
+                          testID={`history-best-${s.id}`}
+                          accessibilityLabel="Fastest average so far"
+                        >
+                          ★ best
+                        </AppText>
+                      )}
+                    </View>
                     <AppText size={12} color={colors.textMuted}>
-                      {fmtMeta(s)}
+                      {fmtMeta(s, now)}
                     </AppText>
                   </View>
                   <View style={styles.rowStats}>
@@ -200,6 +217,20 @@ const styles = StyleSheet.create({
   rowLead: {
     flexShrink: 1,
     gap: 2,
+  },
+  modeLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  // A quiet accent pill — noticed, not shouted, since every list has exactly one.
+  bestBadge: {
+    letterSpacing: 0.5,
+    backgroundColor: colors.accentSurface,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    overflow: "hidden",
   },
   rowStats: {
     alignItems: "flex-end",
