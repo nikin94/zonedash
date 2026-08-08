@@ -323,6 +323,51 @@ test("Stop aborts the run and still summarizes the partial records", async () =>
   expect(screen.queryByText(/Step \d/)).toBeNull();
 });
 
+// A finished run's results describe the path + layout it ran over. The court
+// stays tappable after "Session complete", so authoring the NEXT path must not
+// leave the previous run's summary on screen next to a path it no longer
+// matches (the reported bug: authored path ≠ the results shown).
+test("authoring a new path after a run clears the stale results summary", async () => {
+  const t = await connectedTransport();
+  panel(t, PAIRED, DEFAULT_SETTINGS);
+
+  fireEvent.press(screen.getByText("Path"));
+  fireEvent.press(screen.getByTestId("spot-6-available"));
+  fireEvent.press(screen.getByTestId("spot-0-available"));
+  fireEvent.press(screen.getByText("Start"));
+  await act(() => jest.runAllTimersAsync());
+  expect(screen.getByTestId("stats-panel")).toBeTruthy(); // the run's summary
+
+  // Tap the court again — the operator is authoring the next run.
+  fireEvent.press(screen.getByTestId("spot-7-available"));
+  expect(screen.getByTestId("path-sequence")).toHaveTextContent(
+    "back left → net left → mid left",
+  );
+  // The old summary must be gone — it belonged to the two-spot run, not this one.
+  expect(screen.queryByTestId("stats-panel")).toBeNull();
+});
+
+// HitRecord.position is a slot index into the session's pairing map; a re-pair
+// swaps that map, so a prior run's records would render against the wrong spots
+// (even ones no longer paired). A layout change must drop the stale summary.
+test("a layout change after a run clears the stale results summary", async () => {
+  const t = await connectedTransport();
+  const { rerender } = render(
+    <DrillPanel transport={t} pairedSpots={PAIRED} settings={DEFAULT_SETTINGS} />,
+  );
+
+  fireEvent.press(screen.getByText("Path"));
+  fireEvent.press(screen.getByTestId("spot-6-available"));
+  fireEvent.press(screen.getByTestId("spot-0-available"));
+  fireEvent.press(screen.getByText("Start"));
+  await act(() => jest.runAllTimersAsync());
+  expect(screen.getByTestId("stats-panel")).toBeTruthy();
+
+  // Re-pair to a different layout — the old slot-indexed records no longer map.
+  rerender(<DrillPanel transport={t} pairedSpots={[1, 2, 3]} settings={DEFAULT_SETTINGS} />);
+  expect(screen.queryByTestId("stats-panel")).toBeNull();
+});
+
 test("a finished run reports a summary to onSessionComplete exactly once", async () => {
   const t = await connectedTransport();
   const onSessionComplete = jest.fn();

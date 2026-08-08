@@ -204,6 +204,27 @@ export const DrillPanel = ({
     });
   }, [pairedSpots]);
 
+  // A finished run's summary describes ONE authored path over ONE pairing map.
+  // But the court stays tappable after "Session complete" (the operator authors
+  // the next run) and the layout can change under it (a re-pair), so once the
+  // path or the layout no longer matches the run the records came from, that
+  // summary is stale — and worse, HitRecord.position is a slot index meaningless
+  // without its session's map (domain/spot.ts), so old records rendered against
+  // a new pairedSpots would point at the wrong court spots (even ones no longer
+  // paired). Drop the summary the moment either changes, so the results can
+  // never disagree with the authored path on screen. `path`/`pairedSpots` only
+  // change outside a run (authoring is idle/done-only; a live tap arms, never
+  // edits the path), and the `running` guard keeps a rehydrated live run's
+  // snapshot-seeded counters on the one mount where session is already running.
+  useEffect(() => {
+    if (session === "running") return;
+    setRecords(null);
+    setResolvedCount(0);
+    setLastReactionMs(null);
+    setFlashSpot(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- clear on path/layout change only, not on the session transition into it
+  }, [path, pairedSpots]);
+
   const running = session === "running";
   const done = session === "done";
 
