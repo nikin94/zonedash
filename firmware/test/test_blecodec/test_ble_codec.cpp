@@ -52,9 +52,9 @@ static DrillConfig expected_config(const Value& cfg) {
   c.mode = mode_of(cfg["mode"].as_string());
   c.num_positions = static_cast<uint8_t>(cfg["numPositions"].as_int());
   if (cfg.has("count")) c.count = static_cast<uint16_t>(cfg["count"].as_int());
-  if (cfg.has("durationMs")) c.duration_ms = static_cast<uint32_t>(cfg["durationMs"].as_int());
-  if (cfg.has("delayMs")) c.delay_ms = static_cast<uint32_t>(cfg["delayMs"].as_int());
-  if (cfg.has("timeoutMs")) c.timeout_ms = static_cast<uint32_t>(cfg["timeoutMs"].as_int());
+  if (cfg.has("durationMs")) c.duration_ms = cfg["durationMs"].as_uint32();
+  if (cfg.has("delayMs")) c.delay_ms = cfg["delayMs"].as_uint32();
+  if (cfg.has("timeoutMs")) c.timeout_ms = cfg["timeoutMs"].as_uint32();
   if (cfg.has("allowImmediateRepeat"))
     c.allow_immediate_repeat = cfg["allowImmediateRepeat"].as_bool();
   if (cfg.has("path")) {
@@ -74,7 +74,14 @@ static void test_control_golden_vectors() {
   // pin and the code have already drifted.
   ZD_EQ(root["controlVersion"].as_int(), CONTROL_VERSION);
 
-  for (const Value& v : root["control"].as_array()) {
+  // Guard the pin against drift-by-deletion: an emptied (or silently shrunk)
+  // `control` array would let the loop below run zero assertions and pass
+  // vacuously. Pin catches a byte edit; this pins coverage itself. Bump the
+  // floor when vectors are added on purpose.
+  const zdjson::Array& control = root["control"].as_array();
+  ZD_CHECK(control.size() >= 12);
+
+  for (const Value& v : control) {
     const std::vector<uint8_t> bytes = bytes_of(v);
     const Value& message = v["message"];
     const ControlOp op = op_of(message);

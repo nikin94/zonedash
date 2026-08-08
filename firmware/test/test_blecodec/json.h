@@ -45,6 +45,14 @@ struct Value {
     if (type != Type::Number) fail("not a number");
     return static_cast<int>(num);
   }
+  // For fields that are u32 on the wire (duration_ms / delay_ms / timeout_ms):
+  // as_int() would overflow a signed int once a future vector carries a value
+  // past ~2.1e9. The fixture parses numbers as double, exact to 2^53, so widen
+  // through uint64_t before narrowing to the field's u32.
+  uint32_t as_uint32() const {
+    if (type != Type::Number) fail("not a number");
+    return static_cast<uint32_t>(static_cast<uint64_t>(num));
+  }
   bool as_bool() const {
     if (type != Type::Bool) fail("not a bool");
     return b;
