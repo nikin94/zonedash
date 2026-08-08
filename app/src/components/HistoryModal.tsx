@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Modal, ScrollView, StyleSheet, View } from "react-native";
 
+import { MAX_TARGETS } from "../ble/codec";
 import type { SessionSummary } from "../domain/session";
 import { clearHistory, loadHistory } from "../state/history";
 import { alpha, colors, glowShadow } from "../theme";
@@ -22,6 +23,17 @@ const fmtMode = (mode: string) =>
 const fmtWhen = (endedAt: number) => {
   const d = new Date(endedAt);
   return `${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}, ${d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`;
+};
+
+/** The sub-line under a session's mode: when · [targets ·] hits. The target
+ *  count is only worth noting when the layout was reduced — the full
+ *  MAX_TARGETS layout is the default, so "8 targets" is noise. */
+const fmtMeta = (s: SessionSummary) => {
+  const hits = `${s.attempts} ${s.attempts === 1 ? "hit" : "hits"}`;
+  const parts = [fmtWhen(s.endedAt)];
+  if (s.numPositions < MAX_TARGETS) parts.push(`${s.numPositions} targets`);
+  parts.push(hits);
+  return parts.join(" · ");
 };
 
 /**
@@ -103,8 +115,7 @@ export const HistoryModal = ({
                       {fmtMode(s.mode)}
                     </AppText>
                     <AppText size={12} color={colors.textMuted}>
-                      {fmtWhen(s.endedAt)} · {s.numPositions} targets ·{" "}
-                      {s.attempts} {s.attempts === 1 ? "hit" : "hits"}
+                      {fmtMeta(s)}
                     </AppText>
                   </View>
                   <View style={styles.rowStats}>

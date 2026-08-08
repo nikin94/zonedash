@@ -43,6 +43,18 @@ test("lists stored sessions newest-first with mode, average and best", async () 
   expect(screen.getByText("best 0.25 s")).toBeTruthy(); // path best
 });
 
+test("the target count shows only for a reduced layout, not the full 8", async () => {
+  await appendSession(summary(1, { numPositions: 6 })); // reduced
+  await appendSession(summary(2, { numPositions: 8 })); // full layout
+
+  render(<HistoryModal visible onDismiss={() => {}} />);
+  await screen.findByTestId("history-row-2");
+
+  // A reduced layout notes its count; the full 8-target default stays silent.
+  expect(screen.getByText(/6 targets/)).toBeTruthy();
+  expect(screen.queryByText(/8 targets/)).toBeNull();
+});
+
 test("a hidden modal loads nothing", () => {
   render(<HistoryModal visible={false} onDismiss={() => {}} />);
   expect(screen.queryByTestId("history-empty")).toBeNull();
