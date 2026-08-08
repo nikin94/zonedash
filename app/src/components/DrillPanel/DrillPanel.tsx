@@ -9,6 +9,7 @@ import type {
 } from "../../ble/transport";
 import { AppText } from "../AppText";
 import { Button } from "../Button";
+import { MAX_DRILL_PATH } from "../../ble/codec";
 import { CourtMap, SpotIcon } from "../CourtMap";
 import { msOptions, WheelField } from "../WheelField";
 import { SPOT_CODES, SPOT_NAMES } from "../../domain/spot";
@@ -202,6 +203,10 @@ export const DrillPanel = ({
 
   const appendPathSpot = (spot: number) => {
     if (uiMode !== "path" || !pairedSpots.includes(spot)) return;
+    // Bound the path so a LoadDrill write always fits one ATT MTU (see
+    // MAX_DRILL_PATH). The cap sits far above any real drill, so a tap only
+    // no-ops in the pathological case — the hint below tells the operator why.
+    if (path.length >= MAX_DRILL_PATH) return;
     setPath([...path, spot]);
   };
 
@@ -471,6 +476,16 @@ export const DrillPanel = ({
               >
                 {path.map((s) => SPOT_NAMES[s]).join(" → ")}
               </AppText>
+              {path.length >= MAX_DRILL_PATH && (
+                <AppText
+                  center
+                  size={12}
+                  color={colors.textMuted}
+                  testID="path-full"
+                >
+                  Path is full — Undo a step to change it
+                </AppText>
+              )}
               <View style={styles.pathActions}>
                 <Button
                   label="Undo"

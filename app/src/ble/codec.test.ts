@@ -16,6 +16,8 @@ import {
   decodeResults,
   decodeStatus,
   encodeControl,
+  LOADDRILL_MTU,
+  MAX_DRILL_PATH,
   RESULTS_VERSION,
   resultsLength,
   STATUS_VERSION,
@@ -118,6 +120,26 @@ test("a path entry at or beyond num_positions throws", () => {
       config: { mode: "path", numPositions: 4, path: [0, 4] }, // 4 is out of [0,3]
     }),
   ).toThrow(/path\[1\] out of range/);
+});
+
+// MAX_DRILL_PATH is not an arbitrary number — it's the largest path whose
+// LoadDrill write still fits ONE ATT payload at LOADDRILL_MTU (the transport
+// does no write-long). Pin the invariant against the ACTUAL encoded size, so a
+// change to DRILL_HEAD or the frame prefix that breaks the fit fails here.
+test("a MAX_DRILL_PATH write fits one ATT payload; one more slot overflows it", () => {
+  const attPayload = LOADDRILL_MTU - 3; // ATT header is 3 bytes
+  const path = Array.from({ length: MAX_DRILL_PATH }, () => 0);
+  const atCap = encodeControl({
+    op: ControlOp.LoadDrill,
+    config: { mode: "path", numPositions: 1, path },
+  });
+  expect(atCap.length).toBeLessThanOrEqual(attPayload);
+  // The cap is tight: one more slot spills past a single write.
+  const overCap = encodeControl({
+    op: ControlOp.LoadDrill,
+    config: { mode: "path", numPositions: 1, path: [...path, 0] },
+  });
+  expect(overCap.length).toBeGreaterThan(attPayload);
 });
 
 // ── Behaviour: decode rejects ────────────────────────────────────────────────

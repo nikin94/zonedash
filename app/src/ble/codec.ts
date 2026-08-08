@@ -78,6 +78,21 @@ export const MAX_TARGETS = 8;
 /** Fixed head of the LoadDrill blob, before the variable-length path. */
 const DRILL_HEAD = 18;
 
+/** ATT MTU the transport negotiates on connect (BlePlxPeripheral requests this).
+ *  A LoadDrill write must fit ONE ATT payload of this MTU — the transport does no
+ *  write-long — so the authored path is bounded by what's left after the fixed
+ *  head. Single-sourced here (the wire-format owner) and imported by the adapter,
+ *  so the requested MTU and the path cap can never drift apart. */
+export const LOADDRILL_MTU = 185;
+
+/** Longest authored path a LoadDrill can carry and still fit one ATT write at
+ *  LOADDRILL_MTU. Budget: MTU − 3 (ATT write header) − 2 (CONTROL_VERSION +
+ *  opcode) − DRILL_HEAD, leaving one byte per path slot. 185 → 162 — far above
+ *  any real drill, so it's a wire-safety guard the operator never feels, not a
+ *  UX limit. The path builder caps appends here; encodeControl still range-checks
+ *  each slot regardless. */
+export const MAX_DRILL_PATH = LOADDRILL_MTU - 3 - 2 - DRILL_HEAD;
+
 /** allow_immediate_repeat lives in bit 0 of the flags byte. */
 const FLAG_ALLOW_REPEAT = 1 << 0;
 
