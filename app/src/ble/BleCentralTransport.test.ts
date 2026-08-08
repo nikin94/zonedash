@@ -212,6 +212,33 @@ test("a link drop mid-dump rejects the pending results promise", async () => {
   await expect(pending).rejects.toThrow(/link lost/);
 });
 
+// The brain acked the write but never sent a Results frame (a brain bug) — the
+// dump must fail rather than hang the UI on "Fetching results…" forever.
+test("dumpResults times out if no Results frame ever arrives", async () => {
+  const gatt = new FakeGatt();
+  const t = new BleCentralTransport(gatt, { dumpTimeoutMs: 20 });
+  await t.connect();
+  await expect(t.dumpResults()).rejects.toThrow(/timed out/);
+  // The slot is freed on timeout — a retry isn't wrongly blocked as in-flight.
+  const retry = t.dumpResults();
+  gatt.pushResults(resultsVector("empty").bytes);
+  await expect(retry).resolves.toEqual([]);
+});
+
+// A Results frame that lands within the window clears the timeout — no late
+// rejection fires after the promise already resolved.
+test("a Results frame within the window cancels the timeout", async () => {
+  const gatt = new FakeGatt();
+  const t = new BleCentralTransport(gatt, { dumpTimeoutMs: 40 });
+  await t.connect();
+  const v = resultsVector("multiple");
+  const pending = t.dumpResults();
+  gatt.pushResults(v.bytes);
+  await expect(pending).resolves.toEqual(v.records);
+  // Wait past the (now-cleared) timeout: nothing rejects, no stray timer fires.
+  await new Promise((r) => setTimeout(r, 60));
+});
+
 // The real-link race: on a drop DURING the DumpResults write, ble-plx both
 // rejects the write AND fires onDisconnect, in undefined order. Both used to
 // reject a promise; the write path threw a SECOND (orphaned) rejection that no
