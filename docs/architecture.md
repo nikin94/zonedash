@@ -246,9 +246,13 @@ Minimal custom GATT service:
 
 **Byte-level wire format** for all three characteristics is defined in
 `app/src/ble/codec.ts` and pinned by a **shared, language-neutral fixture**,
-`docs/ble-vectors.json` — the BLE analogue of `protocol.h` for ESP-NOW. The app
-codec test loads it today; the future C++ brain decoder test **must** load the
-same file, so a byte edit breaks both language builds at once. Every write /
+`docs/ble-vectors.json` — the BLE analogue of `protocol.h` for ESP-NOW. Both the
+app codec test (`app/src/ble/codec.test.ts`) AND the brain decoder test
+(`firmware/test/test_blecodec`) load this same file, so a byte edited here breaks
+both language builds at once — the cross-language drift guard. The brain's
+Control-write decoder is `firmware/lib/blecodec` (`decode_control`), the mirror of
+`codec.ts` `encodeControl`; its Status/Results **encoders** (brain → app) are the
+remaining half, still to be written against the same fixture. Every write /
 notification leads with a version byte (`CONTROL_VERSION` / `STATUS_VERSION` /
 `RESULTS_VERSION`); a decoder rejects a version it doesn't know.
 

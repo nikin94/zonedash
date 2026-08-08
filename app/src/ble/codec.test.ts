@@ -53,6 +53,16 @@ test("fixture versions match the codec constants", () => {
   expect(vectors.resultsVersion).toBe(RESULTS_VERSION);
 });
 
+// Guard the pin against drift-by-deletion: the golden loops below build one test
+// per vector, so an emptied (or silently shrunk) array would run zero assertions
+// and pass vacuously. The pin catches a byte edit; this pins coverage itself —
+// the same floor the firmware test asserts. Bump when vectors are added.
+test("the shared fixture keeps its golden-vector coverage", () => {
+  expect(vectors.control.length).toBeGreaterThanOrEqual(12);
+  expect(vectors.status.length).toBeGreaterThanOrEqual(7);
+  expect(vectors.results.length).toBeGreaterThanOrEqual(4);
+});
+
 describe("Control encode — golden vectors (docs/ble-vectors.json)", () => {
   for (const v of vectors.control) {
     test(v.name, () => {
