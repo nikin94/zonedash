@@ -403,7 +403,13 @@ calibration** (real trigger distances from a live racket, in numbers).
 `nRF52840-DK` (the owner's dev-kit, distinct from the reserve E73 modules) is a
 useful **bench tool** here — for debugging the BLE-co-MCU fallback (built-in
 J-Link/logs), and later as a **reference BLE peripheral** that impersonates the
-central unit's GATT so the Expo app can be tested while the real S3 is busy.
+central unit's GATT so the Expo app can be tested while the real S3 is busy. That
+peripheral is `firmware-dk/` — a **Zephyr / nRF Connect SDK** app (toolchain
+chosen for the DK; the BOM records the hardware, not a toolchain). It advertises
+ZONEDASH_SERVICE_UUID + the three characteristics and, on a Control write,
+decodes the `codec.ts` format and scripts Status/Results notifications back
+(pairing → session → chunked dump). It is board-dependent and out of CI —
+validated only on the DK; the codec halves it drives are the CI-pinned ones.
 
 ## App (Expo) — deferred until hardware link is proven
 
