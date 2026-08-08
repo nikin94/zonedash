@@ -264,7 +264,10 @@ buffer across **consecutive Results notifications that simply concatenate** (no
 per-frame header; the `count` in the first frame declares the total length). The
 app holds one dump in flight and **reassembles** the frames until it has
 `3 + count*29` bytes, then decodes the whole (`BleCentralTransport.onResultsFrame`
-/ `codec.ts resultsLength`). Rules the brain's BLE encoder MUST follow: emit the
+/ `codec.ts resultsLength`). The brain cuts those slices with
+`results_frame_count` / `results_frame` (firmware `lib/blecodec`), host-tested to
+concat back to the same buffer — the split half of the same pin. Rules the
+brain's BLE encoder MUST follow: emit the
 frames of one reply back-to-back and in order; do NOT interleave replies (one
 dump is in flight at a time); do NOT push an unsolicited Results frame on its own
 (e.g. on `done`) — a frame arriving with no dump pending is dropped. A dump that

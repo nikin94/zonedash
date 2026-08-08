@@ -230,4 +230,31 @@ size_t encode_results(const HitRecord* records, const Sensor* sensors,
   return n;
 }
 
+namespace {
+// Usable notification payload at `mtu` — 0 when the MTU can't even fit the ATT
+// overhead (a degenerate link the caller must not chunk over).
+size_t frame_payload(size_t mtu) {
+  return mtu > ATT_NOTIFY_OVERHEAD ? mtu - ATT_NOTIFY_OVERHEAD : 0;
+}
+} // namespace
+
+size_t results_frame_count(size_t total_len, size_t mtu) {
+  const size_t cap = frame_payload(mtu);
+  if (cap == 0 || total_len == 0) return 0;
+  return (total_len + cap - 1) / cap; // ceil-divide into full-payload slices
+}
+
+ResultsFrame results_frame(const uint8_t* buffer, size_t total_len, size_t mtu,
+                           size_t index) {
+  ResultsFrame f;
+  const size_t cap = frame_payload(mtu);
+  if (buffer == nullptr || cap == 0) return f;
+  const size_t offset = index * cap;
+  if (offset >= total_len) return f; // past the end (also catches total_len == 0)
+  f.data = buffer + offset;
+  const size_t rest = total_len - offset;
+  f.len = rest < cap ? rest : cap; // the last frame is short
+  return f;
+}
+
 } // namespace zd
