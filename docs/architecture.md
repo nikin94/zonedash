@@ -320,6 +320,18 @@ Data model (app side):
   No custom native module needed unless we later move BLE to a co-MCU with a
   nonstandard framing.
 
+**App wiring (in place).** The library sits behind `GattPeripheral`; the concrete
+adapter is `BlePlxPeripheral` (`app/src/ble/`), the ONE board-dependent file —
+scan for the service UUID, connect (requesting a larger **MTU** so a long-path
+`LoadDrill` doesn't truncate — the caveat pinned in `codec.ts`), discover, then
+base64 ⇄ bytes on every write/notification. `createTransport()` selects it: the
+default is the mock (Expo Go / jest, no native module), and a **dev-client build
+opts in with `EXPO_PUBLIC_BLE=1`** — the ble-plx modules are `require`d lazily so
+that path alone loads them. To run the real link:
+`EXPO_PUBLIC_BLE=1 npx expo run:ios` (or `run:android`) — a dev client, not Expo
+Go. The adapter is bench-validated (needs the nRF DK / real S3); its pure parts
+(base64, transport selection) are host-tested.
+
 ## Testing without the app (serial-first)
 
 The phone is the only *production* I/O, but the prototype needs **none** — the

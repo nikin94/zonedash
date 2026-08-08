@@ -21,6 +21,16 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": false,
+          "neverForLocation": true,
+          "bluetoothAlwaysPermission": "ZoneDash connects to the court's central unit over Bluetooth to run drills."
+        }
+      ]
+    ]
   }
 }
