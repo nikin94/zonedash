@@ -244,6 +244,29 @@ Minimal custom GATT service:
 | **Status** | notify | session state, connected-target count, live progress, pairing progress (`total`, `boundSpots`, `currentSpot`, `awaitingConfirm`, `done`) |
 | **Results** | notify / read | buffered per-hit records (chunked if large) |
 
+**Byte-level wire format** for all three characteristics is defined in
+`app/src/ble/codec.ts` and pinned by a **shared, language-neutral fixture**,
+`docs/ble-vectors.json` — the BLE analogue of `protocol.h` for ESP-NOW. The app
+codec test loads it today; the future C++ brain decoder test **must** load the
+same file, so a byte edit breaks both language builds at once. Every write /
+notification leads with a version byte (`CONTROL_VERSION` / `STATUS_VERSION` /
+`RESULTS_VERSION`); a decoder rejects a version it doesn't know.
+
+**BLE SessionState translation.** The Status `session.state` byte is one of
+`idle / pairing / running / done` — an app-facing state, NOT the engine's
+`enum class State { Idle, Armed, Delaying, WaitOperator, Done }` (drill_engine.h).
+There is no 1:1 map: the engine's active sub-states collapse into `running`, and
+`pairing` is a `PairingRound` phase the engine never sees. The brain **synthesises**
+the wire state from both the engine and the pairing round, per this table (the
+spec the brain's encoder implements, so the mapping isn't re-invented per side):
+
+| Condition (highest row wins) | BLE `session.state` |
+|------------------------------|---------------------|
+| A `PairingRound` is active (`begin`..`done`) | `pairing` |
+| `DrillEngine::running()` — engine `Armed` / `Delaying` / `WaitOperator` | `running` |
+| Engine `Done` (run finished, results buffered until the next Start) | `done` |
+| Otherwise — engine `Idle`, no pairing round | `idle` |
+
 Data model (app side):
 - **Drill** = active-target count `N` + a **mode** + params. N (1–8) is part of
   the setup, so a drill is portable across layouts. Four modes (three from v0 —
