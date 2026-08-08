@@ -345,6 +345,73 @@ static void test_encoders_reject_bad_input() {
   ZD_EQ(encode_results(&h, &s, 1, buf, results_size(1) - 1), 0);
 }
 
+// Split every fixture Results buffer into notification frames and concatenate
+// them back — the frames must reassemble to the original buffer verbatim, the
+// way the app does it (codec.ts onResultsFrame). Run at several MTUs, including
+// the 23-byte default that forces the overflow the chunker exists for. This
+// pins the split against the SAME buffers the app reassembly is pinned to.
+static void test_results_chunking() {
+  Value root = zdjson::parse_file(g_fixture_path);
+  const zdjson::Array& vecs = root["results"].as_array();
+  ZD_CHECK(vecs.size() >= 4); // coverage floor — an emptied array must fail
+
+  const size_t mtus[] = {23, 64, 185, 4096};
+  for (const Value& v : vecs) {
+    const std::vector<uint8_t> want = bytes_of(v);
+    for (size_t mtu : mtus) {
+      const size_t cap = mtu - ATT_NOTIFY_OVERHEAD;
+      const size_t frames = results_frame_count(want.size(), mtu);
+      ZD_CHECK(frames >= 1); // a Results buffer is never empty (header is 3 bytes)
+
+      std::vector<uint8_t> got;
+      for (size_t i = 0; i < frames; ++i) {
+        ResultsFrame f = results_frame(want.data(), want.size(), mtu, i);
+        ZD_CHECK(f.data != nullptr);
+        ZD_CHECK(f.len > 0 && f.len <= cap); // never empty, never over the payload
+        got.insert(got.end(), f.data, f.data + f.len);
+      }
+      // One past the last frame is empty — no over-read, no trailing junk.
+      ZD_CHECK(results_frame(want.data(), want.size(), mtu, frames).data == nullptr);
+      ZD_EQ(got.size(), want.size());
+      ZD_CHECK(got == want);
+    }
+  }
+
+  // Pin the concrete overflow case: the "multiple" buffer (61 bytes) at the
+  // 23-byte default MTU needs ceil(61 / 20) = 4 notifications.
+  for (const Value& v : vecs) {
+    if (v["name"].as_string() != "multiple") continue;
+    ZD_EQ(bytes_of(v).size(), 61u);
+    ZD_EQ(results_frame_count(61, 23), 4u);
+  }
+}
+
+// Chunker edge cases: an unusable MTU refuses to chunk, an exact multiple has no
+// trailing empty frame, and an out-of-range index is an empty frame.
+static void test_results_chunking_edges() {
+  uint8_t buf[40];
+  for (uint8_t i = 0; i < sizeof(buf); ++i) buf[i] = i;
+
+  // MTU at or below the ATT overhead can't carry a payload -> 0 frames, and any
+  // frame request is empty (the brain must not notify over such a link).
+  ZD_EQ(results_frame_count(40, ATT_NOTIFY_OVERHEAD), 0u);
+  ZD_EQ(results_frame_count(40, 2), 0u);
+  ZD_CHECK(results_frame(buf, 40, ATT_NOTIFY_OVERHEAD, 0).data == nullptr);
+
+  // 40 bytes at MTU 23 (payload 20) is an exact 2× multiple: 2 frames, no third.
+  ZD_EQ(results_frame_count(40, 23), 2u);
+  ZD_EQ(results_frame(buf, 40, 23, 0).len, 20u);
+  ZD_EQ(results_frame(buf, 40, 23, 1).len, 20u);
+  ZD_CHECK(results_frame(buf, 40, 23, 2).data == nullptr);
+
+  // A single frame when the whole buffer fits one payload.
+  ZD_EQ(results_frame_count(40, 185), 1u);
+  ZD_EQ(results_frame(buf, 40, 185, 0).len, 40u);
+
+  // A null buffer yields no frame.
+  ZD_CHECK(results_frame(nullptr, 40, 185, 0).data == nullptr);
+}
+
 int main(int argc, char** argv) {
   if (argc > 1) g_fixture_path = argv[1];
   std::printf("ble_codec tests (fixture: %s)\n", g_fixture_path);
@@ -354,6 +421,8 @@ int main(int argc, char** argv) {
   ZD_RUN(test_rejects_bad_drill_blob);
   ZD_RUN(test_status_golden_vectors);
   ZD_RUN(test_results_golden_vectors);
+  ZD_RUN(test_results_chunking);
+  ZD_RUN(test_results_chunking_edges);
   ZD_RUN(test_encoders_reject_bad_input);
   std::printf("%d checks, %d failures\n", zd_checks, zd_fails);
   return zd_fails ? 1 : 0;

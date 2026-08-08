@@ -21,9 +21,12 @@
 //   decodeResults). Both directions are pinned against the SHARED fixture
 //   docs/ble-vectors.json by test/test_blecodec (which loads the SAME file the
 //   app test does, so a byte edit breaks both builds — the cross-language pin,
-//   like protocol.h + static_assert for ESP-NOW). Still TODO: the GATT server
-//   itself — feed characteristic writes to decode_control, and push the encoders'
-//   bytes as notifications (Results chunked across frames; see architecture.md).
+//   like protocol.h + static_assert for ESP-NOW). Results chunking is codec'd
+//   too: results_frame_count / results_frame cut the encode_results buffer into
+//   notification-sized slices the app reassembles by concatenation. Still TODO:
+//   the GATT server itself — feed characteristic writes to decode_control, and
+//   push the encoder bytes as notifications (loop results_frame at the
+//   negotiated MTU for a dump; see architecture.md).
 //   See docs/architecture.md "Byte-level wire format" + "BLE SessionState
 //   translation".
 // TODO: Ed25519 device key + sign session result.

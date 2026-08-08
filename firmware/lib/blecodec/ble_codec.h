@@ -122,12 +122,42 @@ size_t encode_status_resolved(uint16_t seq, uint8_t position, bool miss,
 // results:  [RESULTS_VERSION, count(u16), ...records]. Each record mirrors the
 // engine HitRecord with the sensor the brain splices in from the ESP-NOW Pressed
 // packet — records and sensors are passed in parallel (same length `count`).
-// The transport chunks the returned buffer across notifications; this produces
-// the single logical buffer. Returns 0 if `cap` can't hold the whole thing.
+// This produces the single logical buffer; results_frame (below) cuts it into
+// notification-sized slices to send. Returns 0 if `cap` can't hold the whole thing.
 constexpr size_t results_size(uint16_t count) {
   return RESULTS_HEADER_BYTES + static_cast<size_t>(count) * RESULTS_RECORD_BYTES;
 }
 size_t encode_results(const HitRecord* records, const Sensor* sensors,
                       uint16_t count, uint8_t* out, size_t cap);
+
+// ── Results chunking (brain -> app) ─────────────────────────────────────────
+// A real session's Results buffer (10 hits = 293 bytes) exceeds one ATT
+// notification, so the brain sends it as several. The app reassembles by PLAIN
+// CONCATENATION — there is no per-frame header (codec.ts onResultsFrame /
+// resultsLength). So a frame is just a contiguous slice of the encode_results
+// buffer; these helpers cut those slices so the brain's GATT glue doesn't invent
+// the split (and desync the reassembly). Both are pure, allocation-free, and
+// host-tested against the same fixture the app reassembly is pinned to.
+
+// ATT notification PDU overhead ahead of the payload: 1-byte opcode + 2-byte
+// handle. The usable payload per notification is the negotiated MTU minus this.
+constexpr size_t ATT_NOTIFY_OVERHEAD = 3;
+
+// One notification's worth of the Results buffer — a slice, not a copy.
+struct ResultsFrame {
+  const uint8_t* data = nullptr;
+  size_t len = 0;
+};
+
+// How many notifications a `total_len`-byte Results buffer needs at `mtu`.
+// Returns 0 for an unusable MTU (<= the ATT overhead) or an empty buffer.
+size_t results_frame_count(size_t total_len, size_t mtu);
+
+// The `index`-th notification frame of `buffer` (the whole encode_results
+// output, `total_len` bytes) at `mtu`. Frames concatenate back into `buffer`
+// verbatim — the header rides the first one. Returns an empty frame
+// (data == nullptr, len == 0) for an out-of-range index or an unusable MTU.
+ResultsFrame results_frame(const uint8_t* buffer, size_t total_len, size_t mtu,
+                           size_t index);
 
 } // namespace zd
