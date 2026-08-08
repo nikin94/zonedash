@@ -14,15 +14,18 @@
 // TODO: HUB75 init (ESP32-HUB75-MatrixPanel-DMA): court layout + score/time.
 // TODO: drill engine — arm current target, await Pressed, advance, buffer hits.
 // TODO: clock sync — broadcast Sync at session start; stamp `lit` on flush.
-// TODO: BLE GATT server (control / status / results). Control-write DECODING is
-//   done: lib/blecodec (decode_control) turns an app Control write into a
-//   command/DrillConfig, pinned against the SHARED fixture docs/ble-vectors.json
-//   by test/test_blecodec (which loads the SAME file the app test does, so a byte
-//   edit breaks both builds — the cross-language pin, like protocol.h +
-//   static_assert for ESP-NOW). Still TODO: the GATT server that feeds bytes to
-//   decode_control, and the Status/Results ENCODERS (brain -> app), mirroring
-//   codec.ts decodeStatus/decodeResults against the same fixture. See
-//   docs/architecture.md "Byte-level wire format" + "BLE SessionState translation".
+// TODO: BLE GATT server (control / status / results). Both wire DIRECTIONS are
+//   codec'd in lib/blecodec: decode_control turns an app Control write into a
+//   command/DrillConfig, and encode_status_* / encode_results turn brain state
+//   into Status/Results notification bytes (mirroring codec.ts decodeStatus /
+//   decodeResults). Both directions are pinned against the SHARED fixture
+//   docs/ble-vectors.json by test/test_blecodec (which loads the SAME file the
+//   app test does, so a byte edit breaks both builds — the cross-language pin,
+//   like protocol.h + static_assert for ESP-NOW). Still TODO: the GATT server
+//   itself — feed characteristic writes to decode_control, and push the encoders'
+//   bytes as notifications (Results chunked across frames; see architecture.md).
+//   See docs/architecture.md "Byte-level wire format" + "BLE SessionState
+//   translation".
 // TODO: Ed25519 device key + sign session result.
 
 void setup() {
