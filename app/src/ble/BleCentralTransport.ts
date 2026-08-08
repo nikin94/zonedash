@@ -34,11 +34,21 @@ import type {
   Unsubscribe,
 } from "./transport";
 
-/** A pending dumpResults() awaiting the next Results frame. */
+/** A pending dumpResults() awaiting the next Results frame. `timer` is the
+ *  no-reply timeout, armed once the write is out and cleared the moment the
+ *  waiter settles (frame, link loss, or the timeout itself). */
 interface DumpWaiter {
   resolve: (records: HitRecord[]) => void;
   reject: (err: Error) => void;
+  timer: ReturnType<typeof setTimeout> | null;
 }
+
+/** How long dumpResults() waits for the brain's Results frame after the write is
+ *  acknowledged, before failing rather than hanging the UI on "Fetching
+ *  results…" forever. A missing reply means a brain bug (it must answer a
+ *  DumpResults with exactly one frame — see architecture.md); the timeout turns
+ *  that into a visible error, not a permanent spinner. */
+const DEFAULT_DUMP_TIMEOUT_MS = 5000;
 
 export class BleCentralTransport implements CentralTransport {
   connectionState: ConnectionState = "disconnected";
@@ -63,8 +73,11 @@ export class BleCentralTransport implements CentralTransport {
   // second link + a duplicate subscription (the mock guards the same way).
   private connectPromise: Promise<void> | null = null;
 
-  constructor(peripheral: GattPeripheral) {
+  private readonly dumpTimeoutMs: number;
+
+  constructor(peripheral: GattPeripheral, opts: { dumpTimeoutMs?: number } = {}) {
     this.peripheral = peripheral;
+    this.dumpTimeoutMs = opts.dumpTimeoutMs ?? DEFAULT_DUMP_TIMEOUT_MS;
   }
 
   get sessionSnapshot(): SessionSnapshot {
@@ -162,7 +175,7 @@ export class BleCentralTransport implements CentralTransport {
     // Results notification (see architecture.md), which the results handler
     // resolves this waiter with.
     if (this.pendingDump) throw new Error("a results dump is already in flight");
-    const waiter: DumpWaiter = { resolve: () => {}, reject: () => {} };
+    const waiter: DumpWaiter = { resolve: () => {}, reject: () => {}, timer: null };
     const reply = new Promise<HitRecord[]>((resolve, reject) => {
       waiter.resolve = resolve;
       waiter.reject = reject;
@@ -173,15 +186,22 @@ export class BleCentralTransport implements CentralTransport {
     } catch (err) {
       // ONE reject channel: `reply` is the only promise ever handed out, so a
       // write failure rejects IT (via `waiter`) — never a second, orphaned
-      // rejected promise. On a real link drop mid-write both the write reject and
-      // onLinkLost fire in undefined order; the identity guard makes the loser a
-      // no-op: if onLinkLost already rejected + cleared this waiter, pendingDump
-      // is no longer it, so we don't double-reject. `reply` is always returned,
-      // so its rejection is always awaited by the caller.
-      if (this.pendingDump === waiter) {
-        this.pendingDump = null;
+      // rejected promise. takeDump makes the loser of a race a no-op: if
+      // onLinkLost already settled + cleared this waiter, it is no longer the
+      // active one, so we don't double-reject. `reply` is always returned, so
+      // its rejection is always awaited by the caller.
+      if (this.takeDump(waiter)) {
         waiter.reject(err instanceof Error ? err : new Error("results dump write failed"));
       }
+      return reply;
+    }
+    // The write is out. Arm the no-reply timeout — but only if a link drop during
+    // the await hasn't already settled and cleared this waiter (else we'd leak a
+    // timer on a dead waiter). Cleared by takeDump when the frame arrives.
+    if (this.pendingDump === waiter) {
+      waiter.timer = setTimeout(() => {
+        if (this.takeDump(waiter)) waiter.reject(new Error("results dump timed out"));
+      }, this.dumpTimeoutMs);
     }
     return reply;
   }
@@ -240,9 +260,20 @@ export class BleCentralTransport implements CentralTransport {
     }
     const waiter = this.pendingDump;
     if (waiter) {
-      this.pendingDump = null;
+      this.takeDump(waiter);
       waiter.resolve(records);
     }
+  }
+
+  /** Detach the current dump waiter, clearing its no-reply timeout — the single
+   *  place pendingDump is torn down, so a frame, a link loss, a write failure and
+   *  the timeout can never double-settle. Returns false if `waiter` is no longer
+   *  the active one (another path already settled it), making the caller a no-op. */
+  private takeDump(waiter: DumpWaiter): boolean {
+    if (this.pendingDump !== waiter) return false;
+    if (waiter.timer !== null) clearTimeout(waiter.timer);
+    this.pendingDump = null;
+    return true;
   }
 
   /** An unsolicited link drop (out of range, unit off) — synthesise the
@@ -257,9 +288,10 @@ export class BleCentralTransport implements CentralTransport {
     this.subs = [];
     this.session = "idle";
     this.armedPosition = null;
-    if (this.pendingDump) {
-      this.pendingDump.reject(new Error("link lost during results dump"));
-      this.pendingDump = null;
+    const waiter = this.pendingDump;
+    if (waiter) {
+      this.takeDump(waiter);
+      waiter.reject(new Error("link lost during results dump"));
     }
   }
 
