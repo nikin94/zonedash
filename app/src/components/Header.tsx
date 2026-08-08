@@ -7,7 +7,7 @@ import { colors, glowShadow } from "../theme";
 import { AppText } from "./AppText";
 import { ConfirmModal } from "./ConfirmModal";
 import { CustomPressable } from "./CustomPressable";
-import { SlidersIcon } from "./Icons";
+import { HistoryIcon, SlidersIcon } from "./Icons";
 
 /** Brief status-chip label per connection state. */
 const CHIP_LABEL: Record<ConnectionState, string> = {
@@ -26,9 +26,12 @@ const CHIP_LABEL: Record<ConnectionState, string> = {
  */
 export const Header = ({
   onOpenSettings,
+  onOpenHistory,
   onRepair,
 }: {
   onOpenSettings: () => void;
+  /** Open the session-history modal. */
+  onOpenHistory: () => void;
   /** Re-open the pairing surface to rebind the layout. Offered in the chip
    *  menu only once a layout exists. */
   onRepair?: () => void;
@@ -139,6 +142,15 @@ export const Header = ({
             </>
           )}
         </View>
+
+        <CustomPressable
+          testID="history-button"
+          accessibilityLabel="Open session history"
+          onPress={onOpenHistory}
+          style={styles.headerButton}
+        >
+          <HistoryIcon />
+        </CustomPressable>
 
         <CustomPressable
           testID="settings-button"

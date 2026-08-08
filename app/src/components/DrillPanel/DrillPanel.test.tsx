@@ -323,6 +323,58 @@ test("Stop aborts the run and still summarizes the partial records", async () =>
   expect(screen.queryByText(/Step \d/)).toBeNull();
 });
 
+test("a finished run reports a summary to onSessionComplete exactly once", async () => {
+  const t = await connectedTransport();
+  const onSessionComplete = jest.fn();
+  render(
+    <DrillPanel
+      transport={t}
+      pairedSpots={PAIRED}
+      settings={SETTINGS}
+      onSessionComplete={onSessionComplete}
+    />,
+  );
+
+  // A two-step path run (slots 2, 0), each resolving at the fixed 20 ms tap.
+  fireEvent.press(screen.getByText("Path"));
+  fireEvent.press(screen.getByTestId("spot-6-available"));
+  fireEvent.press(screen.getByTestId("spot-0-available"));
+  fireEvent.press(screen.getByText("Start"));
+  await act(() => jest.runAllTimersAsync());
+
+  expect(screen.getByText("Session complete")).toBeTruthy();
+  expect(onSessionComplete).toHaveBeenCalledTimes(1);
+  expect(onSessionComplete.mock.calls[0][0]).toMatchObject({
+    mode: "path",
+    numPositions: 3,
+    attempts: 2,
+    avgMs: 20, // both hits at the 20 ms tap delay
+    bestMs: 20,
+  });
+});
+
+test("an aborted run with no attempts is not logged", async () => {
+  const t = await connectedTransport();
+  const onSessionComplete = jest.fn();
+  render(
+    <DrillPanel
+      transport={t}
+      pairedSpots={PAIRED}
+      settings={SETTINGS}
+      onSessionComplete={onSessionComplete}
+    />,
+  );
+
+  fireEvent.press(screen.getByText("Start")); // random run
+  await act(() => jest.advanceTimersByTimeAsync(0)); // first target armed, none resolved
+  fireEvent.press(screen.getByText("Stop"));
+  await act(() => jest.runAllTimersAsync());
+
+  // A 0-attempt session still summarizes on screen but is not worth a history row.
+  expect(screen.getByTestId("stats-panel")).toBeTruthy();
+  expect(onSessionComplete).not.toHaveBeenCalled();
+});
+
 test("a failed start surfaces as an inline error, not a crash", async () => {
   const t = await connectedTransport();
   jest.spyOn(t, "startSession").mockRejectedValueOnce(new Error("write failed"));

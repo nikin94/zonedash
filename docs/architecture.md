@@ -316,7 +316,10 @@ Data model (app side):
   (drill_engine.h) — it comes from the ESP-NOW `Pressed` packet and the brain
   splices it in when serializing results. `movement_ms` on a hit that follows a
   miss spans the skipped target (the miss doesn't reset the movement baseline).
-- Results pulled at session end and stored locally (later: sync/export).
+- Results pulled at session end and stored locally: a finished run is distilled
+  to a `SessionSummary` (domain/session.ts) and appended to a capped, device-local
+  log (state/history.ts, AsyncStorage), surfaced in the header's history modal.
+  Only the summary is kept, not per-attempt detail. (Later: sync/export.)
 
 ### iOS vs Android notes
 

@@ -4,7 +4,9 @@ import { StyleSheet, View } from "react-native";
 import { AppText } from "../components/AppText";
 import { CourtMap } from "../components/CourtMap";
 import { Header } from "../components/Header";
+import { HistoryModal } from "../components/HistoryModal";
 import { SettingsModal } from "../components/SettingsModal";
+import { appendSession } from "../state/history";
 import { type SpotVisual } from "../helpers/court";
 import { useAppState } from "../state/AppState";
 import { colors } from "../theme";
@@ -44,6 +46,7 @@ export const MainScreen = () => {
   const paired = pairedSpots.length > 0;
 
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   // "pairing" until a completed round's handoff elapses; "drill" once the
   // controls are revealed. Re-pair sends it back to "pairing".
   const [view, setView] = useState<"pairing" | "drill">("pairing");
@@ -89,6 +92,7 @@ export const MainScreen = () => {
     <View style={styles.screen}>
       <Header
         onOpenSettings={() => setSettingsOpen(true)}
+        onOpenHistory={() => setHistoryOpen(true)}
         onRepair={() => setView("pairing")}
       />
 
@@ -99,6 +103,7 @@ export const MainScreen = () => {
           settings={settings}
           rotation={courtRotation}
           onRotate={rotateCourt}
+          onSessionComplete={(s) => void appendSession(s)}
         />
       ) : showPairing ? (
         <PairingPanel
@@ -134,6 +139,11 @@ export const MainScreen = () => {
         onDismiss={() => setSettingsOpen(false)}
         settings={settings}
         onChange={setSettings}
+      />
+
+      <HistoryModal
+        visible={historyOpen}
+        onDismiss={() => setHistoryOpen(false)}
       />
     </View>
   );
