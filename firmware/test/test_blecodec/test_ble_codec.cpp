@@ -194,6 +194,157 @@ static void test_rejects_bad_drill_blob() {
   ZD_CHECK(!decode_control(bad_mode, sizeof(bad_mode), m));
 }
 
+// ── Status / Results ENCODE (brain -> app) against the same fixture ──────────
+// The mirror direction of the app decoders: build each vector's `event` /
+// `records` into the brain-side inputs, encode, and assert the bytes equal the
+// vector's `bytes`. Same cross-language pin, encode side.
+
+// Assert an encoder wrote exactly `want`.
+static void expect_bytes(const char* name, const uint8_t* got, size_t got_len,
+                         const std::vector<uint8_t>& want) {
+  ZD_EQ(got_len, want.size());
+  bool eq = got_len == want.size();
+  for (size_t i = 0; eq && i < want.size(); ++i)
+    if (got[i] != want[i]) eq = false;
+  ZD_CHECK(eq);
+  if (!eq) std::printf("    %s: encoded bytes differ from fixture\n", name);
+}
+
+static BleSessionState session_state_of(const std::string& s) {
+  if (s == "idle") return BleSessionState::Idle;
+  if (s == "pairing") return BleSessionState::Pairing;
+  if (s == "running") return BleSessionState::Running;
+  if (s == "done") return BleSessionState::Done;
+  Value::fail("unknown session state in fixture");
+}
+
+static Sensor sensor_of(const std::string& s) {
+  if (s == "tof") return Sensor::ToF;
+  if (s == "piezo") return Sensor::Piezo;
+  Value::fail("unknown sensor in fixture");
+}
+
+// Encode every `status` vector from its `event` and assert it matches `bytes`.
+static void test_status_golden_vectors() {
+  Value root = zdjson::parse_file(g_fixture_path);
+  ZD_EQ(root["statusVersion"].as_int(), STATUS_VERSION);
+
+  const zdjson::Array& vecs = root["status"].as_array();
+  // Coverage floor: an emptied/shrunk array would run zero asserts and pass
+  // vacuously — the pin must catch dropped vectors, not only edited bytes.
+  ZD_CHECK(vecs.size() >= 7);
+
+  uint8_t buf[64];
+  for (const Value& v : vecs) {
+    const std::vector<uint8_t> want = bytes_of(v);
+    const Value& e = v["event"];
+    const std::string& kind = e["kind"].as_string();
+    size_t n = 0;
+
+    if (kind == "session") {
+      n = encode_status_session(session_state_of(e["state"].as_string()),
+                                static_cast<uint8_t>(e["targetsOnline"].as_int()),
+                                buf, sizeof(buf));
+    } else if (kind == "pairing") {
+      const Value& pr = e["progress"];
+      std::vector<uint8_t> spots;
+      for (const Value& s : pr["boundSpots"].as_array())
+        spots.push_back(static_cast<uint8_t>(s.as_int()));
+      PairingStatus p;
+      p.total = static_cast<uint8_t>(pr["total"].as_int());
+      p.bound_spots = spots.data();
+      p.bound_count = static_cast<uint8_t>(spots.size());
+      p.current_spot = pr["currentSpot"].is_null() ? -1 : pr["currentSpot"].as_int();
+      p.awaiting_confirm = pr["awaitingConfirm"].as_bool();
+      p.done = pr["done"].as_bool();
+      n = encode_status_pairing(p, buf, sizeof(buf));
+    } else if (kind == "progress") {
+      n = encode_status_progress(static_cast<uint16_t>(e["seq"].as_int()),
+                                 static_cast<uint8_t>(e["position"].as_int()),
+                                 buf, sizeof(buf));
+    } else if (kind == "resolved") {
+      n = encode_status_resolved(static_cast<uint16_t>(e["seq"].as_int()),
+                                 static_cast<uint8_t>(e["position"].as_int()),
+                                 e["miss"].as_bool(), e["reactionMs"].as_uint32(),
+                                 buf, sizeof(buf));
+    } else {
+      Value::fail("unknown status kind in fixture");
+    }
+    expect_bytes(v["name"].as_string().c_str(), buf, n, want);
+  }
+}
+
+// Encode every `results` vector from its `records` and assert it matches `bytes`.
+static void test_results_golden_vectors() {
+  Value root = zdjson::parse_file(g_fixture_path);
+  ZD_EQ(root["resultsVersion"].as_int(), RESULTS_VERSION);
+
+  const zdjson::Array& vecs = root["results"].as_array();
+  ZD_CHECK(vecs.size() >= 4); // coverage floor (see status)
+
+  for (const Value& v : vecs) {
+    const std::vector<uint8_t> want = bytes_of(v);
+    std::vector<HitRecord> records;
+    std::vector<Sensor> sensors;
+    for (const Value& r : v["records"].as_array()) {
+      HitRecord h;
+      h.seq = static_cast<uint16_t>(r["seq"].as_int());
+      h.position = static_cast<uint8_t>(r["position"].as_int());
+      h.t_lit_us = r["tLitUs"].as_uint64();
+      h.t_hit_us = r["tHitUs"].as_uint64();
+      h.reaction_ms = r["reactionMs"].as_uint32();
+      h.movement_ms = r["movementMs"].as_uint32();
+      h.miss = r["miss"].as_bool();
+      records.push_back(h);
+      sensors.push_back(sensor_of(r["sensor"].as_string()));
+    }
+    const uint16_t count = static_cast<uint16_t>(records.size());
+    std::vector<uint8_t> buf(results_size(count));
+    const size_t n = encode_results(records.data(), sensors.data(), count,
+                                    buf.data(), buf.size());
+    expect_bytes(v["name"].as_string().c_str(), buf.data(), n, want);
+  }
+}
+
+// Encoders refuse an oversized field / undersized buffer rather than truncating
+// — the encode-side of "never put a wrong value on the wire".
+static void test_encoders_reject_bad_input() {
+  uint8_t buf[64];
+  // Buffer too small for even the fixed heads.
+  ZD_EQ(encode_status_session(BleSessionState::Idle, 0, buf, 3), 0);
+  ZD_EQ(encode_status_progress(0, 0, buf, 4), 0);
+  ZD_EQ(encode_status_resolved(0, 0, false, 0, buf, 8), 0);
+  // Pairing: a current_spot outside the layout, and a buffer one byte short.
+  const uint8_t spots[2] = {0, 2};
+  PairingStatus bad_spot;
+  bad_spot.total = 3;
+  bad_spot.bound_spots = spots;
+  bad_spot.bound_count = 2;
+  bad_spot.current_spot = MAX_TARGETS; // out of 0..7
+  ZD_EQ(encode_status_pairing(bad_spot, buf, sizeof(buf)), 0);
+  PairingStatus ok = bad_spot;
+  ok.current_spot = 1;
+  ZD_EQ(encode_status_pairing(ok, buf, 7), 0);          // needs 6 + 2 = 8
+  ZD_EQ(encode_status_pairing(ok, buf, 8), 8);          // exact fit passes
+  // An unexpected negative current_spot (not the -1 sentinel) is rejected, not
+  // silently coded as "none".
+  PairingStatus neg = ok;
+  neg.current_spot = -2;
+  ZD_EQ(encode_status_pairing(neg, buf, sizeof(buf)), 0);
+  // total and each bound spot are gated the same as current_spot.
+  PairingStatus big_total = ok;
+  big_total.total = MAX_TARGETS + 1;
+  ZD_EQ(encode_status_pairing(big_total, buf, sizeof(buf)), 0);
+  const uint8_t off_layout[2] = {0, MAX_TARGETS}; // spot 8 is off the layout
+  PairingStatus bad_bound = ok;
+  bad_bound.bound_spots = off_layout;
+  ZD_EQ(encode_status_pairing(bad_bound, buf, sizeof(buf)), 0);
+  // Results: a buffer one byte short of the whole logical buffer.
+  HitRecord h;
+  Sensor s = Sensor::ToF;
+  ZD_EQ(encode_results(&h, &s, 1, buf, results_size(1) - 1), 0);
+}
+
 int main(int argc, char** argv) {
   if (argc > 1) g_fixture_path = argv[1];
   std::printf("ble_codec tests (fixture: %s)\n", g_fixture_path);
@@ -201,6 +352,9 @@ int main(int argc, char** argv) {
   ZD_RUN(test_rejects_bad_frames);
   ZD_RUN(test_rejects_out_of_range);
   ZD_RUN(test_rejects_bad_drill_blob);
+  ZD_RUN(test_status_golden_vectors);
+  ZD_RUN(test_results_golden_vectors);
+  ZD_RUN(test_encoders_reject_bad_input);
   std::printf("%d checks, %d failures\n", zd_checks, zd_fails);
   return zd_fails ? 1 : 0;
 }

@@ -53,6 +53,13 @@ struct Value {
     if (type != Type::Number) fail("not a number");
     return static_cast<uint32_t>(static_cast<uint64_t>(num));
   }
+  // u64 fields (the Results tLitUs / tHitUs timestamps) go through double, which
+  // is exact for any real session value (µs stay far under 2^53), and never
+  // through a signed int that would overflow past ~2.1e9.
+  uint64_t as_uint64() const {
+    if (type != Type::Number) fail("not a number");
+    return static_cast<uint64_t>(num);
+  }
   bool as_bool() const {
     if (type != Type::Bool) fail("not a bool");
     return b;

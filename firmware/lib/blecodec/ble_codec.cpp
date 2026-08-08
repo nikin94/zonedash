@@ -13,6 +13,34 @@ uint32_t rd_u32(const uint8_t* p) {
          (static_cast<uint32_t>(p[2]) << 16) | (static_cast<uint32_t>(p[3]) << 24);
 }
 
+// Little-endian writers, symmetric to the readers above — the encoders below put
+// the same bytes the app's DataView reads back with `littleEndian = true`.
+void wr_u16(uint8_t* p, uint16_t v) {
+  p[0] = static_cast<uint8_t>(v & 0xFF);
+  p[1] = static_cast<uint8_t>((v >> 8) & 0xFF);
+}
+void wr_u32(uint8_t* p, uint32_t v) {
+  p[0] = static_cast<uint8_t>(v & 0xFF);
+  p[1] = static_cast<uint8_t>((v >> 8) & 0xFF);
+  p[2] = static_cast<uint8_t>((v >> 16) & 0xFF);
+  p[3] = static_cast<uint8_t>((v >> 24) & 0xFF);
+}
+void wr_u64(uint8_t* p, uint64_t v) {
+  for (int i = 0; i < 8; ++i) p[i] = static_cast<uint8_t>((v >> (8 * i)) & 0xFF);
+}
+
+// Status notification kinds (byte 1, after the version) — mirrors codec.ts
+// StatusKind.
+constexpr uint8_t STATUS_SESSION = 1;
+constexpr uint8_t STATUS_PAIRING = 2;
+constexpr uint8_t STATUS_PROGRESS = 3;
+constexpr uint8_t STATUS_RESOLVED = 4;
+
+constexpr uint8_t CURRENT_SPOT_NONE = 0xFF; // pairing: no spot prompted now
+constexpr uint8_t FLAG_AWAITING = 1u << 0;  // pairing flags
+constexpr uint8_t FLAG_DONE = 1u << 1;
+constexpr uint8_t FLAG_MISS = 1u << 0;      // resolved / hit-record flags
+
 // LoadDrill blob layout (after the opcode byte), mirroring codec.ts DRILL_HEAD:
 //   [0]     mode          [1]     num_positions
 //   [2..3]  count u16     [4..7]  duration_ms u32
@@ -116,6 +144,90 @@ bool decode_control(const uint8_t* bytes, size_t len, ControlMsg& out) {
     default:
       return false; // unknown opcode
   }
+}
+
+size_t encode_status_session(BleSessionState state, uint8_t targets_online,
+                             uint8_t* out, size_t cap) {
+  if (out == nullptr || cap < 4) return 0;
+  out[0] = STATUS_VERSION;
+  out[1] = STATUS_SESSION;
+  out[2] = static_cast<uint8_t>(state);
+  out[3] = targets_online;
+  return 4;
+}
+
+size_t encode_status_pairing(const PairingStatus& p, uint8_t* out, size_t cap) {
+  // Every spot field must fit the active layout — never silently truncate a bad
+  // value onto the wire (the same rule current_spot is held to, applied to its
+  // neighbours: total, bound_count, and each bound spot).
+  if (p.total > MAX_TARGETS) return 0;
+  if (p.bound_count > MAX_TARGETS) return 0;
+  // current_spot is -1 (none) or a real spot 0..MAX_TARGETS-1. Reject any other
+  // negative: an unexpected -2/-100 must fail loud, not masquerade as "none".
+  if (p.current_spot < -1 || p.current_spot >= MAX_TARGETS) return 0;
+  const size_t n = 6 + p.bound_count;
+  if (out == nullptr || cap < n) return 0;
+  if (p.bound_count > 0 && p.bound_spots == nullptr) return 0;
+  for (uint8_t i = 0; i < p.bound_count; ++i)
+    if (p.bound_spots[i] >= MAX_TARGETS) return 0; // a bound spot off the layout
+
+  out[0] = STATUS_VERSION;
+  out[1] = STATUS_PAIRING;
+  out[2] = p.total;
+  out[3] = p.bound_count;
+  out[4] = p.current_spot < 0 ? CURRENT_SPOT_NONE
+                              : static_cast<uint8_t>(p.current_spot);
+  out[5] = static_cast<uint8_t>((p.awaiting_confirm ? FLAG_AWAITING : 0) |
+                                (p.done ? FLAG_DONE : 0));
+  for (uint8_t i = 0; i < p.bound_count; ++i) out[6 + i] = p.bound_spots[i];
+  return n;
+}
+
+size_t encode_status_progress(uint16_t seq, uint8_t position, uint8_t* out,
+                              size_t cap) {
+  if (out == nullptr || cap < 5) return 0;
+  out[0] = STATUS_VERSION;
+  out[1] = STATUS_PROGRESS;
+  wr_u16(out + 2, seq);
+  out[4] = position;
+  return 5;
+}
+
+size_t encode_status_resolved(uint16_t seq, uint8_t position, bool miss,
+                              uint32_t reaction_ms, uint8_t* out, size_t cap) {
+  // 10 bytes: [ver, kind, seq(2), position, flags, reaction_ms(4)] — the u32 at
+  // offset 6 spans bytes 6..9.
+  if (out == nullptr || cap < 10) return 0;
+  out[0] = STATUS_VERSION;
+  out[1] = STATUS_RESOLVED;
+  wr_u16(out + 2, seq);
+  out[4] = position;
+  out[5] = miss ? FLAG_MISS : 0;
+  wr_u32(out + 6, reaction_ms);
+  return 10;
+}
+
+size_t encode_results(const HitRecord* records, const Sensor* sensors,
+                      uint16_t count, uint8_t* out, size_t cap) {
+  const size_t n = results_size(count);
+  if (out == nullptr || cap < n) return 0;
+  if (count > 0 && (records == nullptr || sensors == nullptr)) return 0;
+
+  out[0] = RESULTS_VERSION;
+  wr_u16(out + 1, count);
+  for (uint16_t i = 0; i < count; ++i) {
+    uint8_t* r = out + RESULTS_HEADER_BYTES + static_cast<size_t>(i) * RESULTS_RECORD_BYTES;
+    const HitRecord& h = records[i];
+    wr_u16(r, h.seq);
+    r[2] = h.position;
+    wr_u64(r + 3, h.t_lit_us);
+    wr_u64(r + 11, h.t_hit_us);
+    wr_u32(r + 19, h.reaction_ms);
+    wr_u32(r + 23, h.movement_ms);
+    r[27] = h.miss ? FLAG_MISS : 0;
+    r[28] = static_cast<uint8_t>(sensors[i]);
+  }
+  return n;
 }
 
 } // namespace zd
