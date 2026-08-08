@@ -252,6 +252,16 @@ same file, so a byte edit breaks both language builds at once. Every write /
 notification leads with a version byte (`CONTROL_VERSION` / `STATUS_VERSION` /
 `RESULTS_VERSION`); a decoder rejects a version it doesn't know.
 
+**Results is request/reply.** A `DumpResults` Control write is answered by the
+brain with **exactly one** Results notification carrying the whole session's
+records. The app holds one dump in flight and resolves it with the next Results
+frame (`BleCentralTransport.dumpResults`), so the brain's BLE encoder MUST emit
+one frame per request and MUST NOT push an unsolicited Results frame on its own
+(e.g. on `done`) — an unsolicited frame arriving with no dump pending is dropped,
+and a request expecting one frame would then read the wrong one. (`Results` is
+listed `notify / read` for MTU/chunking headroom, but the app protocol treats it
+as one-shot reply.)
+
 **BLE SessionState translation.** The Status `session.state` byte is one of
 `idle / pairing / running / done` — an app-facing state, NOT the engine's
 `enum class State { Idle, Armed, Delaying, WaitOperator, Done }` (drill_engine.h).

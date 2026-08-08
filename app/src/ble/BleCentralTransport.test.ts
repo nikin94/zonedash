@@ -44,21 +44,28 @@ const resultsVector = (name: string) => {
 class FakeGatt implements GattPeripheral {
   writes: { char: string; bytes: number[] }[] = [];
   failConnect: string | null = null;
+  failWrite: string | null = null;
+  connectCount = 0;
   private statusCbs = new Set<(b: Uint8Array) => void>();
   private resultsCbs = new Set<(b: Uint8Array) => void>();
   private dropCbs = new Set<(r?: string) => void>();
 
   async connect(): Promise<void> {
+    this.connectCount++;
     if (this.failConnect) throw new Error(this.failConnect);
   }
   async disconnect(): Promise<void> {}
   async write(char: string, bytes: Uint8Array): Promise<void> {
     this.writes.push({ char, bytes: Array.from(bytes) });
+    if (this.failWrite) throw new Error(this.failWrite);
   }
   subscribe(char: string, onFrame: (b: Uint8Array) => void): Unsubscribe {
     const set = char === CHAR.status ? this.statusCbs : this.resultsCbs;
     set.add(onFrame);
     return () => set.delete(onFrame);
+  }
+  get statusSubCount(): number {
+    return this.statusCbs.size;
   }
   onDisconnect(cb: (r?: string) => void): Unsubscribe {
     this.dropCbs.add(cb);
@@ -203,4 +210,55 @@ test("a link drop mid-dump rejects the pending results promise", async () => {
   const pending = t.dumpResults();
   gatt.drop();
   await expect(pending).rejects.toThrow(/link lost/);
+});
+
+// The real-link race: on a drop DURING the DumpResults write, ble-plx both
+// rejects the write AND fires onDisconnect, in undefined order. Both used to
+// reject a promise; the write path threw a SECOND (orphaned) rejection that no
+// one awaited -> an unhandled rejection. Now there is one channel (`reply`), so
+// the drop-first ordering rejects it once and the write reject is a no-op.
+test("a write failure racing a link drop rejects once, with no orphan rejection", async () => {
+  const { gatt, t } = await connected();
+  // onDisconnect fires first (tears down + rejects reply), THEN the write throws.
+  gatt.failWrite = "gatt write failed";
+  const onUnhandled = jest.fn();
+  process.on("unhandledRejection", onUnhandled);
+  try {
+    // drop() runs synchronously inside dumpResults' await point via the failed
+    // write; simulate the link-lost-first ordering by dropping before the write
+    // rejection is observed.
+    const pending = t.dumpResults();
+    gatt.drop("out of range");
+    await expect(pending).rejects.toThrow(); // rejected exactly once, and awaited
+    // Let any stray unhandled rejection surface (a macrotask past the microtask
+    // queue) before asserting none did.
+    await new Promise((r) => setTimeout(r, 0));
+    expect(onUnhandled).not.toHaveBeenCalled();
+  } finally {
+    process.off("unhandledRejection", onUnhandled);
+  }
+});
+
+// A write failure with no link drop still rejects the returned promise (not a
+// throw that bypasses `reply`), and clears the in-flight slot for a retry.
+test("a plain write failure rejects dumpResults and frees the in-flight slot", async () => {
+  const { gatt, t } = await connected();
+  gatt.failWrite = "gatt write failed";
+  await expect(t.dumpResults()).rejects.toThrow(/gatt write failed/);
+  // The slot is free: a second dump isn't wrongly blocked as "already in flight".
+  gatt.failWrite = null;
+  const pending = t.dumpResults();
+  gatt.pushResults(resultsVector("empty").bytes);
+  await expect(pending).resolves.toEqual([]);
+});
+
+// A second connect() while the first is still connecting joins it — one link,
+// one subscription set — instead of opening a duplicate that folds every
+// notification twice. Matches the mock's connectPromise join.
+test("parallel connect() calls join one attempt, not a double subscription", async () => {
+  const gatt = new FakeGatt();
+  const t = new BleCentralTransport(gatt);
+  await Promise.all([t.connect(), t.connect()]);
+  expect(gatt.connectCount).toBe(1);
+  expect(gatt.statusSubCount).toBe(1);
 });

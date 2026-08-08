@@ -59,6 +59,9 @@ export class BleCentralTransport implements CentralTransport {
 
   // One in-flight dumpResults at a time — the reply is the next Results frame.
   private pendingDump: DumpWaiter | null = null;
+  // A connect() in flight, so parallel calls join it instead of opening a
+  // second link + a duplicate subscription (the mock guards the same way).
+  private connectPromise: Promise<void> | null = null;
 
   constructor(peripheral: GattPeripheral) {
     this.peripheral = peripheral;
@@ -76,23 +79,32 @@ export class BleCentralTransport implements CentralTransport {
     };
   }
 
-  async connect(): Promise<void> {
-    if (this.connectionState === "connected") return;
+  connect(): Promise<void> {
+    if (this.connectionState === "connected") return Promise.resolve();
+    // A real connect takes seconds; a second call while connecting must join the
+    // in-flight attempt, not open a second link and double-subscribe (every
+    // notification would then fold twice). Same join the mock does.
+    if (this.connectPromise) return this.connectPromise;
     this.setConnection("connecting");
-    try {
-      await this.peripheral.connect();
-    } catch (err) {
-      this.setConnection("error", err instanceof Error ? err.message : "connect failed");
-      throw err;
-    }
-    // Subscribe once the service is discovered, before reporting connected, so
-    // the first post-connect notification can't slip past an unsubscribed link.
-    this.subs.push(
-      this.peripheral.subscribe(CHAR.status, (b) => this.onStatusFrame(b)),
-      this.peripheral.subscribe(CHAR.results, (b) => this.onResultsFrame(b)),
-      this.peripheral.onDisconnect((reason) => this.onLinkLost(reason)),
-    );
-    this.setConnection("connected");
+    this.connectPromise = (async () => {
+      try {
+        await this.peripheral.connect();
+      } catch (err) {
+        this.setConnection("error", err instanceof Error ? err.message : "connect failed");
+        throw err;
+      }
+      // Subscribe once the service is discovered, before reporting connected, so
+      // the first post-connect notification can't slip past an unsubscribed link.
+      this.subs.push(
+        this.peripheral.subscribe(CHAR.status, (b) => this.onStatusFrame(b)),
+        this.peripheral.subscribe(CHAR.results, (b) => this.onResultsFrame(b)),
+        this.peripheral.onDisconnect((reason) => this.onLinkLost(reason)),
+      );
+      this.setConnection("connected");
+    })().finally(() => {
+      this.connectPromise = null;
+    });
+    return this.connectPromise;
   }
 
   async disconnect(): Promise<void> {
@@ -146,17 +158,30 @@ export class BleCentralTransport implements CentralTransport {
 
   async dumpResults(): Promise<HitRecord[]> {
     this.assertConnected();
-    // The reply arrives as the next Results notification — hold a waiter the
-    // results handler resolves. A link drop rejects it (onLinkLost).
+    // DumpResults is request/reply: the brain answers a write with exactly one
+    // Results notification (see architecture.md), which the results handler
+    // resolves this waiter with.
     if (this.pendingDump) throw new Error("a results dump is already in flight");
+    const waiter: DumpWaiter = { resolve: () => {}, reject: () => {} };
     const reply = new Promise<HitRecord[]>((resolve, reject) => {
-      this.pendingDump = { resolve, reject };
+      waiter.resolve = resolve;
+      waiter.reject = reject;
     });
+    this.pendingDump = waiter;
     try {
       await this.peripheral.write(CHAR.control, encodeControl({ op: ControlOp.DumpResults }));
     } catch (err) {
-      this.pendingDump = null; // the write never went out — no frame is coming
-      throw err;
+      // ONE reject channel: `reply` is the only promise ever handed out, so a
+      // write failure rejects IT (via `waiter`) — never a second, orphaned
+      // rejected promise. On a real link drop mid-write both the write reject and
+      // onLinkLost fire in undefined order; the identity guard makes the loser a
+      // no-op: if onLinkLost already rejected + cleared this waiter, pendingDump
+      // is no longer it, so we don't double-reject. `reply` is always returned,
+      // so its rejection is always awaited by the caller.
+      if (this.pendingDump === waiter) {
+        this.pendingDump = null;
+        waiter.reject(err instanceof Error ? err : new Error("results dump write failed"));
+      }
     }
     return reply;
   }
