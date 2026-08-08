@@ -13,6 +13,7 @@ import { MAX_DRILL_PATH } from "../../ble/codec";
 import { CourtMap, SpotIcon } from "../CourtMap";
 import { msOptions, WheelField } from "../WheelField";
 import { SPOT_CODES, SPOT_NAMES } from "../../domain/spot";
+import { summarize, type SessionSummary } from "../../domain/session";
 import { type SpotVisual } from "../../helpers/court";
 import { type DrillSettings } from "../../state/AppState";
 import { colors } from "../../theme";
@@ -90,6 +91,7 @@ export const DrillPanel = ({
   settings,
   rotation,
   onRotate,
+  onSessionComplete,
 }: {
   transport: CentralTransport;
   pairedSpots: number[]; // canonical spots in bind order (slot order)
@@ -97,6 +99,10 @@ export const DrillPanel = ({
   /** Court view orientation + its rotate control, threaded to the map (see CourtMap). */
   rotation?: number;
   onRotate?: () => void;
+  /** Called once when a run finishes with at least one attempt, so the app can
+   *  log it to the session history. The panel builds the summary; persistence is
+   *  the caller's. */
+  onSessionComplete?: (summary: SessionSummary) => void;
 }) => {
   // Read the central's session ONCE at mount and, if a run is in progress, seed
   // state from it — so a remount over a live run reflects it (running, armed
@@ -299,6 +305,25 @@ export const DrillPanel = ({
   const attempts = records ?? [];
   const totalMs = attempts.reduce((s, r) => s + r.reactionMs, 0);
   const avgMs = attempts.length > 0 ? totalMs / attempts.length : null;
+
+  // Log a finished run to the session history — once per session, exactly when
+  // its records land (records goes null -> array once per done, and resets to
+  // null on the next Start). Keyed on the records object identity so an
+  // unrelated re-render (e.g. a re-pair) can't re-log the same session; skipped
+  // for a 0-attempt run (an aborted drill nobody reacted in isn't worth a row).
+  const loggedRef = useRef<HitRecord[] | null>(null);
+  useEffect(() => {
+    if (!done || records === null || records.length === 0) return;
+    if (loggedRef.current === records) return;
+    loggedRef.current = records;
+    onSessionComplete?.(
+      summarize(records, {
+        endedAt: Date.now(),
+        mode: runMode, // the mode that actually ran (stable through done)
+        numPositions: pairedSpots.length,
+      }),
+    );
+  }, [done, records, runMode, pairedSpots, onSessionComplete]);
 
   // Secondary status line during a run. Auto modes narrate the athlete's
   // reaction; live mode narrates the operator's turn: tap → armed → time.
