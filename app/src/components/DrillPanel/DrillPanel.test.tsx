@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react-native";
 
+import { MAX_DRILL_PATH } from "../../ble/codec";
 import { MockCentralTransport } from "../../ble/mock";
 import type { DrillConfig } from "../../ble/transport";
 import { DEFAULT_SETTINGS, type DrillSettings } from "../../state/AppState";
@@ -172,6 +173,27 @@ test("path Undo drops the last step; Clear empties the sequence", async () => {
   fireEvent.press(screen.getByText("Clear"));
   expect(screen.queryByTestId("path-sequence")).toBeNull();
   expect(screen.getByText(/Tap paired spots on the map/)).toBeTruthy();
+});
+
+// The authored path is bounded so a LoadDrill write always fits one ATT MTU (no
+// write-long) — see codec MAX_DRILL_PATH. Past the cap a tap is a no-op and the
+// "full" hint appears; the sent config carries exactly the cap, not more.
+test("authoring past the cap no-ops — the wire path never exceeds MAX_DRILL_PATH", async () => {
+  const t = await connectedTransport();
+  const load = jest.spyOn(t, "loadDrill");
+  panel(t);
+
+  fireEvent.press(screen.getByText("Path"));
+  fireEvent.press(screen.getByTestId("spot-0-available")); // first step (repeats ok)
+  // Tap well past the cap; every append beyond MAX_DRILL_PATH is dropped.
+  for (let i = 1; i < MAX_DRILL_PATH + 10; i++) {
+    fireEvent.press(screen.getByTestId("spot-0-selected"));
+  }
+  expect(screen.getByTestId("path-full")).toBeTruthy();
+
+  fireEvent.press(screen.getByText("Start"));
+  await act(() => jest.advanceTimersByTimeAsync(0));
+  expect(load.mock.calls[0][0].path).toHaveLength(MAX_DRILL_PATH);
 });
 
 test("a re-pair filters the authored path — nothing translates to -1", async () => {

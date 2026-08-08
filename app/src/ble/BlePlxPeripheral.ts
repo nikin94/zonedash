@@ -17,6 +17,7 @@
 import { BleManager, type Device, type Subscription } from "react-native-ble-plx";
 
 import { base64ToBytes, bytesToBase64 } from "./base64";
+import { LOADDRILL_MTU } from "./codec";
 import { ZONEDASH_SERVICE_UUID } from "./contract";
 import type { GattPeripheral } from "./gatt";
 import type { Unsubscribe } from "./transport";
@@ -31,8 +32,9 @@ const SCAN_TIMEOUT_MS = 10_000;
 // NOTE: the INBOUND Results reply is NOT made to fit one frame by MTU — a real
 // session's records span several notifications regardless of MTU, so the
 // transport reassembles them (BleCentralTransport.onResultsFrame). MTU here only
-// widens the single outbound Control write.
-const REQUEST_MTU = 185;
+// widens the single outbound Control write. Single-sourced with the path cap
+// (codec.ts MAX_DRILL_PATH) so the requested MTU and the bound can't drift.
+const REQUEST_MTU = LOADDRILL_MTU;
 
 export class BlePlxPeripheral implements GattPeripheral {
   private manager = new BleManager();
