@@ -28,6 +28,10 @@ const SCAN_TIMEOUT_MS = 10_000;
 // A LoadDrill with a long path can exceed the 23-byte default ATT MTU (the
 // caveat flagged in codec.ts). Ask for a larger one at connect; Android honours
 // it, iOS negotiates its own max — either way a full drill config fits a write.
+// NOTE: the INBOUND Results reply is NOT made to fit one frame by MTU — a real
+// session's records span several notifications regardless of MTU, so the
+// transport reassembles them (BleCentralTransport.onResultsFrame). MTU here only
+// widens the single outbound Control write.
 const REQUEST_MTU = 185;
 
 export class BlePlxPeripheral implements GattPeripheral {

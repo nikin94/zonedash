@@ -194,6 +194,35 @@ test("dumpResults writes DumpResults and resolves with the next Results frame", 
   await expect(pending).resolves.toEqual(v.records);
 });
 
+// A real session's records exceed one ATT notification, so the brain chunks the
+// single Results buffer across consecutive frames that concatenate. The transport
+// must reassemble them and only decode once the header-declared length is in — a
+// decode on the first (truncated) frame would throw "need N bytes" and be dropped.
+test("dumpResults reassembles a Results reply chunked across notifications", async () => {
+  const { gatt, t } = await connected();
+  const v = resultsVector("multiple"); // 2 records = 3 + 2*29 = 61 bytes
+  const cut = 30; // split mid-way through the first record — split-point-agnostic
+
+  const pending = t.dumpResults();
+  gatt.pushResults(v.bytes.slice(0, cut)); // header + partial record: total not yet reached
+  gatt.pushResults(v.bytes.slice(cut)); // the rest — now the buffer is whole
+  await expect(pending).resolves.toEqual(v.records);
+});
+
+// If the frames stop mid-buffer (a brain that dies mid-reply), the accumulated
+// partial must NOT decode into a truncated record set — it holds until complete,
+// so an incomplete stream fails via the no-reply timeout, not a wrong resolve.
+test("a Results reply that stops mid-buffer times out rather than resolving partial", async () => {
+  const gatt = new FakeGatt();
+  const t = new BleCentralTransport(gatt, { dumpTimeoutMs: 20 });
+  await t.connect();
+  const v = resultsVector("multiple");
+
+  const pending = t.dumpResults();
+  gatt.pushResults(v.bytes.slice(0, 30)); // only the first chunk ever arrives
+  await expect(pending).rejects.toThrow(/timed out/);
+});
+
 test("an unsolicited link drop synthesises the connection event and resets state", async () => {
   const { gatt, t, events } = await connected();
   gatt.pushStatus(statusBytes("session.running"));

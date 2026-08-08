@@ -214,6 +214,15 @@ export const encodeControl = (msg: ControlMessage): Uint8Array =>
 //   record (29 bytes, mirrors firmware HitRecord + the spliced Pressed.sensor):
 //     seq(u16) position(u8) tLitUs(u64) tHitUs(u64) reactionMs(u32)
 //     movementMs(u32) flags(u8: bit0 miss) sensor(u8: 0 tof, 1 piezo)
+//
+// Results CHUNKING — a real session's records (10 hits = 293 bytes) exceed one
+// ATT notification (~182 bytes at MTU 185), so the brain splits the SINGLE logical
+// buffer above across consecutive Results notifications. There is NO per-frame
+// header: the frames simply concatenate back into `[version, count, ...records]`.
+// The header (version + count) rides the FIRST frame, so the reader knows the
+// total length (RESULTS_HEADER + count*RECORD_BYTES) as soon as it arrives and
+// accumulates until it has that many bytes — see resultsLength(). decodeResults
+// runs on the reassembled whole. (BleCentralTransport does the reassembly.)
 
 /** Status/Results wire revisions — each notification's leading byte. Independent
  *  of CONTROL_VERSION (separate characteristics can move separately), but bump
@@ -252,6 +261,8 @@ const FLAG_AWAITING = 1 << 0; // pairing flags
 const FLAG_DONE = 1 << 1;
 const FLAG_MISS = 1 << 0; // resolved / hit-record flags
 const RECORD_BYTES = 29;
+/** Results header before the records: [version(u8), count(u16)]. */
+const RESULTS_HEADER = 3;
 
 /** Guard a buffer is at least `n` bytes before reading `what`, else throw. */
 const need = (bytes: Uint8Array, n: number, what: string): void => {
@@ -337,17 +348,17 @@ export const decodeStatus = (bytes: Uint8Array): StatusEvent => {
  * for any real value.
  */
 export const decodeResults = (bytes: Uint8Array): HitRecord[] => {
-  need(bytes, 3, "results header");
+  need(bytes, RESULTS_HEADER, "results header");
   if (bytes[0] !== RESULTS_VERSION) {
     throw new RangeError(`results version ${bytes[0]} != ${RESULTS_VERSION}`);
   }
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const count = view.getUint16(1, true);
-  need(bytes, 3 + count * RECORD_BYTES, "results records");
+  need(bytes, RESULTS_HEADER + count * RECORD_BYTES, "results records");
 
   const records: HitRecord[] = [];
   for (let i = 0; i < count; i++) {
-    const o = 3 + i * RECORD_BYTES;
+    const o = RESULTS_HEADER + i * RECORD_BYTES;
     records.push({
       seq: view.getUint16(o, true),
       position: bytes[o + 2],
@@ -360,4 +371,22 @@ export const decodeResults = (bytes: Uint8Array): HitRecord[] => {
     });
   }
   return records;
+};
+
+/**
+ * Total byte length a complete Results buffer will occupy, read from its header
+ * (version + u16 count) — or null while fewer than the 3 header bytes have
+ * arrived. The brain chunks a large Results reply across several notifications
+ * (see the Results-chunking note above); the transport concatenates frames and
+ * only decodeResults() once it holds this many bytes. Throws on a wrong version —
+ * the same rejection decodeResults makes, surfaced early so a mis-versioned
+ * stream is dropped rather than accumulated toward a length that never comes.
+ */
+export const resultsLength = (bytes: Uint8Array): number | null => {
+  if (bytes.length < RESULTS_HEADER) return null;
+  if (bytes[0] !== RESULTS_VERSION) {
+    throw new RangeError(`results version ${bytes[0]} != ${RESULTS_VERSION}`);
+  }
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  return RESULTS_HEADER + view.getUint16(1, true) * RECORD_BYTES;
 };
