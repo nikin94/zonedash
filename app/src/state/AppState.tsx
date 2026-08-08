@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 
-import { MockCentralTransport } from "../ble/mock";
+import { createTransport } from "../ble/createTransport";
 import type { CentralTransport, ConnectionState } from "../ble/transport";
 import { loadPrefs, savePrefs } from "./prefs";
 
@@ -54,7 +54,8 @@ const Ctx = createContext<AppState | null>(null);
  * orientation. The durable prefs (settings, orientation) are hydrated from and
  * saved to device storage (prefs.ts) so they survive a restart; the link, the
  * layout, and the session are always fresh each launch. `transport` is
- * injectable for tests; the app default is the in-app mock until real BLE lands.
+ * injectable for tests; otherwise createTransport() picks the in-app mock (Expo
+ * Go / jest) or the real BLE stack (a dev build with EXPO_PUBLIC_BLE=1).
  */
 export const AppStateProvider = ({
   transport: injected,
@@ -63,7 +64,9 @@ export const AppStateProvider = ({
   transport?: CentralTransport;
   children: ReactNode;
 }) => {
-  const transport = useMemo(() => injected ?? new MockCentralTransport(), [injected]);
+  // Tests inject a transport; otherwise createTransport picks mock (Expo Go /
+  // jest) or the real BLE stack (dev build, EXPO_PUBLIC_BLE=1).
+  const transport = useMemo(() => injected ?? createTransport(), [injected]);
   const [connection, setConnection] = useState<ConnectionState>("disconnected");
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [settings, setSettings] = useState<DrillSettings>(DEFAULT_SETTINGS);

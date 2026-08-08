@@ -21,7 +21,13 @@
  */
 import { CHAR } from "./contract";
 import type { HitRecord } from "./contract";
-import { decodeResults, decodeStatus, encodeControl, type ControlMessage } from "./codec";
+import {
+  decodeResults,
+  decodeStatus,
+  encodeControl,
+  resultsLength,
+  type ControlMessage,
+} from "./codec";
 import { ControlOp } from "./contract";
 import type { GattPeripheral } from "./gatt";
 import type {
@@ -34,9 +40,9 @@ import type {
   Unsubscribe,
 } from "./transport";
 
-/** A pending dumpResults() awaiting the next Results frame. `timer` is the
- *  no-reply timeout, armed once the write is out and cleared the moment the
- *  waiter settles (frame, link loss, or the timeout itself). */
+/** A pending dumpResults() awaiting the Results reply (reassembled from its
+ *  chunks). `timer` is the no-reply timeout, armed once the write is out and
+ *  cleared the moment the waiter settles (reply, link loss, or the timeout). */
 interface DumpWaiter {
   resolve: (records: HitRecord[]) => void;
   reject: (err: Error) => void;
@@ -49,6 +55,18 @@ interface DumpWaiter {
  *  DumpResults with exactly one frame — see architecture.md); the timeout turns
  *  that into a visible error, not a permanent spinner. */
 const DEFAULT_DUMP_TIMEOUT_MS = 5000;
+
+const EMPTY = new Uint8Array(0);
+
+/** Append `b` after `a` into a FRESH zero-offset buffer. Always copies (never
+ *  aliases `b`), so a pooled notification buffer the BLE stack may reuse after
+ *  the callback returns can't corrupt the accumulated dump. */
+const concat = (a: Uint8Array, b: Uint8Array): Uint8Array => {
+  const out = new Uint8Array(a.length + b.length);
+  out.set(a, 0);
+  out.set(b, a.length);
+  return out;
+};
 
 export class BleCentralTransport implements CentralTransport {
   connectionState: ConnectionState = "disconnected";
@@ -67,8 +85,11 @@ export class BleCentralTransport implements CentralTransport {
     mode: "random",
   };
 
-  // One in-flight dumpResults at a time — the reply is the next Results frame.
+  // One in-flight dumpResults at a time — the reply is one OR MORE Results frames
+  // (the brain chunks a large reply across notifications). `dumpBuffer`
+  // accumulates them until the header-declared length has arrived.
   private pendingDump: DumpWaiter | null = null;
+  private dumpBuffer: Uint8Array = EMPTY;
   // A connect() in flight, so parallel calls join it instead of opening a
   // second link + a duplicate subscription (the mock guards the same way).
   private connectPromise: Promise<void> | null = null;
@@ -171,9 +192,10 @@ export class BleCentralTransport implements CentralTransport {
 
   async dumpResults(): Promise<HitRecord[]> {
     this.assertConnected();
-    // DumpResults is request/reply: the brain answers a write with exactly one
-    // Results notification (see architecture.md), which the results handler
-    // resolves this waiter with.
+    // DumpResults is request/reply: the brain answers a write with the session's
+    // records, chunked across one or more Results notifications that concatenate
+    // into the full buffer (see architecture.md / codec.ts). onResultsFrame
+    // reassembles them and resolves this waiter with the decoded records.
     if (this.pendingDump) throw new Error("a results dump is already in flight");
     const waiter: DumpWaiter = { resolve: () => {}, reject: () => {}, timer: null };
     const reply = new Promise<HitRecord[]>((resolve, reject) => {
@@ -181,6 +203,7 @@ export class BleCentralTransport implements CentralTransport {
       waiter.reject = reject;
     });
     this.pendingDump = waiter;
+    this.dumpBuffer = EMPTY; // a fresh reassembly buffer for this dump
     try {
       await this.peripheral.write(CHAR.control, encodeControl({ op: ControlOp.DumpResults }));
     } catch (err) {
@@ -249,20 +272,37 @@ export class BleCentralTransport implements CentralTransport {
     this.emit(event);
   }
 
-  /** A Results notification: the reply to a DumpResults write. Decode and hand
-   *  it to the waiting dumpResults() (drop it if unsolicited or malformed). */
+  /** A Results notification: a chunk of the reply to a DumpResults write. Append
+   *  it, and only once the whole header-declared buffer has arrived, decode and
+   *  hand it to the waiting dumpResults(). Unsolicited (no dump pending) frames
+   *  and a corrupt/mis-versioned stream are dropped — the no-reply timeout is the
+   *  backstop, so a broken brain never hangs the UI forever. */
   private onResultsFrame(bytes: Uint8Array): void {
-    let records: HitRecord[];
+    const waiter = this.pendingDump;
+    if (!waiter) return; // unsolicited — nothing is collecting a dump right now
+
+    const acc = concat(this.dumpBuffer, bytes);
+    this.dumpBuffer = acc;
+
+    let total: number | null;
     try {
-      records = decodeResults(bytes);
+      total = resultsLength(acc); // null until the 3-byte header is in
     } catch {
+      this.dumpBuffer = EMPTY; // wrong version — drop the stream, let it time out
       return;
     }
-    const waiter = this.pendingDump;
-    if (waiter) {
-      this.takeDump(waiter);
-      waiter.resolve(records);
+    if (total === null || acc.length < total) return; // more frames still coming
+
+    let records: HitRecord[];
+    try {
+      records = decodeResults(acc);
+    } catch {
+      this.dumpBuffer = EMPTY;
+      return;
     }
+    this.dumpBuffer = EMPTY;
+    this.takeDump(waiter);
+    waiter.resolve(records);
   }
 
   /** Detach the current dump waiter, clearing its no-reply timeout — the single
@@ -273,6 +313,7 @@ export class BleCentralTransport implements CentralTransport {
     if (this.pendingDump !== waiter) return false;
     if (waiter.timer !== null) clearTimeout(waiter.timer);
     this.pendingDump = null;
+    this.dumpBuffer = EMPTY; // no partial reassembly outlives its dump
     return true;
   }
 

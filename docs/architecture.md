@@ -252,15 +252,20 @@ same file, so a byte edit breaks both language builds at once. Every write /
 notification leads with a version byte (`CONTROL_VERSION` / `STATUS_VERSION` /
 `RESULTS_VERSION`); a decoder rejects a version it doesn't know.
 
-**Results is request/reply.** A `DumpResults` Control write is answered by the
-brain with **exactly one** Results notification carrying the whole session's
-records. The app holds one dump in flight and resolves it with the next Results
-frame (`BleCentralTransport.dumpResults`), so the brain's BLE encoder MUST emit
-one frame per request and MUST NOT push an unsolicited Results frame on its own
-(e.g. on `done`) — an unsolicited frame arriving with no dump pending is dropped,
-and a request expecting one frame would then read the wrong one. (`Results` is
-listed `notify / read` for MTU/chunking headroom, but the app protocol treats it
-as one-shot reply.)
+**Results is request/reply, chunked.** A `DumpResults` Control write is answered
+by the brain with the session's records as **one logical buffer**
+(`[version, count(u16), ...records]`) — but a real session exceeds one ATT
+notification (10 hits = 293 bytes > ~182 at MTU 185), so the brain splits that
+buffer across **consecutive Results notifications that simply concatenate** (no
+per-frame header; the `count` in the first frame declares the total length). The
+app holds one dump in flight and **reassembles** the frames until it has
+`3 + count*29` bytes, then decodes the whole (`BleCentralTransport.onResultsFrame`
+/ `codec.ts resultsLength`). Rules the brain's BLE encoder MUST follow: emit the
+frames of one reply back-to-back and in order; do NOT interleave replies (one
+dump is in flight at a time); do NOT push an unsolicited Results frame on its own
+(e.g. on `done`) — a frame arriving with no dump pending is dropped. A dump that
+never completes (frames stop mid-buffer, or no reply at all) fails via the
+no-reply timeout rather than hanging the UI.
 
 **BLE SessionState translation.** The Status `session.state` byte is one of
 `idle / pairing / running / done` — an app-facing state, NOT the engine's
@@ -319,6 +324,18 @@ Data model (app side):
 - **Expo:** `react-native-ble-plx` via **dev-client + config plugin** (prebuild).
   No custom native module needed unless we later move BLE to a co-MCU with a
   nonstandard framing.
+
+**App wiring (in place).** The library sits behind `GattPeripheral`; the concrete
+adapter is `BlePlxPeripheral` (`app/src/ble/`), the ONE board-dependent file —
+scan for the service UUID, connect (requesting a larger **MTU** so a long-path
+`LoadDrill` doesn't truncate — the caveat pinned in `codec.ts`), discover, then
+base64 ⇄ bytes on every write/notification. `createTransport()` selects it: the
+default is the mock (Expo Go / jest, no native module), and a **dev-client build
+opts in with `EXPO_PUBLIC_BLE=1`** — the ble-plx modules are `require`d lazily so
+that path alone loads them. To run the real link:
+`EXPO_PUBLIC_BLE=1 npx expo run:ios` (or `run:android`) — a dev client, not Expo
+Go. The adapter is bench-validated (needs the nRF DK / real S3); its pure parts
+(base64, transport selection) are host-tested.
 
 ## Testing without the app (serial-first)
 

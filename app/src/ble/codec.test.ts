@@ -17,6 +17,7 @@ import {
   decodeStatus,
   encodeControl,
   RESULTS_VERSION,
+  resultsLength,
   STATUS_VERSION,
 } from "./codec";
 import { ControlOp, type HitRecord } from "./contract";
@@ -122,6 +123,16 @@ test("decodeResults rejects a wrong version and a truncated record", () => {
   expect(() => decodeResults(buf([9, 0, 0]))).toThrow(/results version/);
   // count says 1 but only a partial record follows.
   expect(() => decodeResults(buf([RESULTS_VERSION, 1, 0, 0, 0, 4]))).toThrow(/need 32 bytes/);
+});
+
+// resultsLength drives the transport's chunk reassembly: null until the 3-byte
+// header is in, then the header-declared total (3 + count*29); a wrong version
+// throws early so a mis-versioned stream is dropped, not accumulated forever.
+test("resultsLength reports the header-declared total, or null before the header", () => {
+  expect(resultsLength(buf([RESULTS_VERSION, 2]))).toBeNull(); // header incomplete
+  expect(resultsLength(buf([RESULTS_VERSION, 2, 0]))).toBe(3 + 2 * 29); // count 2 -> 61
+  expect(resultsLength(buf([RESULTS_VERSION, 0, 0]))).toBe(3); // empty set -> header only
+  expect(() => resultsLength(buf([9, 0, 0]))).toThrow(/results version/);
 });
 
 // ── Behaviour: pooled buffer (nonzero byteOffset) ────────────────────────────
