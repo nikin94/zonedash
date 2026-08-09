@@ -60,3 +60,19 @@ export const summarize = (
     bestMs,
   };
 };
+
+/**
+ * The id of the session with the fastest average reaction — the personal best a
+ * history list badges, so progression reads at a glance. Only meaningful as a
+ * comparison, so it returns null unless at least TWO sessions have an average to
+ * compare (a lone session isn't "the best of" anything). Sessions with no
+ * attempts (null avg) are ignored. Ties keep the first (newest, since history is
+ * newest-first) so the badge doesn't hop between equal runs.
+ */
+export const bestAverageSessionId = (
+  sessions: SessionSummary[],
+): string | null => {
+  const scored = sessions.filter((s): s is SessionSummary & { avgMs: number } => s.avgMs !== null);
+  if (scored.length < 2) return null;
+  return scored.reduce((best, s) => (s.avgMs < best.avgMs ? s : best)).id;
+};
