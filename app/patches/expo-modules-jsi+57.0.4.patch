@@ -55,7 +55,7 @@ index 9a0b4e0..020824b 100644
    init(runtime: JavaScriptRuntime) {
      self.runtime = runtime
 diff --git a/node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI/Runtime/JavaScriptPropNameID.swift b/node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI/Runtime/JavaScriptPropNameID.swift
-index ef4624d..81589d3 100644
+index ef4624d..352d3d3 100644
 --- a/node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI/Runtime/JavaScriptPropNameID.swift
 +++ b/node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI/Runtime/JavaScriptPropNameID.swift
 @@ -2,7 +2,7 @@ internal import jsi
@@ -63,7 +63,7 @@ index ef4624d..81589d3 100644
  /// Represents something that can be a JS property key.
  public final class JavaScriptPropNameID: JavaScriptType {
 -  private weak let runtime: JavaScriptRuntime?
-+  private weak var runtime: JavaScriptRuntime?
++  nonisolated(unsafe) private weak var runtime: JavaScriptRuntime?
    internal let pointee: facebook.jsi.PropNameID
  
    /// Creates a PropNameID from existing `facebook.jsi.PropNameID`.
