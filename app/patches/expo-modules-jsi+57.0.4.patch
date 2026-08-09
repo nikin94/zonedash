@@ -172,7 +172,7 @@ index 280c18a..8d472a3 100644
  
    /// The underlying `ArrayBuffer` backing this typed array. Stored alongside `pointee`
 diff --git a/node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI/Runtime/Values/JavaScriptValue.swift b/node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI/Runtime/Values/JavaScriptValue.swift
-index ded0419..59aba14 100644
+index ded0419..a902ce2 100644
 --- a/node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI/Runtime/Values/JavaScriptValue.swift
 +++ b/node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI/Runtime/Values/JavaScriptValue.swift
 @@ -7,7 +7,7 @@ internal import jsi
@@ -180,7 +180,7 @@ index ded0419..59aba14 100644
  /// and stored in containers that don't support non-copyable types etc.
  public final class JavaScriptValue: JavaScriptType, Equatable, Escapable {
 -  internal weak let runtime: JavaScriptRuntime?
-+  internal weak var runtime: JavaScriptRuntime?
++  nonisolated(unsafe) internal weak var runtime: JavaScriptRuntime?
    internal let pointee: facebook.jsi.Value
  
    /// Initializer from the existing JSI value.
