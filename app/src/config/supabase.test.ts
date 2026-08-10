@@ -1,7 +1,7 @@
 import { getSupabaseConfig } from "./supabase";
 
 const URL_KEY = "EXPO_PUBLIC_SUPABASE_URL";
-const KEY_KEY = "EXPO_PUBLIC_SUPABASE_ANON_KEY";
+const KEY_KEY = "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY";
 
 // Save/restore the two env vars around each test so the process env is pristine.
 const saved: Record<string, string | undefined> = {};
@@ -20,10 +20,10 @@ afterEach(() => {
 
 test("both vars set → returns the config", () => {
   process.env[URL_KEY] = "https://proj.supabase.co";
-  process.env[KEY_KEY] = "anon-key-123";
+  process.env[KEY_KEY] = "sb_publishable_123";
   expect(getSupabaseConfig()).toEqual({
     url: "https://proj.supabase.co",
-    anonKey: "anon-key-123",
+    publishableKey: "sb_publishable_123",
   });
 });
 
@@ -34,12 +34,12 @@ test("either var missing → null (app stays local-only)", () => {
   expect(getSupabaseConfig()).toBeNull(); // key missing
 
   delete process.env[URL_KEY];
-  process.env[KEY_KEY] = "anon-key-123";
+  process.env[KEY_KEY] = "sb_publishable_123";
   expect(getSupabaseConfig()).toBeNull(); // url missing
 });
 
 test("an empty string counts as unset — no broken client", () => {
   process.env[URL_KEY] = "";
-  process.env[KEY_KEY] = "anon-key-123";
+  process.env[KEY_KEY] = "sb_publishable_123";
   expect(getSupabaseConfig()).toBeNull();
 });
