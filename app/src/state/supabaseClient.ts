@@ -19,7 +19,7 @@ import type { SupabaseConfig } from "../config/supabase";
  * spec-complete URL/URLSearchParams, which React Native lacks by default.
  */
 export const createSupabaseClient = (cfg: SupabaseConfig): SupabaseClient =>
-  createClient(cfg.url, cfg.anonKey, {
+  createClient(cfg.url, cfg.publishableKey, {
     auth: {
       // Persist the session across restarts in the same store history uses.
       storage: AsyncStorage,

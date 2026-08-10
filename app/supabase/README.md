@@ -19,13 +19,15 @@ local-only (`src/config/supabase.ts` → `getSupabaseConfig()` returns null):
 
 ```
 EXPO_PUBLIC_SUPABASE_URL=https://berbrcafejaytymceape.supabase.co
-EXPO_PUBLIC_SUPABASE_ANON_KEY=<the project's anon / public key>
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_…
 ```
 
 Set them in a local `.env` for `expo run:*`, and as EAS build secrets for
 release builds. Both values are from **Project Settings → API** in the Supabase
-dashboard. The anon key is public and safe to ship (see Security model below);
-the **service-role key and DB password never go in the app**.
+dashboard. Use the **publishable key** (`sb_publishable_…`) from the "Publishable
+and secret API keys" tab — the current key system, replacing the legacy `anon`
+JWT. The publishable key is public and safe to ship (see Security model below);
+the **secret key and DB password never go in the app**.
 
 ## Migrations
 
@@ -43,10 +45,11 @@ a migration is safe.
 
 ## Security model
 
-The app ships the **anon (public) key** — that is expected and safe. Every table
-enables **RLS** with policies that pin `user_id` to `auth.uid()`, so the anon key
-can only ever read/write the signed-in user's own rows, never across accounts.
-The service-role key and DB password stay server-side and are never in the app.
+The app ships the **publishable (public) key** — that is expected and safe. Every
+table enables **RLS** with policies that pin `user_id` to `auth.uid()`, so the
+publishable key can only ever read/write the signed-in user's own rows, never
+across accounts. The secret key and DB password stay server-side and are never in
+the app.
 
 Finished sessions are **immutable**: `sessions` has select/insert/delete policies
 but **no update policy**, so with RLS on, no client — not even the owner — can

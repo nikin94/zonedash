@@ -10,7 +10,7 @@
 -- is an append-only archive — the merge policy is union-by-id, never an update.
 -- That immutability is a real DB invariant, not just a client convention: there
 -- is NO update policy, so no client (not even the owner, nor a buggy/tampered one
--- holding the anon key) can overwrite a row's fields after the fact. The sync
+-- holding the publishable key) can overwrite a row's fields after the fact. The sync
 -- adapter (PR-B) writes with `insert … on conflict do nothing` — see sync.ts
 -- RemoteHistoryStore.upsert.
 --
@@ -43,8 +43,8 @@ create index if not exists sessions_user_ended_at_idx
   on public.sessions (user_id, ended_at desc);
 
 -- Row-level security: a user can only ever see and write their OWN sessions.
--- Every policy pins user_id to the authenticated uid, so the anon key (shipped
--- in the app) can't read across accounts — RLS is the boundary, not the key.
+-- Every policy pins user_id to the authenticated uid, so the publishable key
+-- (shipped in the app) can't read across accounts — RLS is the boundary, not the key.
 -- (`enable row level security` is idempotent; the policies are dropped first so
 -- a re-paste doesn't fail on "policy already exists".)
 alter table public.sessions enable row level security;
