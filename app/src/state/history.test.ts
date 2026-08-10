@@ -1,7 +1,13 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import type { SessionSummary } from "../domain/session";
-import { appendSession, clearHistory, HISTORY_CAP, loadHistory } from "./history";
+import {
+  appendSession,
+  clearHistory,
+  HISTORY_CAP,
+  loadHistory,
+  replaceHistory,
+} from "./history";
 
 const KEY = "zonedash:history:v1";
 
@@ -43,6 +49,16 @@ test("clear wipes the log", async () => {
   await appendSession(summary(1));
   await clearHistory();
   expect(await loadHistory()).toEqual([]);
+});
+
+test("replace swaps the whole log and caps it", async () => {
+  await appendSession(summary(1));
+  const many = Array.from({ length: HISTORY_CAP + 5 }, (_, i) => summary(i + 10));
+  await replaceHistory(many);
+  const got = await loadHistory();
+  expect(got).toHaveLength(HISTORY_CAP); // capped
+  expect(got[0].id).toBe("10"); // kept the first (newest) entries passed
+  expect(got.some((s) => s.id === "1")).toBe(false); // old log fully replaced
 });
 
 test("a corrupt or non-array store falls back to empty, never throws", async () => {

@@ -47,6 +47,21 @@ export const appendSession = async (
   return next;
 };
 
+/**
+ * Replace the whole log with `sessions` (already newest-first), capped. Used by
+ * the cloud sync to persist the reconciled local+cloud view so the history modal
+ * reflects it on next open. Best-effort — a failed write never throws.
+ */
+export const replaceHistory = async (
+  sessions: SessionSummary[],
+): Promise<void> => {
+  try {
+    await AsyncStorage.setItem(KEY, JSON.stringify(sessions.slice(0, HISTORY_CAP)));
+  } catch {
+    // swallow — persistence is best-effort
+  }
+};
+
 /** Wipe the log. Best-effort, never throws. */
 export const clearHistory = async (): Promise<void> => {
   try {

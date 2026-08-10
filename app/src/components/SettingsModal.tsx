@@ -1,7 +1,9 @@
 import { Modal, StyleSheet, View } from "react-native";
 
 import { type DrillSettings } from "../state/AppState";
+import type { AuthStatus, AuthUser } from "../state/auth";
 import { alpha, colors, glowShadow } from "../theme";
+import { AccountSection } from "./AccountSection";
 import { CustomPressable } from "./CustomPressable";
 import { SettingsPanel } from "./SettingsPanel";
 
@@ -16,11 +18,19 @@ export const SettingsModal = ({
   onDismiss,
   settings,
   onChange,
+  authStatus,
+  authUser,
+  onSignIn,
+  onSignOut,
 }: {
   visible: boolean;
   onDismiss: () => void;
   settings: DrillSettings;
   onChange: (next: DrillSettings) => void;
+  authStatus: AuthStatus;
+  authUser: AuthUser | null;
+  onSignIn: () => void;
+  onSignOut: () => void;
 }) => (
   <Modal
     visible={visible}
@@ -39,6 +49,13 @@ export const SettingsModal = ({
         style={StyleSheet.absoluteFill}
       />
       <View style={styles.card}>
+        <AccountSection
+          status={authStatus}
+          user={authUser}
+          onSignIn={onSignIn}
+          onSignOut={onSignOut}
+        />
+        <View style={styles.divider} />
         <SettingsPanel settings={settings} onChange={onChange} />
       </View>
     </View>
@@ -61,5 +78,11 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingVertical: 12,
     ...glowShadow,
+  },
+  divider: {
+    height: 1,
+    alignSelf: "stretch",
+    marginTop: 16,
+    backgroundColor: colors.border,
   },
 });

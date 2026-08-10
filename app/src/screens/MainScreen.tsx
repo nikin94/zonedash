@@ -41,6 +41,10 @@ export const MainScreen = () => {
     setSettings,
     courtRotation,
     rotateCourt,
+    authStatus,
+    authUser,
+    signIn,
+    signOut,
   } = useAppState();
   const connected = connection === "connected";
   const paired = pairedSpots.length > 0;
@@ -139,6 +143,10 @@ export const MainScreen = () => {
         onDismiss={() => setSettingsOpen(false)}
         settings={settings}
         onChange={setSettings}
+        authStatus={authStatus}
+        authUser={authUser}
+        onSignIn={signIn}
+        onSignOut={signOut}
       />
 
       <HistoryModal
