@@ -7,8 +7,25 @@ signs in; this backend is the optional cloud mirror on top of the same
 
 - **Project ref:** `berbrcafejaytymceape`
 - **Auth:** Supabase Auth, Google via a native id token (no browser hand-off) —
-  wired in PR-B/PR-C.
+  wired in PR-C.
 - **Data:** one `public.sessions` table, row-level-security scoped to the owner.
+  The client + `RemoteHistoryStore` adapter over it are wired in PR-B
+  (`src/state/supabaseClient.ts`, `src/state/supabaseHistory.ts`).
+
+## Environment
+
+The app reads two Expo public env vars; **both must be set** or the app stays
+local-only (`src/config/supabase.ts` → `getSupabaseConfig()` returns null):
+
+```
+EXPO_PUBLIC_SUPABASE_URL=https://berbrcafejaytymceape.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=<the project's anon / public key>
+```
+
+Set them in a local `.env` for `expo run:*`, and as EAS build secrets for
+release builds. Both values are from **Project Settings → API** in the Supabase
+dashboard. The anon key is public and safe to ship (see Security model below);
+the **service-role key and DB password never go in the app**.
 
 ## Migrations
 
