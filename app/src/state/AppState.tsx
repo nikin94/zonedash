@@ -10,7 +10,11 @@ import {
 
 import { createTransport } from "../ble/createTransport";
 import type { CentralTransport, ConnectionState } from "../ble/transport";
+import type { AuthProvider, AuthStatus, AuthUser } from "./auth";
+import { createAuthProvider } from "./createAuthProvider";
+import { reconcileHistory } from "./historySync";
 import { loadPrefs, savePrefs } from "./prefs";
+import type { RemoteHistoryStore } from "./sync";
 
 /**
  * Session-wide drill settings, edited on the Settings screen and consumed by
@@ -44,6 +48,14 @@ interface AppState {
    *  re-pair or reconnect. */
   courtRotation: number;
   rotateCourt: () => void;
+  /** Account status off the AuthProvider seam — "signed-out" is the default and
+   *  first-class (local-only). */
+  authStatus: AuthStatus;
+  authUser: AuthUser | null;
+  /** Start Google sign-in; the UI tracks progress via authStatus. */
+  signIn: () => void;
+  /** Sign out — back to local-only. */
+  signOut: () => void;
 }
 
 const Ctx = createContext<AppState | null>(null);
@@ -59,14 +71,28 @@ const Ctx = createContext<AppState | null>(null);
  */
 export const AppStateProvider = ({
   transport: injected,
+  auth: injectedAuth,
+  remoteHistory,
   children,
 }: {
   transport?: CentralTransport;
-  children: ReactNode;
+  /** Injectable for tests; otherwise createAuthProvider picks the mock (Expo Go
+   *  / jest) or the real Supabase provider (PR-C). */
+  auth?: AuthProvider;
+  /** The cloud archive to reconcile local history against on sign-in. Null when
+   *  there is no backend (local-only); PR-C provides the real Supabase-backed
+   *  store built on the same authenticated client. */
+  remoteHistory?: RemoteHistoryStore | null;
+  children?: ReactNode;
 }) => {
   // Tests inject a transport; otherwise createTransport picks mock (Expo Go /
   // jest) or the real BLE stack (dev build, EXPO_PUBLIC_BLE=1).
   const transport = useMemo(() => injected ?? createTransport(), [injected]);
+  const auth = useMemo(() => injectedAuth ?? createAuthProvider(), [injectedAuth]);
+  // Seed from the provider so a freshly-mounted tree reflects an already-active
+  // session (same rehydrate reason as connection/session snapshots).
+  const [authStatus, setAuthStatus] = useState<AuthStatus>(auth.status);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(auth.user);
   const [connection, setConnection] = useState<ConnectionState>("disconnected");
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [settings, setSettings] = useState<DrillSettings>(DEFAULT_SETTINGS);
@@ -130,6 +156,44 @@ export const AppStateProvider = ({
 
   const rotateCourt = useCallback(() => setCourtRotation((r) => (r + 1) % 4), []);
 
+  // Track auth transitions off the seam — the account UI renders off this, and
+  // the sync effect below keys sign-in on it.
+  useEffect(() => {
+    const unsub = auth.onAuthChange((e) => {
+      setAuthStatus(e.status);
+      setAuthUser(e.user);
+    });
+    return unsub;
+  }, [auth]);
+
+  const signIn = useCallback(() => {
+    // The event stream drives the UI (signing-in → signed-in / back to
+    // signed-out with a reason); swallow the rejection so a cancel isn't an
+    // unhandled promise.
+    void auth.signInWithGoogle().catch(() => {});
+  }, [auth]);
+  const signOut = useCallback(() => {
+    void auth.signOut().catch(() => {});
+  }, [auth]);
+
+  // On sign-in, reconcile device-local history with the account's cloud archive
+  // (and, for a fresh account, migrate the local log up). Runs once per sign-in
+  // (authUser.id is stable while signed-in). No-op without a backend
+  // (remoteHistory null → local-only), so the mock/default path never syncs.
+  // Best-effort: a network failure leaves local history intact (nothing is lost,
+  // the push is idempotent on id) and the next sign-in retries.
+  const userId = authUser?.id ?? null;
+  useEffect(() => {
+    if (authStatus !== "signed-in" || userId === null || !remoteHistory) return;
+    let cancelled = false;
+    reconcileHistory(userId, remoteHistory).catch(() => {
+      if (!cancelled) return; // swallow — local store is untouched on failure
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [authStatus, userId, remoteHistory]);
+
   const value = useMemo(
     () => ({
       transport,
@@ -140,8 +204,24 @@ export const AppStateProvider = ({
       pairedSpots,
       courtRotation,
       rotateCourt,
+      authStatus,
+      authUser,
+      signIn,
+      signOut,
     }),
-    [transport, connection, connectionError, settings, pairedSpots, courtRotation, rotateCourt],
+    [
+      transport,
+      connection,
+      connectionError,
+      settings,
+      pairedSpots,
+      courtRotation,
+      rotateCourt,
+      authStatus,
+      authUser,
+      signIn,
+      signOut,
+    ],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 };
