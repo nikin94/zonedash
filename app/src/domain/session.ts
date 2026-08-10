@@ -7,7 +7,14 @@ import type { HitRecord } from "../ble/contract";
  * the live results panel), so a summary stays small and a capped history is cheap.
  */
 export interface SessionSummary {
-  /** Stable id — the completion timestamp in epoch ms (also `endedAt`). */
+  /**
+   * Stable id — the completion timestamp in epoch ms (also `endedAt`). Carries
+   * no entropy, so two sessions that finish in the SAME epoch-ms share an id.
+   * Same-device that can't happen (runs are sequential); across two devices for
+   * one account it's effectively unreachable at human drill cadence, and if it
+   * ever did, cloud sync ignores the second (insert-or-ignore on the id). If
+   * that assumption ever needs to hold, append a device/random suffix here.
+   */
   id: string;
   /** When the session finished, epoch ms. */
   endedAt: number;
