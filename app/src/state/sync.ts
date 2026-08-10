@@ -16,7 +16,15 @@ import { HISTORY_CAP } from "./history";
 export interface RemoteHistoryStore {
   /** Every session the account has, any order (the caller sorts). */
   list(userId: string): Promise<SessionSummary[]>;
-  /** Upsert sessions for the account — idempotent on id (immutable rows). */
+  /**
+   * Archive sessions for the account. INSERT-OR-IGNORE, never update: a row
+   * whose id already exists is left untouched (finished sessions are immutable,
+   * enforced by the schema having no update policy — see
+   * migrations/0001_create_sessions.sql). This is what makes a re-push
+   * idempotent on id, so a retry after a partial sync can't corrupt an archived
+   * row. The Supabase adapter (PR-B) implements this as
+   * `insert … on conflict (user_id, id) do nothing`.
+   */
   upsert(userId: string, sessions: SessionSummary[]): Promise<void>;
 }
 

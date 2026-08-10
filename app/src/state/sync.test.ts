@@ -30,9 +30,12 @@ class FakeRemote implements RemoteHistoryStore {
     if (this.failList) throw new Error(this.failList);
     return [...this.rows.values()];
   }
+  // Insert-or-ignore, mirroring the RemoteHistoryStore contract + the schema's
+  // no-update-policy: an id that already exists is left untouched, never
+  // overwritten. A faithful double so a test can prove immutability holds.
   async upsert(_userId: string, sessions: SessionSummary[]): Promise<void> {
     this.upserts.push(sessions);
-    for (const s of sessions) this.rows.set(s.id, s);
+    for (const s of sessions) if (!this.rows.has(s.id)) this.rows.set(s.id, s);
   }
 }
 
@@ -100,5 +103,15 @@ describe("syncHistory", () => {
     const remote = new FakeRemote();
     remote.failList = "network down";
     await expect(syncHistory("u1", [sess(1)], remote)).rejects.toThrow("network down");
+  });
+
+  test("a re-push of an archived id leaves the cloud row untouched (immutable)", async () => {
+    // The cloud already holds session 2 with best 300; a device re-syncs a row
+    // with the same id but a different best. Sessions are immutable, so the
+    // archived row must NOT be overwritten (schema has no update policy).
+    const remote = new FakeRemote().seed([sess(2, { bestMs: 300 })]);
+    await syncHistory("u1", [sess(2, { bestMs: 999 })], remote);
+    expect(remote.rows.get("2")?.bestMs).toBe(300); // original, not clobbered
+    expect(remote.upserts).toHaveLength(0); // id already present → nothing pushed
   });
 });

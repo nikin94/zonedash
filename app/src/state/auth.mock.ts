@@ -43,7 +43,10 @@ export class MockAuthProvider implements AuthProvider {
   }
 
   async signInWithGoogle(): Promise<void> {
-    if (this.status === "signed-in") return;
+    // Already signed in, or a sign-in already in flight → no-op. Guarding
+    // "signing-in" too keeps a double-tap (or the real provider's seconds of
+    // network) from re-emitting signing-in and racing a second attempt.
+    if (this.status === "signed-in" || this.status === "signing-in") return;
     this.setState("signing-in", null);
     await this.wait();
     if (this.failSignIn) {

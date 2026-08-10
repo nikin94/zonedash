@@ -47,6 +47,18 @@ test("sign-out returns to local-only and emits signed-out", async () => {
   expect(events.at(-1)).toEqual({ status: "signed-out", user: null, reason: undefined });
 });
 
+test("a second sign-in while one is in flight is a no-op — no duplicate walk", async () => {
+  const auth = new MockAuthProvider({ latencyMs: 10 });
+  const events: AuthEvent[] = [];
+  auth.onAuthChange((e) => events.push(e));
+
+  // Fire two concurrently; the second must not re-emit signing-in or re-attempt.
+  await Promise.all([auth.signInWithGoogle(), auth.signInWithGoogle()]);
+
+  expect(events.map((e) => e.status)).toEqual(["signing-in", "signed-in"]);
+  expect(auth.status).toBe("signed-in");
+});
+
 test("a custom account is what sign-in resolves to", async () => {
   const auth = new MockAuthProvider({
     user: { id: "u42", email: "a@b.c", name: "Ada" },
