@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import { Animated, StyleSheet, Text } from "react-native";
 
 import { type SpotVisual } from "../../helpers/court";
-import { colors } from "../../theme";
+import { alpha, colors } from "../../theme";
 import { CourtMap } from "./CourtMap";
 import { SpotIcon } from "./SpotIcon";
 
@@ -245,17 +245,22 @@ test("every dot has an app-background disc behind it, masking the court lines", 
   }
 });
 
-// The centre block (title / info / controls) crossing the centre line gets its
-// own app-background card, so text stays legible over the markings.
-test("centre content is wrapped in an app-background card", () => {
+// The centre block (title / info / controls) crossing the centre line sits on a
+// frosted-glass card: a BlurView frost under a translucent white tint (not a
+// solid fill), clipped to the rounded corners — so the court markings behind it
+// blur out rather than being fully masked, and the text stays legible.
+test("centre content sits on a frosted-glass card that blurs the lines behind it", () => {
   render(
     <CourtMap spots={allOff}>
       <Text>Ready</Text>
     </CourtMap>,
   );
   const card = StyleSheet.flatten(screen.getByTestId("centre-card").props.style);
-  expect(card.backgroundColor).toBe(colors.background);
-  // No card without centre content — nothing to mask.
+  // A translucent tint (not the opaque app fill), clipped to the corners.
+  expect(card.backgroundColor).toBe(alpha(colors.background, 0.6));
+  expect(card.overflow).toBe("hidden");
+  expect(screen.getByTestId("centre-glass")).toBeTruthy(); // the BlurView frost
+  // No card without centre content — nothing to frost.
   screen.unmount();
   render(<CourtMap spots={allOff} />);
   expect(screen.queryByTestId("centre-card")).toBeNull();

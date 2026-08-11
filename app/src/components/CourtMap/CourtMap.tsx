@@ -1,6 +1,8 @@
 import { type ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
 
+import { BlurView } from "expo-blur";
+
 import { SPOT_NAMES, SPOT_XY } from "../../domain/spot";
 import {
   CENTRE_PAD,
@@ -13,7 +15,7 @@ import {
   type SpotVisual,
 } from "../../helpers/court";
 import { rotateNorm } from "../../helpers/courtLines";
-import { colors } from "../../theme";
+import { alpha, colors } from "../../theme";
 import { AppText } from "../AppText";
 import { CustomPressable } from "../CustomPressable";
 import { RotateIcon } from "../Icons";
@@ -130,14 +132,26 @@ export const CourtMap = ({
             // box-none: the centre content is interactive, the empty area around
             // it stays transparent to touches so the perimeter spots keep working.
             <View pointerEvents="box-none" style={styles.centre}>
-              {/* A content-hugging app-background card behind the whole centre
-                  block, so the title / info / controls crossing the centre line
-                  read cleanly over the court markings — no gaps between lines. */}
+              {/* A content-hugging frosted-glass card behind the whole centre
+                  block: the title / info / controls crossing the centre line
+                  read cleanly while the court markings behind BLUR out rather
+                  than being fully masked — the same liquid-glass treatment as
+                  the tab bar. The card clips the blur to its rounded corners. */}
               <View
                 pointerEvents="box-none"
                 testID="centre-card"
                 style={styles.centreCard}
               >
+                {/* The frost. tint "light" over the blur reads as a subtle
+                    white glass; on Android expo-blur falls back to the
+                    translucent fill (centreCard's backgroundColor). */}
+                <BlurView
+                  pointerEvents="none"
+                  testID="centre-glass"
+                  intensity={40}
+                  tint="light"
+                  style={StyleSheet.absoluteFill}
+                />
                 {children}
               </View>
             </View>
@@ -275,15 +289,18 @@ const styles = StyleSheet.create({
     // space to the bigger, further-inset targets.
     padding: CENTRE_PAD,
   },
-  // Hugs the centre content (alignItems/justify on `centre` keep it centred),
-  // masking the court markings behind the text/controls with the app fill.
+  // Hugs the centre content (alignItems/justify on `centre` keep it centred).
+  // A translucent white tint OVER the BlurView (not a solid fill) so the court
+  // markings behind frost rather than vanish; `overflow: hidden` clips the blur
+  // to the rounded corners. The tint doubles as the Android blur fallback.
   centreCard: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.background,
+    backgroundColor: alpha(colors.background, 0.6),
     borderRadius: 16,
     paddingHorizontal: 12,
     paddingVertical: 8,
+    overflow: "hidden",
   },
   hit: {
     position: "absolute",
