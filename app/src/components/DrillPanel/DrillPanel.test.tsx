@@ -4,6 +4,11 @@ import { StyleSheet } from "react-native";
 
 import { MAX_DRILL_PATH } from "../../ble/codec";
 import { SURFACE_MARGIN_TOP } from "../../helpers/court";
+import {
+  TAB_BAR_DISC_RISE,
+  TAB_BAR_ROW_H,
+  tabBarClearance,
+} from "../../navigation/GlassTabBar";
 import { MockCentralTransport } from "../../ble/mock";
 import type { DrillConfig } from "../../ble/transport";
 import { DEFAULT_SETTINGS, type DrillSettings } from "../../state/AppState";
@@ -618,4 +623,21 @@ test("the drill court is clean — no centre card over the schema", async () => 
   // CourtMap only draws its frosted centre card for centre children; the drill
   // surface passes none now, so the court stays clear.
   expect(screen.queryByTestId("centre-card")).toBeNull();
+});
+
+// Regression: the tab bar is a floating, translucent bar the scene extends
+// UNDER, so the pinned action bar must pad its bottom by the bar's full
+// footprint (tabBarClearance) plus the centre disc's upward poke — otherwise
+// Start is hidden behind the bar (as it was with a fixed 30 px pad). The pad is
+// derived from the bar's own exported geometry so a bar resize can't re-hide it.
+test("the pinned action bar clears the floating tab bar and its centre disc", async () => {
+  const t = await connectedTransport();
+  panel(t);
+  const bar = StyleSheet.flatten(
+    screen.getByTestId("drill-action-bar").props.style,
+  );
+  // insets are 0 in jest → tabBarClearance(0) + disc rise + the gap.
+  expect(bar.paddingBottom).toBe(tabBarClearance(0) + TAB_BAR_DISC_RISE + 12);
+  // And it genuinely clears both the bar row and the poking disc.
+  expect(bar.paddingBottom).toBeGreaterThanOrEqual(TAB_BAR_ROW_H + TAB_BAR_DISC_RISE);
 });

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import type { HitRecord } from "../../ble/contract";
 import type {
@@ -18,6 +19,10 @@ import { summarize, type SessionSummary } from "../../domain/session";
 import { SURFACE_MARGIN_TOP, type SpotVisual } from "../../helpers/court";
 import { formatStepBadge } from "../../helpers/pathBadge";
 import { type DrillSettings } from "../../state/AppState";
+import {
+  TAB_BAR_DISC_RISE,
+  tabBarClearance,
+} from "../../navigation/GlassTabBar";
 import { alpha, colors } from "../../theme";
 
 const COUNT_OPTIONS = Array.from({ length: 99 }, (_, i) => ({
@@ -39,9 +44,9 @@ const fmtSec = (ms: number) => `${(ms / 1000).toFixed(2)} ${UNIT}`;
 // shifts the layout.
 const TEXT_SLOT_H = 44; // fixed status area: room for the 2-line running status
 const ERROR_SLOT_H = 18;
-// Keeps the pinned Start/Stop button clear of the tab bar's protruding centre
-// (Drill) disc, which pokes ~22 px up into the scene above the bar.
-const ACTION_BAR_PAD_BOTTOM = 30;
+// Breathing room between the pinned button and the tab bar's centre (Drill)
+// disc, on top of the full bar clearance (tabBarClearance + TAB_BAR_DISC_RISE).
+const ACTION_BAR_GAP = 12;
 
 /** UI modes. The engine's `random` and `time` differ only in the stop
  *  condition (rep count vs duration window), so the UI folds them into one
@@ -117,6 +122,14 @@ export const DrillPanel = ({
   // pairedSpots, on the session axis. Scoped to `running`: a finished session
   // rehydrates to a fresh idle Start (the operator left; re-authoring is the
   // likely next step, and its records were never theirs to keep across a leave).
+  const insets = useSafeAreaInsets();
+  // The pinned action bar must clear the FLOATING (translucent) tab bar the
+  // scene extends under — its full footprint plus the centre disc's upward poke,
+  // plus a small gap. Derived from the bar's own exported geometry so a bar
+  // resize can't silently re-hide the button.
+  const actionBarPadBottom =
+    tabBarClearance(insets.bottom) + TAB_BAR_DISC_RISE + ACTION_BAR_GAP;
+
   const [snap] = useState(() => transport.sessionSnapshot);
   const live = snap.state === "running";
   const ui = uiFromWire(snap.mode);
@@ -679,7 +692,10 @@ export const DrillPanel = ({
       {/* The primary action, pinned above the tab bar so Start/Stop is always
           one tap away no matter how far the config (path chips, wheels,
           results) scrolls — the config scrolls, the action doesn't. */}
-      <View style={styles.actionBar}>
+      <View
+        testID="drill-action-bar"
+        style={[styles.actionBar, { paddingBottom: actionBarPadBottom }]}
+      >
         {running ? (
           <Button label="Stop" onPress={stop} style={styles.actionButton} />
         ) : (
@@ -729,7 +745,8 @@ const styles = StyleSheet.create({
   actionBar: {
     paddingHorizontal: 24,
     paddingTop: 12,
-    paddingBottom: ACTION_BAR_PAD_BOTTOM,
+    // paddingBottom is applied inline (safe-area + tab-bar clearance) so the
+    // pinned button always sits above the floating bar and its centre disc.
     borderTopWidth: 1,
     borderTopColor: alpha(colors.border, 0.4),
     backgroundColor: colors.background,
