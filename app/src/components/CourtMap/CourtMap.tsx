@@ -280,7 +280,7 @@ const styles = StyleSheet.create({
   centreCard: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "transparent",
+    backgroundColor: colors.background,
     borderRadius: 16,
     paddingHorizontal: 12,
     paddingVertical: 8,
