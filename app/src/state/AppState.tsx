@@ -11,7 +11,7 @@ import {
 import { createTransport } from "../ble/createTransport";
 import type { CentralTransport, ConnectionState } from "../ble/transport";
 import type { AuthProvider, AuthStatus, AuthUser } from "./auth";
-import { createAuthProvider } from "./createAuthProvider";
+import { createAccountsBackend } from "./createAccountsBackend";
 import { reconcileHistory } from "./historySync";
 import { loadPrefs, savePrefs } from "./prefs";
 import type { RemoteHistoryStore } from "./sync";
@@ -72,23 +72,31 @@ const Ctx = createContext<AppState | null>(null);
 export const AppStateProvider = ({
   transport: injected,
   auth: injectedAuth,
-  remoteHistory,
+  remoteHistory: injectedRemoteHistory,
   children,
 }: {
   transport?: CentralTransport;
-  /** Injectable for tests; otherwise createAuthProvider picks the mock (Expo Go
-   *  / jest) or the real Supabase provider (PR-C). */
+  /** Injectable for tests; otherwise the accounts backend picks the mock (Expo
+   *  Go / jest, no config) or the real Supabase+Google provider. */
   auth?: AuthProvider;
-  /** The cloud archive to reconcile local history against on sign-in. Null when
-   *  there is no backend (local-only); PR-C provides the real Supabase-backed
-   *  store built on the same authenticated client. */
+  /** The cloud archive to reconcile local history against on sign-in. Injectable
+   *  for tests; otherwise it comes from the accounts backend — the real Supabase
+   *  store (same authenticated client as `auth`) when configured, else null
+   *  (local-only). `undefined` means "not injected, use the backend default";
+   *  an explicit `null` forces local-only. */
   remoteHistory?: RemoteHistoryStore | null;
   children?: ReactNode;
 }) => {
   // Tests inject a transport; otherwise createTransport picks mock (Expo Go /
   // jest) or the real BLE stack (dev build, EXPO_PUBLIC_BLE=1).
   const transport = useMemo(() => injected ?? createTransport(), [injected]);
-  const auth = useMemo(() => injectedAuth ?? createAuthProvider(), [injectedAuth]);
+  // The auth provider and cloud store come from ONE backend so they share a
+  // Supabase client (its JWT is what RLS scopes cloud rows by). Either can be
+  // injected for tests; an injected value wins over the backend default.
+  const backend = useMemo(() => createAccountsBackend(), []);
+  const auth = useMemo(() => injectedAuth ?? backend.auth, [injectedAuth, backend]);
+  const remoteHistory =
+    injectedRemoteHistory !== undefined ? injectedRemoteHistory : backend.remoteHistory;
   // Seed from the provider so a freshly-mounted tree reflects an already-active
   // session (same rehydrate reason as connection/session snapshots).
   const [authStatus, setAuthStatus] = useState<AuthStatus>(auth.status);
