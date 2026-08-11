@@ -1,6 +1,9 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react-native";
 
+import { StyleSheet } from "react-native";
+
 import { MAX_DRILL_PATH } from "../../ble/codec";
+import { SURFACE_MARGIN_TOP } from "../../helpers/court";
 import { MockCentralTransport } from "../../ble/mock";
 import type { DrillConfig } from "../../ble/transport";
 import { DEFAULT_SETTINGS, type DrillSettings } from "../../state/AppState";
@@ -580,4 +583,17 @@ test("a rehydrated random run shows its real count, not the default", async () =
   expect(load).toHaveBeenLastCalledWith(
     expect.objectContaining({ mode: "random", count: 20 }),
   );
+});
+
+// The drill surface must start at the SAME shared top offset as the idle and
+// pairing surfaces (court.ts) — otherwise the court jumps when the pairing
+// handoff swaps this panel in. The offset rides the ScrollView's content
+// container. Regression: this surface was at 16 while the others were at 32.
+test("the drill surface sits at the shared surface top offset", async () => {
+  const t = await connectedTransport();
+  panel(t);
+  const cc = StyleSheet.flatten(
+    screen.getByTestId("drill-surface").props.contentContainerStyle,
+  );
+  expect(cc.marginTop).toBe(SURFACE_MARGIN_TOP);
 });
