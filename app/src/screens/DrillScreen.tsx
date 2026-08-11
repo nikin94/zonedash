@@ -4,7 +4,7 @@ import { AppText } from "../components/AppText";
 import { CourtMap } from "../components/CourtMap";
 import { DrillPanel } from "../components/DrillPanel";
 import { PairingPanel } from "../components/PairingPanel";
-import { type SpotVisual } from "../helpers/court";
+import { SURFACE_MARGIN_TOP, type SpotVisual } from "../helpers/court";
 import { appendSession } from "../state/history";
 import { useAppState } from "../state/AppState";
 import { colors } from "../theme";
@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   idle: {
-    marginTop: 32,
+    marginTop: SURFACE_MARGIN_TOP,
     alignItems: "center",
   },
   hint: {

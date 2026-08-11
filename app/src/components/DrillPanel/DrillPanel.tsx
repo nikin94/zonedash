@@ -15,7 +15,7 @@ import { CourtMap, SpotIcon } from "../CourtMap";
 import { msOptions, WheelField } from "../WheelField";
 import { SPOT_CODES, SPOT_NAMES } from "../../domain/spot";
 import { summarize, type SessionSummary } from "../../domain/session";
-import { type SpotVisual } from "../../helpers/court";
+import { SURFACE_MARGIN_TOP, type SpotVisual } from "../../helpers/court";
 import { formatStepBadge } from "../../helpers/pathBadge";
 import { type DrillSettings } from "../../state/AppState";
 import { colors } from "../../theme";
@@ -389,6 +389,7 @@ export const DrillPanel = ({
 
   return (
     <ScrollView
+      testID="drill-surface"
       contentContainerStyle={styles.panel}
       showsVerticalScrollIndicator={false}
     >
@@ -680,7 +681,9 @@ export const DrillPanel = ({
 
 const styles = StyleSheet.create({
   panel: {
-    marginTop: 16,
+    // Shared with the idle + pairing surfaces so the court doesn't jump when one
+    // replaces another (notably the pairing → drill handoff). See court.ts.
+    marginTop: SURFACE_MARGIN_TOP,
     alignItems: "center",
     gap: 12,
     alignSelf: "stretch",

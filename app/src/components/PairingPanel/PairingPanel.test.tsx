@@ -1,6 +1,9 @@
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 
+import { StyleSheet } from "react-native";
+
 import { MockCentralTransport } from "../../ble/mock";
+import { SURFACE_MARGIN_TOP } from "../../helpers/court";
 import { PairingPanel } from "./PairingPanel";
 
 // Zero latency + a fixed, small tap delay so the two-tap confirm lands at
@@ -232,4 +235,14 @@ test("info-block slots stay mounted through every round phase", async () => {
 
   await act(() => jest.runAllTimersAsync());
   expect(screen.getByTestId("finish-pairing")).toBeEnabled(); // bound → enabled
+});
+
+// The pairing surface must start at the SHARED top offset — idle, pairing and
+// drill swap in place, so a mismatch snaps the whole court vertically. Locks the
+// offset so it can't drift back out of sync with the other two surfaces.
+test("the pairing surface sits at the shared surface top offset", async () => {
+  const t = await connectedTransport();
+  render(<PairingPanel transport={t} />);
+  const style = StyleSheet.flatten(screen.getByTestId("pairing-surface").props.style);
+  expect(style.marginTop).toBe(SURFACE_MARGIN_TOP);
 });

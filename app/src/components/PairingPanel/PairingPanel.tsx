@@ -4,7 +4,7 @@ import { StyleSheet, View } from "react-native";
 import type { PairingProgress } from "../../ble/contract";
 import type { CentralTransport } from "../../ble/transport";
 import { SPOT_NAMES } from "../../domain/spot";
-import { type SpotVisual } from "../../helpers/court";
+import { SURFACE_MARGIN_TOP, type SpotVisual } from "../../helpers/court";
 import { colors } from "../../theme";
 import { AppText } from "../AppText";
 import { Button } from "../Button";
@@ -152,7 +152,7 @@ export const PairingPanel = ({
   const canCorrect = choosing && boundCount > 0;
 
   return (
-    <View style={styles.panel}>
+    <View testID="pairing-surface" style={styles.panel}>
       <CourtMap
         spots={visuals}
         onPressSpot={choosing ? pickSpot : undefined}
@@ -295,7 +295,7 @@ export const PairingPanel = ({
 
 const styles = StyleSheet.create({
   panel: {
-    marginTop: 32,
+    marginTop: SURFACE_MARGIN_TOP,
     alignItems: "center",
     gap: 12,
   },
