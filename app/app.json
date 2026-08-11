@@ -38,6 +38,12 @@
           "neverForLocation": true,
           "bluetoothAlwaysPermission": "ZoneDash connects to the court's central unit over Bluetooth to run drills."
         }
+      ],
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.621612892615-0sgs8ipd6h6akrr4tcmhcsovkci78mmr"
+        }
       ]
     ]
   }
