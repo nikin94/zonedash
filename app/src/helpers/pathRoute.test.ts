@@ -1,5 +1,5 @@
 import { alpha, colors } from "../theme";
-import { routeSegments } from "./pathRoute";
+import { polylineLength, routePolyline, routeSegments } from "./pathRoute";
 
 const FULL = alpha(colors.accent, 1); // the last segment's full-accent stroke
 
@@ -49,4 +49,30 @@ test("a back-and-forth reuse fans out — the two arcs bow to opposite sides", (
   const b = nums(segs[1].d);
   const midX = (a[0] + a[4]) / 2; // (x0 + x1) / 2
   expect(Math.sign(a[2] - midX)).toBe(-Math.sign(b[2] - midX));
+});
+
+// The preview marker's track: the whole route sampled into one dense pixel
+// polyline (routePolyline), paced by its length (polylineLength).
+test("routePolyline samples the route into a monotone-marching point list", () => {
+  const pts = routePolyline([0, 4], 0, 10); // one segment, 10 samples
+  // First point + `perSeg` samples per quad, joins emitted once.
+  expect(pts).toHaveLength(11);
+  // It starts at the first dot's centre and ends at the last dot's centre —
+  // the same endpoints the drawn segment carries.
+  const seg = nums(routeSegments([0, 4], 0)[0].d); // [x0,y0,cx,cy,x1,y1]
+  expect(pts[0].x).toBeCloseTo(seg[0], 1);
+  expect(pts[0].y).toBeCloseTo(seg[1], 1);
+  expect(pts.at(-1)!.x).toBeCloseTo(seg[4], 1);
+  expect(pts.at(-1)!.y).toBeCloseTo(seg[5], 1);
+});
+
+test("routePolyline is empty for a path with nothing to traverse", () => {
+  expect(routePolyline([], 0)).toEqual([]);
+  expect(routePolyline([3], 0)).toEqual([]);
+});
+
+test("a longer route yields a longer polyline (paces the marker by distance)", () => {
+  const short = polylineLength(routePolyline([0, 1], 0));
+  const long = polylineLength(routePolyline([0, 4], 0)); // corner-to-corner
+  expect(long).toBeGreaterThan(short);
 });

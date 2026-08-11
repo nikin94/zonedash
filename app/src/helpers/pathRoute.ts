@@ -49,6 +49,15 @@ interface Pt {
   y: number;
 }
 
+/** One route segment as a raw quadratic curve (dot centres + control point) in
+ *  the court box's pixel space. The single source both the drawn segments and
+ *  the animated preview derive from, so the marker rides the exact same curve. */
+export interface RouteQuad {
+  p0: Pt;
+  ctrl: Pt;
+  p2: Pt;
+}
+
 /** The pixel CENTRE of a canonical spot's dot, rotated with the view — the same
  *  centring the dots are positioned with (INSET + HIT/2 + fraction · span). */
 const dotCentre = (spot: number, r: number): Pt => {
@@ -63,14 +72,16 @@ const dotCentre = (spot: number, r: number): Pt => {
 const round = (n: number) => Math.round(n * 100) / 100;
 
 /**
- * Build the drawn segments for a path (canonical spot indices, in step order).
- * `path.length - 1` segments; an empty or single-step path draws nothing.
+ * Build the raw quadratic curves for a path (canonical spot indices, in step
+ * order) — the shape only, no colour/arrow. `path.length - 1` quads; an empty
+ * or single-step path yields none. Both routeSegments (drawn) and routePolyline
+ * (the preview marker's track) build on this, so the curves never diverge.
  */
-export const routeSegments = (path: number[], rotation: number): RouteSeg[] => {
+export const routeQuadratics = (path: number[], rotation: number): RouteQuad[] => {
   const r = ((rotation % 4) + 4) % 4;
   const cx = MAP_W / 2;
   const cy = MAP_H / 2;
-  const segs: RouteSeg[] = [];
+  const quads: RouteQuad[] = [];
   // How many times each unordered pair has been drawn, so repeats fan out.
   const seen = new Map<string, number>();
   const N = path.length - 1;
@@ -114,17 +125,69 @@ export const routeSegments = (path: number[], rotation: number): RouteSeg[] => {
       ctrl = { x: mx + nx * bulge, y: my + ny * bulge };
     }
 
+    quads.push({ p0, ctrl, p2 });
+  }
+  return quads;
+};
+
+/**
+ * Build the drawn segments for a path (canonical spot indices, in step order).
+ * `path.length - 1` segments; an empty or single-step path draws nothing.
+ */
+export const routeSegments = (path: number[], rotation: number): RouteSeg[] => {
+  const quads = routeQuadratics(path, rotation);
+  const N = quads.length;
+  return quads.map(({ p0, ctrl, p2 }, i) => {
     // Fade first → last so the order reads as colour: faint start, full accent end.
     const t = N === 1 ? 1 : 0.45 + 0.55 * (i / (N - 1));
-    const color = alpha(colors.accent, round(t));
-
-    segs.push({
+    return {
       d: `M ${round(p0.x)} ${round(p0.y)} Q ${round(ctrl.x)} ${round(ctrl.y)} ${round(p2.x)} ${round(p2.y)}`,
       arrow: arrowPoints(p0, ctrl, p2),
-      color,
-    });
+      color: alpha(colors.accent, round(t)),
+    };
+  });
+};
+
+/** Sample a quadratic at t∈[0,1]. */
+const quadAt = (q: RouteQuad, t: number): Pt => {
+  const mt = 1 - t;
+  return {
+    x: mt * mt * q.p0.x + 2 * mt * t * q.ctrl.x + t * t * q.p2.x,
+    y: mt * mt * q.p0.y + 2 * mt * t * q.ctrl.y + t * t * q.p2.y,
+  };
+};
+
+/**
+ * The whole route as one dense pixel polyline — the track the preview marker
+ * runs along. Each quad is sampled `perSeg` times; the shared start point of
+ * adjacent quads is emitted once, so the points march monotonically from the
+ * first spot to the last with no duplicate stalls at the joins. Empty for a
+ * path shorter than two spots (nothing to traverse).
+ */
+export const routePolyline = (
+  path: number[],
+  rotation: number,
+  perSeg = 14,
+): Pt[] => {
+  const quads = routeQuadratics(path, rotation);
+  if (quads.length === 0) return [];
+  const pts: Pt[] = [quads[0].p0];
+  for (const q of quads) {
+    for (let s = 1; s <= perSeg; s++) {
+      const p = quadAt(q, s / perSeg);
+      pts.push({ x: round(p.x), y: round(p.y) });
+    }
   }
-  return segs;
+  return pts;
+};
+
+/** Total length of a polyline, px — used to pace the marker at a steady speed. */
+export const polylineLength = (pts: Pt[]): number => {
+  let len = 0;
+  for (let i = 1; i < pts.length; i++) {
+    len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+  }
+  return len;
 };
 
 /** Arrowhead polygon at t≈0.62 along the quadratic, aimed down the tangent. */

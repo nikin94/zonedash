@@ -281,3 +281,16 @@ test("a route of N spots draws N-1 curved segments; none for a short route", () 
   rerender(<CourtMap spots={allOff} />);
   expect(screen.queryByTestId("court-route")).toBeNull();
 });
+
+// Stage 3: an animated marker loops along the route curve, tracing the sequence
+// without a play button. It shows only with a route to trace (>= 2 spots) and
+// rides above the line but below the dots (its own overlay, taking no touches).
+test("a route of two or more spots shows the looping preview marker", () => {
+  const { rerender } = render(<CourtMap spots={allOff} route={[0, 4]} />);
+  expect(screen.getByTestId("route-preview")).toBeTruthy();
+  // A single-spot (or absent) route has nothing to trace — no marker.
+  rerender(<CourtMap spots={allOff} route={[0]} />);
+  expect(screen.queryByTestId("route-preview")).toBeNull();
+  rerender(<CourtMap spots={allOff} />);
+  expect(screen.queryByTestId("route-preview")).toBeNull();
+});
