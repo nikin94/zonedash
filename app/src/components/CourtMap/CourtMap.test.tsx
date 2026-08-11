@@ -1,7 +1,8 @@
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
-import { Animated, StyleSheet } from "react-native";
+import { Animated, StyleSheet, Text } from "react-native";
 
 import { type SpotVisual } from "../../helpers/court";
+import { colors } from "../../theme";
 import { CourtMap } from "./CourtMap";
 import { SpotIcon } from "./SpotIcon";
 
@@ -231,4 +232,31 @@ test("the court lines rotate with the view, matching the dots' transform", () =>
   const turned = shortServiceCoords();
   expect(turned.dx).toBeCloseTo(0, 5); // vertical at 90°
   expect(turned.dy).toBeGreaterThan(0);
+});
+
+// Each target sits on an opaque app-background disc, so the court markings
+// drawn behind the map never bleed through a resting dot — the dot (and its
+// buttons/state fill) reads as laid over the schematic.
+test("every dot has an app-background disc behind it, masking the court lines", () => {
+  render(<CourtMap spots={allOff} />);
+  for (let i = 0; i < 8; i++) {
+    const bg = StyleSheet.flatten(screen.getByTestId(`spot-bg-${i}`).props.style);
+    expect(bg.backgroundColor).toBe(colors.background);
+  }
+});
+
+// The centre block (title / info / controls) crossing the centre line gets its
+// own app-background card, so text stays legible over the markings.
+test("centre content is wrapped in an app-background card", () => {
+  render(
+    <CourtMap spots={allOff}>
+      <Text>Ready</Text>
+    </CourtMap>,
+  );
+  const card = StyleSheet.flatten(screen.getByTestId("centre-card").props.style);
+  expect(card.backgroundColor).toBe(colors.background);
+  // No card without centre content — nothing to mask.
+  screen.unmount();
+  render(<CourtMap spots={allOff} />);
+  expect(screen.queryByTestId("centre-card")).toBeNull();
 });
