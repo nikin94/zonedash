@@ -1,11 +1,10 @@
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { BlurView } from "expo-blur";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppText } from "../components/AppText";
-import { CustomPressable } from "../components/CustomPressable";
-import { AccountIcon, DrillIcon, SlidersIcon } from "../components/Icons";
+import { AccountIcon, DrillIcon, GearIcon } from "../components/Icons";
 import { alpha, colors, glowShadow } from "../theme";
 
 /**
@@ -15,8 +14,25 @@ import { alpha, colors, glowShadow } from "../theme";
  * item navigates through react-navigation; the transport lives above the
  * navigator (AppState), so switching tabs never touches the BLE link.
  *
+ * Only the icons (+ labels) are tappable — each side item is a content-sized
+ * Pressable centred in a flex column, and the centre button's target is the
+ * disc itself, not the square around it. Press feedback is icon-only opacity;
+ * there is no grey surface flash. The centre region has a FIXED width so the two
+ * side items split the remaining space evenly — their icons land midway between
+ * the centre disc and the screen edge.
+ *
  * Presentation only: focus state and the route list come from the navigator.
  */
+// Floor for the bar's bottom padding. On a device with a home-indicator gap
+// `insets.bottom` already lifts the icons off the edge; on a square/legacy
+// device it reports 0, so this keeps the icons from hugging the screen bottom.
+const MIN_BOTTOM_PADDING = 16;
+
+const pressStyle = ({ pressed }: { pressed: boolean }) => [
+  styles.tap,
+  pressed && styles.tapPressed,
+];
+
 export const GlassTabBar = ({ state, navigation }: BottomTabBarProps) => {
   const insets = useSafeAreaInsets();
 
@@ -30,7 +46,12 @@ export const GlassTabBar = ({ state, navigation }: BottomTabBarProps) => {
   };
 
   return (
-    <View style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+    <View
+      style={[
+        styles.wrap,
+        { paddingBottom: Math.max(insets.bottom, MIN_BOTTOM_PADDING) },
+      ]}
+    >
       {/* The frost. tint "light" over the white page reads as a subtle glass
           strip; on Android expo-blur falls back to a translucent fill. */}
       <BlurView intensity={40} tint="light" style={StyleSheet.absoluteFill} />
@@ -40,39 +61,49 @@ export const GlassTabBar = ({ state, navigation }: BottomTabBarProps) => {
           const onPress = go(route.name, route.key, focused);
 
           if (route.name === "Drill") {
+            // Fixed-width region so the side items split the rest evenly; the
+            // tap target is the disc only (content-sized Pressable), not the
+            // square around it.
             return (
-              <CustomPressable
-                key={route.key}
-                testID="tab-drill"
-                accessibilityLabel="Drill"
-                onPress={onPress}
-                style={styles.centerWrap}
-              >
-                <View style={styles.centerButton}>
-                  <DrillIcon color={colors.background} size={26} />
-                </View>
-              </CustomPressable>
+              <View key={route.key} style={styles.centerSlot}>
+                <Pressable
+                  testID="tab-drill"
+                  accessibilityRole="button"
+                  accessibilityLabel="Drill"
+                  onPress={onPress}
+                  hitSlop={6}
+                  style={({ pressed }) => [
+                    styles.centerButton,
+                    pressed && styles.tapPressed,
+                  ]}
+                >
+                  <DrillIcon color={colors.background} size={28} />
+                </Pressable>
+              </View>
             );
           }
 
           const color = focused ? colors.accent : colors.textMuted;
           return (
-            <CustomPressable
-              key={route.key}
-              testID={`tab-${route.name.toLowerCase()}`}
-              accessibilityLabel={route.name}
-              onPress={onPress}
-              style={styles.item}
-            >
-              {route.name === "Account" ? (
-                <AccountIcon color={color} size={22} />
-              ) : (
-                <SlidersIcon color={color} />
-              )}
-              <AppText size={11} weight="600" color={color}>
-                {route.name}
-              </AppText>
-            </CustomPressable>
+            <View key={route.key} style={styles.item}>
+              <Pressable
+                testID={`tab-${route.name.toLowerCase()}`}
+                accessibilityRole="button"
+                accessibilityLabel={route.name}
+                onPress={onPress}
+                hitSlop={{ top: 10, bottom: 10, left: 16, right: 16 }}
+                style={pressStyle}
+              >
+                {route.name === "Account" ? (
+                  <AccountIcon color={color} size={26} />
+                ) : (
+                  <GearIcon color={color} size={26} />
+                )}
+                <AppText size={11} weight="600" color={color}>
+                  {route.name}
+                </AppText>
+              </Pressable>
+            </View>
           );
         })}
       </View>
@@ -91,19 +122,35 @@ const styles = StyleSheet.create({
     alignItems: "center",
     height: 58,
   },
+  // A side column — fills half the remaining space so its centred tap target
+  // lands midway between the centre disc and the screen edge.
   item: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+  },
+  // Content-sized so only the icon + label react to a tap (hitSlop widens the
+  // touch area without a visible box); no grey surface — press dims the icon.
+  tap: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     gap: 3,
   },
-  centerWrap: {
-    flex: 1,
+  tapPressed: {
+    opacity: 0.5,
+  },
+  // Fixed centre region: narrower than a third so the side icons sit further in
+  // (centred in the gap), not out at the 1/6 marks.
+  centerSlot: {
+    width: 72,
     alignItems: "center",
     justifyContent: "center",
   },
   // The hero: a filled accent disc lifted above the bar so it reads as the
-  // primary action, like Revolut's centre button.
+  // primary action, like Revolut's centre button. The disc itself is the tap
+  // target — no square hit area around it.
   centerButton: {
     width: 58,
     height: 58,
