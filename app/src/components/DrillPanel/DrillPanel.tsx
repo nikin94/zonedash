@@ -23,7 +23,7 @@ import {
   TAB_BAR_DISC_RISE,
   tabBarClearance,
 } from "../../navigation/GlassTabBar";
-import { alpha, colors } from "../../theme";
+import { colors } from "../../theme";
 
 const COUNT_OPTIONS = Array.from({ length: 99 }, (_, i) => ({
   value: i + 1,
@@ -44,8 +44,8 @@ const fmtSec = (ms: number) => `${(ms / 1000).toFixed(2)} ${UNIT}`;
 // shifts the layout.
 const TEXT_SLOT_H = 44; // fixed status area: room for the 2-line running status
 const ERROR_SLOT_H = 18;
-// Breathing room between the pinned button and the tab bar's centre (Drill)
-// disc, on top of the full bar clearance (tabBarClearance + TAB_BAR_DISC_RISE).
+// Breathing room between the last scrolled item and the tab bar's centre
+// (Drill) disc, on top of the bar clearance (tabBarClearance + TAB_BAR_DISC_RISE).
 const ACTION_BAR_GAP = 12;
 
 /** UI modes. The engine's `random` and `time` differ only in the stop
@@ -123,11 +123,12 @@ export const DrillPanel = ({
   // rehydrates to a fresh idle Start (the operator left; re-authoring is the
   // likely next step, and its records were never theirs to keep across a leave).
   const insets = useSafeAreaInsets();
-  // The pinned action bar must clear the FLOATING (translucent) tab bar the
-  // scene extends under — its full footprint plus the centre disc's upward poke,
-  // plus a small gap. Derived from the bar's own exported geometry so a bar
-  // resize can't silently re-hide the button.
-  const actionBarPadBottom =
+  // The scrolling column extends under the FLOATING (translucent) tab bar, so
+  // its bottom padding must clear the bar's full footprint plus the centre
+  // disc's upward poke, plus a gap — otherwise the last item (Start, when the
+  // config is short) sits under the bar. Derived from the bar's own exported
+  // geometry so a bar resize can't silently re-hide it.
+  const scrollPadBottom =
     tabBarClearance(insets.bottom) + TAB_BAR_DISC_RISE + ACTION_BAR_GAP;
 
   const [snap] = useState(() => transport.sessionSnapshot);
@@ -404,15 +405,14 @@ export const DrillPanel = ({
   const runStatusHit = !liveBusy && lastReactionMs !== null;
 
   return (
-    <View style={styles.container}>
-      <ScrollView
-        testID="drill-surface"
-        contentContainerStyle={styles.panel}
-        showsVerticalScrollIndicator={false}
-      >
+    <ScrollView
+      testID="drill-surface"
+      contentContainerStyle={[styles.panel, { paddingBottom: scrollPadBottom }]}
+      showsVerticalScrollIndicator={false}
+    >
         {/* A clean court — its schema, targets, route and preview read
             unobstructed. The status line, drill config and the primary action
-            all live OUTSIDE the court now: below it, or pinned at the bottom. */}
+            all live OUTSIDE the court now: below it in the scrolling column. */}
         <CourtMap
           spots={visuals}
           badges={pathBadges}
@@ -615,6 +615,20 @@ export const DrillPanel = ({
           ))}
       </View>
 
+      {/* The primary action, in the scrolling column right under the config —
+          a full-width Start/Stop/Run again. It flows with the content (no
+          pinned bar), so it sits naturally at the end of the drill setup. */}
+      {running ? (
+        <Button label="Stop" onPress={stop} style={styles.runButton} />
+      ) : (
+        <Button
+          label={showDone ? "Run again" : "Start"}
+          disabled={!canStart}
+          onPress={start}
+          style={styles.runButton}
+        />
+      )}
+
       {showDone && records !== null && (
         <View style={styles.stats} testID="stats-panel">
           <AppText
@@ -688,44 +702,20 @@ export const DrillPanel = ({
         </View>
       )}
       </ScrollView>
-
-      {/* The primary action, pinned above the tab bar so Start/Stop is always
-          one tap away no matter how far the config (path chips, wheels,
-          results) scrolls — the config scrolls, the action doesn't. */}
-      <View
-        testID="drill-action-bar"
-        style={[styles.actionBar, { paddingBottom: actionBarPadBottom }]}
-      >
-        {running ? (
-          <Button label="Stop" onPress={stop} style={styles.actionButton} />
-        ) : (
-          <Button
-            label={showDone ? "Run again" : "Start"}
-            disabled={!canStart}
-            onPress={start}
-            style={styles.actionButton}
-          />
-        )}
-      </View>
-    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  // Fills the Drill surface: the scrolling config sits above, the pinned action
-  // bar below. flex:1 so the ScrollView takes the space left over the bar.
-  container: {
-    flex: 1,
-  },
   panel: {
     // Shared with the idle + pairing surfaces so the court doesn't jump when one
     // replaces another (notably the pairing → drill handoff). See court.ts.
+    // paddingBottom is applied inline (tab-bar clearance) so the scrolled column
+    // clears the floating bar.
     marginTop: SURFACE_MARGIN_TOP,
     alignItems: "center",
     gap: 12,
     alignSelf: "stretch",
     paddingHorizontal: 24,
-    paddingBottom: 32,
   },
   // The status line under the clean court. Fixed height so a one-line (idle) and
   // a two-line (running) status keep the config below them from jumping.
@@ -740,20 +730,11 @@ const styles = StyleSheet.create({
     height: ERROR_SLOT_H,
     justifyContent: "center",
   },
-  // The pinned primary action, above the tab bar: a solid strip with a hairline
-  // top border so the scrolling config never bleeds through behind the button.
-  actionBar: {
-    paddingHorizontal: 24,
-    paddingTop: 12,
-    // paddingBottom is applied inline (safe-area + tab-bar clearance) so the
-    // pinned button always sits above the floating bar and its centre disc.
-    borderTopWidth: 1,
-    borderTopColor: alpha(colors.border, 0.4),
-    backgroundColor: colors.background,
-  },
-  // Full-width Start/Stop/Run again — the hero action stretches the bar.
-  actionButton: {
+  // Full-width Start/Stop/Run again — the hero action in the scrolling column,
+  // stretched across the surface right under the config.
+  runButton: {
     alignSelf: "stretch",
+    marginTop: 4,
   },
   dimmed: {
     opacity: 0.4,

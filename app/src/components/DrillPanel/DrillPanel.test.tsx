@@ -603,18 +603,17 @@ test("the drill surface sits at the shared surface top offset", async () => {
   expect(cc.marginTop).toBe(SURFACE_MARGIN_TOP);
 });
 
-// Layout (option B): the court is clean — the status, config and the primary
-// action all live OUTSIDE the court. The primary action is PINNED, so it sits
-// outside the scrolling surface (always one tap away), and the court draws no
-// centre card (no children), so its schema/targets/route read unobstructed.
-test("the primary action is pinned outside the scrolling court surface", async () => {
+// Layout (option A): the court is clean — the status, config and the primary
+// action all live OUTSIDE the court, in the scrolling column below it. Start
+// flows with the content (no pinned bar), and the court draws no centre card
+// (no children), so its schema/targets/route read unobstructed.
+test("the primary action lives in the scrolling court surface, under the config", async () => {
   const t = await connectedTransport();
   panel(t);
 
   const surface = screen.getByTestId("drill-surface");
-  // Start exists, but NOT inside the scrolling surface — it's in the pinned bar.
-  expect(screen.getByText("Start")).toBeTruthy();
-  expect(within(surface).queryByText("Start")).toBeNull();
+  // Start is a full-width button in the scrolling column, not a pinned bar.
+  expect(within(surface).getByText("Start")).toBeTruthy();
 });
 
 test("the drill court is clean — no centre card over the schema", async () => {
@@ -626,18 +625,18 @@ test("the drill court is clean — no centre card over the schema", async () => 
 });
 
 // Regression: the tab bar is a floating, translucent bar the scene extends
-// UNDER, so the pinned action bar must pad its bottom by the bar's full
-// footprint (tabBarClearance) plus the centre disc's upward poke — otherwise
-// Start is hidden behind the bar (as it was with a fixed 30 px pad). The pad is
-// derived from the bar's own exported geometry so a bar resize can't re-hide it.
-test("the pinned action bar clears the floating tab bar and its centre disc", async () => {
+// UNDER, so the scrolling column must pad its BOTTOM by the bar's full footprint
+// (tabBarClearance) plus the centre disc's upward poke — otherwise the last item
+// (Start, when the config is short) is hidden behind the bar. The pad is derived
+// from the bar's own exported geometry so a bar resize can't re-hide it.
+test("the scrolling column clears the floating tab bar and its centre disc", async () => {
   const t = await connectedTransport();
   panel(t);
-  const bar = StyleSheet.flatten(
-    screen.getByTestId("drill-action-bar").props.style,
+  const cc = StyleSheet.flatten(
+    screen.getByTestId("drill-surface").props.contentContainerStyle,
   );
   // insets are 0 in jest → tabBarClearance(0) + disc rise + the gap.
-  expect(bar.paddingBottom).toBe(tabBarClearance(0) + TAB_BAR_DISC_RISE + 12);
+  expect(cc.paddingBottom).toBe(tabBarClearance(0) + TAB_BAR_DISC_RISE + 12);
   // And it genuinely clears both the bar row and the poking disc.
-  expect(bar.paddingBottom).toBeGreaterThanOrEqual(TAB_BAR_ROW_H + TAB_BAR_DISC_RISE);
+  expect(cc.paddingBottom).toBeGreaterThanOrEqual(TAB_BAR_ROW_H + TAB_BAR_DISC_RISE);
 });
