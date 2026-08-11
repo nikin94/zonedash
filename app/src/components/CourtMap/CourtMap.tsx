@@ -21,6 +21,7 @@ import { CustomPressable } from "../CustomPressable";
 import { RotateIcon } from "../Icons";
 import { AnimatedDot } from "./AnimatedDot";
 import { CourtLines } from "./CourtLines";
+import { CourtRoute } from "./CourtRoute";
 
 // Screen-reader wording per state — the label must carry it, since fill and
 // glyph are the only visual differentiators between the states.
@@ -68,12 +69,17 @@ export const CourtMap = ({
   spots,
   onPressSpot,
   badges,
+  route,
   children,
   rotation = 0,
   onRotate,
 }: {
   spots: SpotVisual[]; // length 8, canonical order
   onPressSpot?: (index: number) => void;
+  /** Optional Path drill route — the tapped spots in step order. Drawn as
+   *  curved, directed, order-coloured segments between the dots (CourtRoute),
+   *  under the dots so a target stays tappable. Omit outside Path authoring. */
+  route?: number[];
   /** Optional per-spot order label (length 8, canonical order) — e.g. a Path
    *  step's ordinal(s) on the dot it lands on ("1", or "1·4" for a repeat).
    *  null = no badge. A pure display overlay: it rides on the dot, so it turns
@@ -128,6 +134,12 @@ export const CourtMap = ({
           {/* Faint court markings under everything — a schematic backdrop that
               turns with the view (rotateNorm) but never eats a target's tap. */}
           <CourtLines rotation={r} width={MAP_W} height={MAP_H} />
+          {/* The Path route (curved, directed, order-coloured) over the
+              markings but under the dots — a target stays on top of its own
+              line and keeps its tap. */}
+          {route != null && route.length >= 2 && (
+            <CourtRoute path={route} rotation={r} width={MAP_W} height={MAP_H} />
+          )}
           {children != null && (
             // box-none: the centre content is interactive, the empty area around
             // it stays transparent to touches so the perimeter spots keep working.

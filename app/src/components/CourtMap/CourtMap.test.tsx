@@ -265,3 +265,19 @@ test("centre content sits on a frosted-glass card that blurs the lines behind it
   render(<CourtMap spots={allOff} />);
   expect(screen.queryByTestId("centre-card")).toBeNull();
 });
+
+// The Path route draws one curved segment per step transition, over the
+// markings but under the dots. It only appears with a real route (≥2 spots).
+test("a route of N spots draws N-1 curved segments; none for a short route", () => {
+  const { rerender } = render(<CourtMap spots={allOff} route={[0, 2, 4]} />);
+  expect(screen.getByTestId("court-route")).toBeTruthy();
+  expect(screen.getByTestId("route-seg-0")).toBeTruthy();
+  expect(screen.getByTestId("route-seg-1")).toBeTruthy();
+  expect(screen.queryByTestId("route-seg-2")).toBeNull(); // 3 spots → 2 segments
+
+  // A single spot (or none) has no transition to draw — no overlay at all.
+  rerender(<CourtMap spots={allOff} route={[0]} />);
+  expect(screen.queryByTestId("court-route")).toBeNull();
+  rerender(<CourtMap spots={allOff} />);
+  expect(screen.queryByTestId("court-route")).toBeNull();
+});
