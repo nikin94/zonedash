@@ -73,6 +73,11 @@ interface AppState {
   signIn: () => void;
   /** Sign out — back to local-only. */
   signOut: () => void;
+  /** Monotonic counter bumped whenever the device-local history changes behind
+   *  the UI's back — right now, after a sign-in sync merges the cloud archive
+   *  into the local store. The history list keys a re-read off it, so synced
+   *  sessions appear at once instead of only after a tab round-trip. */
+  historyVersion: number;
 }
 
 const Ctx = createContext<AppState | null>(null);
@@ -119,6 +124,7 @@ export const AppStateProvider = ({
   const [authStatus, setAuthStatus] = useState<AuthStatus>(auth.status);
   const [authUser, setAuthUser] = useState<AuthUser | null>(auth.user);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [historyVersion, setHistoryVersion] = useState(0);
   const [drillView, setDrillView] = useState<DrillView>("pairing");
   const [connection, setConnection] = useState<ConnectionState>("disconnected");
   const [connectionError, setConnectionError] = useState<string | null>(null);
@@ -249,9 +255,18 @@ export const AppStateProvider = ({
   useEffect(() => {
     if (authStatus !== "signed-in" || userId === null || !remoteHistory) return;
     let cancelled = false;
-    reconcileHistory(userId, remoteHistory).catch(() => {
-      if (!cancelled) return; // swallow — local store is untouched on failure
-    });
+    reconcileHistory(userId, remoteHistory)
+      .then(() => {
+        // The merged cloud archive is now in the local store — nudge the
+        // history list to re-read so an account's sessions from other devices
+        // (the whole point of signing in) show up immediately, not only after
+        // the operator leaves the Account tab and comes back.
+        if (!cancelled) setHistoryVersion((v) => v + 1);
+      })
+      .catch(() => {
+        // swallow — a failed sync leaves local history untouched (nothing lost,
+        // the push is idempotent on id) and the next sign-in retries.
+      });
     return () => {
       cancelled = true;
     };
@@ -274,6 +289,7 @@ export const AppStateProvider = ({
       authError,
       signIn,
       signOut,
+      historyVersion,
     }),
     [
       transport,
@@ -290,6 +306,7 @@ export const AppStateProvider = ({
       authError,
       signIn,
       signOut,
+      historyVersion,
     ],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

@@ -14,19 +14,26 @@ import { colors } from "../theme";
  *  - AccountSection: signed-out → "Sign in with Google"; signed-in → account +
  *    "Sign out" (the way back to the logged-out / login state).
  *  - a sign-in error line when the last attempt was cancelled/failed.
- *  - HistoryPanel: the device-local session log, re-pulled on tab focus so a
- *    session finished on the Drill tab shows up here.
+ *  - HistoryPanel: the device-local session log, re-pulled on tab focus AND
+ *    whenever a sign-in sync merges the cloud archive in (historyVersion) — so
+ *    a session finished on the Drill tab, or synced from another device while
+ *    this tab is already open, shows up without a tab round-trip.
  */
 export const AccountScreen = () => {
-  const { authStatus, authUser, authError, signIn, signOut } = useAppState();
+  const { authStatus, authUser, authError, signIn, signOut, historyVersion } =
+    useAppState();
 
   // Bump on focus so HistoryPanel re-reads the log each time the tab is shown.
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [focusKey, setFocusKey] = useState(0);
   useFocusEffect(
     useCallback(() => {
-      setRefreshKey((k) => k + 1);
+      setFocusKey((k) => k + 1);
     }, []),
   );
+  // Combine focus with historyVersion (bumped when a sign-in sync writes the
+  // merged history). Both are monotonic, so the sum changes on either — a
+  // sync that lands while the tab is already focused still re-reads the list.
+  const refreshKey = focusKey + historyVersion;
 
   return (
     <ScrollView
