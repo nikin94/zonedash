@@ -72,12 +72,18 @@ const NET_EDGE = ["top", "right", "bottom", "left"] as const;
 export const CourtMap = ({
   spots,
   onPressSpot,
+  badges,
   children,
   rotation = 0,
   onRotate,
 }: {
   spots: SpotVisual[]; // length 8, canonical order
   onPressSpot?: (index: number) => void;
+  /** Optional per-spot order label (length 8, canonical order) — e.g. a Path
+   *  step's ordinal(s) on the dot it lands on ("1", or "1·4" for a repeat).
+   *  null = no badge. A pure display overlay: it rides on the dot, so it turns
+   *  with the view like the dot does, and never intercepts a tap. */
+  badges?: (string | null)[];
   children?: ReactNode;
   rotation?: number;
   onRotate?: () => void;
@@ -135,6 +141,7 @@ export const CourtMap = ({
             // Rotation moves the drawn position only — dot `i` still reports spot
             // `i`, so the wire/identity is untouched.
             const { x, y } = rotate(p.x, p.y, r);
+            const badge = badges?.[i] ?? null;
             return (
               <CustomPressable
                 key={i}
@@ -142,7 +149,10 @@ export const CourtMap = ({
                 disabled={!onPressSpot}
                 hitSlop={HIT_SLOP}
                 testID={`spot-${i}-${spots[i]}`}
-                accessibilityLabel={`${SPOT_NAMES[i]} spot, ${A11Y_STATE[spots[i]]}`}
+                accessibilityLabel={
+                  `${SPOT_NAMES[i]} spot, ${A11Y_STATE[spots[i]]}` +
+                  (badge ? `, path step ${badge}` : "")
+                }
                 accessibilityState={{ disabled: !onPressSpot, selected: spots[i] !== "off" }}
                 onPress={() => onPressSpot?.(i)}
                 style={[
@@ -154,6 +164,17 @@ export const CourtMap = ({
                 ]}
               >
                 <AnimatedDot visual={spots[i]} />
+                {badge != null && (
+                  <View
+                    pointerEvents="none"
+                    testID={`spot-badge-${i}`}
+                    style={styles.badge}
+                  >
+                    <AppText size={11} weight="700" color={colors.background}>
+                      {badge}
+                    </AppText>
+                  </View>
+                )}
               </CustomPressable>
             );
           })}
@@ -245,6 +266,23 @@ const styles = StyleSheet.create({
     position: "absolute",
     width: HIT,
     height: HIT,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  // Order pill riding the dot's top-right — a darker accent chip with white
+  // digits so it stays legible over the accent-filled selected dot underneath.
+  // pointerEvents none (set on the View) so it never eats the dot's tap.
+  badge: {
+    position: "absolute",
+    top: 2,
+    right: 2,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    borderRadius: 9,
+    backgroundColor: colors.accentText,
+    borderWidth: 1,
+    borderColor: colors.background,
     alignItems: "center",
     justifyContent: "center",
   },

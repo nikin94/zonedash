@@ -9,12 +9,14 @@ import type {
 } from "../../ble/transport";
 import { AppText } from "../AppText";
 import { Button } from "../Button";
+import { PathChip } from "./PathChip";
 import { MAX_DRILL_PATH } from "../../ble/codec";
 import { CourtMap, SpotIcon } from "../CourtMap";
 import { msOptions, WheelField } from "../WheelField";
 import { SPOT_CODES, SPOT_NAMES } from "../../domain/spot";
 import { summarize, type SessionSummary } from "../../domain/session";
 import { type SpotVisual } from "../../helpers/court";
+import { formatStepBadge } from "../../helpers/pathBadge";
 import { type DrillSettings } from "../../state/AppState";
 import { colors } from "../../theme";
 
@@ -156,6 +158,16 @@ export const DrillPanel = ({
   const [records, setRecords] = useState<HitRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The Path step-chip strip, scrolled to its end whenever a step is appended so
+  // the newest chips stay in view instead of running off the right edge.
+  const pathChipsRef = useRef<ScrollView>(null);
+  const prevPathLen = useRef(path.length);
+  useEffect(() => {
+    if (path.length > prevPathLen.current) {
+      pathChipsRef.current?.scrollToEnd({ animated: true });
+    }
+    prevPathLen.current = path.length;
+  }, [path.length]);
 
   useEffect(() => {
     const unsub = transport.onStatus((e) => {
@@ -318,6 +330,22 @@ export const DrillPanel = ({
     return "available";
   });
 
+  // Order badges for the Path authoring surface: each selected spot carries its
+  // step ordinal(s), so the sequence — and a spot reused across steps — reads on
+  // the map. Spot 6 used at steps 1 and 3 shows "1·3"; a spot reused past the cap
+  // elides its oldest steps to "…" so the newest stay legible on the dot
+  // (formatStepBadge). Authoring only; a run's armed/hit visuals own the map.
+  const showPathBadges = !running && uiMode === "path";
+  const pathBadges: (string | null)[] | undefined = showPathBadges
+    ? Array.from({ length: 8 }, (_, i) => {
+        const steps = path.reduce<number[]>(
+          (acc, s, idx) => (s === i ? [...acc, idx + 1] : acc),
+          [],
+        );
+        return formatStepBadge(steps);
+      })
+    : undefined;
+
   const canStart = uiMode !== "path" || path.length > 0;
   // A finished run's court state and results belong to the mode they ran in:
   // switching to another mode reads as fresh (Start), and the stats stay tied
@@ -366,6 +394,7 @@ export const DrillPanel = ({
     >
       <CourtMap
         spots={visuals}
+        badges={pathBadges}
         onPressSpot={
           liveRunning || (!running && uiMode === "path")
             ? onCourtTap
@@ -514,14 +543,32 @@ export const DrillPanel = ({
         {uiMode === "path" &&
           (path.length > 0 ? (
             <>
-              <AppText
-                center
-                size={13}
-                color={colors.accentText}
+              {/* Ordered step chips — the sequence, in order, each removable by
+                  a tap (a targeted delete the map badges point back to). A
+                  repeat shows twice, so the sequence stays unambiguous. A single
+                  horizontal strip (the path can run to MAX_DRILL_PATH steps): it
+                  auto-scrolls to the end on each append, so the LATEST steps stay
+                  in view rather than the row spilling its newest off-screen. */}
+              <ScrollView
+                ref={pathChipsRef}
+                horizontal
+                showsHorizontalScrollIndicator={false}
                 testID="path-sequence"
+                style={styles.pathChips}
+                contentContainerStyle={styles.pathChipsContent}
               >
-                {path.map((s) => SPOT_NAMES[s]).join(" → ")}
-              </AppText>
+                {path.map((s, idx) => (
+                  <PathChip
+                    key={idx}
+                    index={idx}
+                    code={SPOT_CODES[s]}
+                    label={SPOT_NAMES[s]}
+                    onRemove={() =>
+                      setPath((p) => p.filter((_, j) => j !== idx))
+                    }
+                  />
+                ))}
+              </ScrollView>
               {path.length >= MAX_DRILL_PATH && (
                 <AppText
                   center
@@ -529,7 +576,7 @@ export const DrillPanel = ({
                   color={colors.textMuted}
                   testID="path-full"
                 >
-                  Path is full — Undo a step to change it
+                  Path is full — remove a step to change it
                 </AppText>
               )}
               <View style={styles.pathActions}>
@@ -718,5 +765,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     marginTop: 8,
+  },
+  // A single horizontal strip (not a wrapping block): the path can be long, so
+  // it scrolls, and the content is centred only until it overflows.
+  pathChips: {
+    alignSelf: "stretch",
+    flexGrow: 0,
+  },
+  pathChipsContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    flexGrow: 1,
+    paddingHorizontal: 8,
   },
 });
