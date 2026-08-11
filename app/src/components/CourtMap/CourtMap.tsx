@@ -11,11 +11,13 @@ import {
   MAP_W,
   type SpotVisual,
 } from "../../helpers/court";
+import { rotateNorm } from "../../helpers/courtLines";
 import { colors } from "../../theme";
 import { AppText } from "../AppText";
 import { CustomPressable } from "../CustomPressable";
 import { RotateIcon } from "../Icons";
 import { AnimatedDot } from "./AnimatedDot";
+import { CourtLines } from "./CourtLines";
 
 // Screen-reader wording per state — the label must carry it, since fill and
 // glyph are the only visual differentiators between the states.
@@ -38,20 +40,10 @@ const ICON_BOX = 20; // rotate control's touch box
 // line, so nothing overlaps.
 const ICON_OUT = 10;
 
-/** Rotate a normalised (x, y) by `r` clockwise quarter turns. One turn maps
- *  (x, y) → (1 − y, x); the 8 perimeter spots stay on the perimeter, so a dot
- *  keeps its identity while its drawn position turns with the view. */
-const rotate = (x: number, y: number, r: number) => {
-  let rx = x;
-  let ry = y;
-  for (let k = 0; k < (((r % 4) + 4) % 4); k++) {
-    const nx = 1 - ry;
-    const ny = rx;
-    rx = nx;
-    ry = ny;
-  }
-  return { x: rx, y: ry };
-};
+// Dots and the line markings share one transform (rotateNorm, helpers/court-
+// lines): one turn maps (x, y) → (1 − y, x). The 8 perimeter spots stay on the
+// perimeter, so a dot keeps its identity while its drawn position — and every
+// court line — turns with the view together.
 
 // Which court edge the NET sits on per rotation — the top row of spots turns
 // clockwise with the view: top → right → bottom → left.
@@ -130,6 +122,9 @@ export const CourtMap = ({
           </AppText>
         )}
         <View style={styles.court}>
+          {/* Faint court markings under everything — a schematic backdrop that
+              turns with the view (rotateNorm) but never eats a target's tap. */}
+          <CourtLines rotation={r} width={MAP_W} height={MAP_H} />
           {children != null && (
             // box-none: the centre content is interactive, the empty area around
             // it stays transparent to touches so the perimeter spots keep working.
@@ -140,7 +135,7 @@ export const CourtMap = ({
           {SPOT_XY.map((p, i) => {
             // Rotation moves the drawn position only — dot `i` still reports spot
             // `i`, so the wire/identity is untouched.
-            const { x, y } = rotate(p.x, p.y, r);
+            const { x, y } = rotateNorm(p.x, p.y, r);
             const badge = badges?.[i] ?? null;
             return (
               <CustomPressable

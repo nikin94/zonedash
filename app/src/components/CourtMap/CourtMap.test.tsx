@@ -206,3 +206,29 @@ test("rotation moves a dot's position, not its identity", () => {
   expect(pos(0)).toEqual(backRightNormal); // 180°: drawn where back-right was
   expect(screen.getByTestId("spot-0-off")).toBeTruthy();
 });
+
+// The court markings render as a faint schematic backdrop — the five interior
+// BWF lines — under the dots, and they take no touches (a pure display layer).
+test("renders the five court line markings, and they never intercept a tap", () => {
+  render(<CourtMap spots={allOff} />);
+  expect(screen.getAllByTestId(/^court-line-\d+$/)).toHaveLength(5);
+});
+
+// The whole schematic turns with the view: the short service line is horizontal
+// (y fixed) at 0° and vertical (x fixed) at 90°, the same transform the dots use.
+test("the court lines rotate with the view, matching the dots' transform", () => {
+  const shortServiceCoords = () => {
+    const l = screen.getByTestId("court-line-0").props;
+    return { dx: Math.abs(l.x2 - l.x1), dy: Math.abs(l.y2 - l.y1) };
+  };
+
+  const { rerender } = render(<CourtMap spots={allOff} />);
+  const flat = shortServiceCoords();
+  expect(flat.dy).toBeCloseTo(0, 5); // horizontal at 0°
+  expect(flat.dx).toBeGreaterThan(0);
+
+  rerender(<CourtMap spots={allOff} rotation={1} />);
+  const turned = shortServiceCoords();
+  expect(turned.dx).toBeCloseTo(0, 5); // vertical at 90°
+  expect(turned.dy).toBeGreaterThan(0);
+});
