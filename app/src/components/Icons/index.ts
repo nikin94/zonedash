@@ -9,3 +9,5 @@ export { CheckIcon } from "./CheckIcon";
 export { UndoIcon } from "./UndoIcon";
 export { RotateIcon } from "./RotateIcon";
 export { HistoryIcon } from "./HistoryIcon";
+export { AccountIcon } from "./AccountIcon";
+export { DrillIcon } from "./DrillIcon";

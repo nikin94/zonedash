@@ -7,14 +7,21 @@ const KNOB = 6;
 
 /**
  * Three slider tracks with offset knobs — the settings affordance. Pure Views,
- * no icon font / emoji glyphs (those render differently per platform); sized
- * for the 44 px header buttons.
+ * no icon font / emoji glyphs (those render differently per platform). `color`
+ * tints the tracks + knob rings so the Settings tab can go accent when focused;
+ * defaults to muted.
  */
-export const SlidersIcon = () => (
+export const SlidersIcon = ({
+  color = colors.textMuted,
+}: {
+  color?: string;
+} = {}) => (
   <View style={styles.box} accessible={false}>
     {[0.15, 0.7, 0.4].map((x, i) => (
-      <View key={i} style={styles.track}>
-        <View style={[styles.knob, { left: x * (W - KNOB) }]} />
+      <View key={i} style={[styles.track, { backgroundColor: color }]}>
+        <View
+          style={[styles.knob, { left: x * (W - KNOB), borderColor: color }]}
+        />
       </View>
     ))}
   </View>

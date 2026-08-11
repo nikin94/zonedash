@@ -32,7 +32,8 @@ export class MockAuthProvider implements AuthProvider {
   user: AuthUser | null = null;
 
   private readonly account: AuthUser;
-  private readonly failSignIn: boolean;
+  // Mutable so a test can flip a failing provider to succeed on retry.
+  failSignIn: boolean;
   private readonly latencyMs: number;
   private listeners = new Set<(e: AuthEvent) => void>();
 

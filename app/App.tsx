@@ -1,19 +1,34 @@
 import { StatusBar } from "expo-status-bar";
+import { StyleSheet } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
-import { MainScreen } from "./src/screens/MainScreen";
+import { RootNavigator } from "./src/navigation/RootNavigator";
 import { AppStateProvider } from "./src/state/AppState";
 
 /**
- * ZoneDash operator app. One screen over the CentralTransport seam (currently
- * the in-app mock): the court is always on screen, and connection + pairing
- * state layer the pairing surface, then the drill controls, on top of it — no
- * navigation stack. Settings opens as a modal from the header gear.
+ * ZoneDash operator app. A footer tab navigator (Account · Drill · Settings)
+ * under a persistent header, over the CentralTransport seam.
+ *
+ * Provider order is load-bearing: AppStateProvider (which owns the transport
+ * singleton) wraps RootNavigator, so it sits ABOVE the NavigationContainer —
+ * switching tabs never remounts the provider, so the BLE link is untouched by
+ * navigation. GestureHandlerRootView + SafeAreaProvider are the navigation
+ * stack's required roots.
  */
 const App = () => (
-  <AppStateProvider>
-    <MainScreen />
-    <StatusBar style="dark" />
-  </AppStateProvider>
+  <GestureHandlerRootView style={styles.root}>
+    <SafeAreaProvider>
+      <AppStateProvider>
+        <RootNavigator />
+        <StatusBar style="dark" />
+      </AppStateProvider>
+    </SafeAreaProvider>
+  </GestureHandlerRootView>
 );
+
+const styles = StyleSheet.create({
+  root: { flex: 1 },
+});
 
 export default App;
