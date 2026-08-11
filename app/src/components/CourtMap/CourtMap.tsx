@@ -22,6 +22,7 @@ import { RotateIcon } from "../Icons";
 import { AnimatedDot } from "./AnimatedDot";
 import { CourtLines } from "./CourtLines";
 import { CourtRoute } from "./CourtRoute";
+import { RoutePreview } from "./RoutePreview";
 
 // Screen-reader wording per state — the label must carry it, since fill and
 // glyph are the only visual differentiators between the states.
@@ -138,7 +139,13 @@ export const CourtMap = ({
               markings but under the dots — a target stays on top of its own
               line and keeps its tap. */}
           {route != null && route.length >= 2 && (
-            <CourtRoute path={route} rotation={r} width={MAP_W} height={MAP_H} />
+            <>
+              <CourtRoute path={route} rotation={r} width={MAP_W} height={MAP_H} />
+              {/* A marker looping the route curve, tracing the sequence so its
+                  shape reads at a glance; restarts when a step changes. Over the
+                  route line, under the dots. */}
+              <RoutePreview path={route} rotation={r} />
+            </>
           )}
           {children != null && (
             // box-none: the centre content is interactive, the empty area around
