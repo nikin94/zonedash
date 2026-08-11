@@ -9,6 +9,7 @@ import type {
 } from "../../ble/transport";
 import { AppText } from "../AppText";
 import { Button } from "../Button";
+import { CustomPressable } from "../CustomPressable";
 import { MAX_DRILL_PATH } from "../../ble/codec";
 import { CourtMap, SpotIcon } from "../CourtMap";
 import { msOptions, WheelField } from "../WheelField";
@@ -318,6 +319,21 @@ export const DrillPanel = ({
     return "available";
   });
 
+  // Order badges for the Path authoring surface: each selected spot carries its
+  // step ordinal(s), so the sequence — and a spot reused across steps — reads on
+  // the map. Spot 6 used at steps 1 and 3 shows "1·3". Authoring only; a run's
+  // armed/hit visuals own the map instead.
+  const showPathBadges = !running && uiMode === "path";
+  const pathBadges: (string | null)[] | undefined = showPathBadges
+    ? Array.from({ length: 8 }, (_, i) => {
+        const steps = path.reduce<number[]>(
+          (acc, s, idx) => (s === i ? [...acc, idx + 1] : acc),
+          [],
+        );
+        return steps.length > 0 ? steps.join("·") : null;
+      })
+    : undefined;
+
   const canStart = uiMode !== "path" || path.length > 0;
   // A finished run's court state and results belong to the mode they ran in:
   // switching to another mode reads as fresh (Start), and the stats stay tied
@@ -366,6 +382,7 @@ export const DrillPanel = ({
     >
       <CourtMap
         spots={visuals}
+        badges={pathBadges}
         onPressSpot={
           liveRunning || (!running && uiMode === "path")
             ? onCourtTap
@@ -514,14 +531,35 @@ export const DrillPanel = ({
         {uiMode === "path" &&
           (path.length > 0 ? (
             <>
-              <AppText
-                center
-                size={13}
-                color={colors.accentText}
-                testID="path-sequence"
-              >
-                {path.map((s) => SPOT_NAMES[s]).join(" → ")}
-              </AppText>
+              {/* Ordered step chips — the sequence, in order, each removable by
+                  a tap (a targeted delete the map badges point back to). A
+                  repeat shows twice, so the sequence stays unambiguous. */}
+              <View style={styles.pathChips} testID="path-sequence">
+                {path.map((s, idx) => (
+                  <CustomPressable
+                    key={idx}
+                    noFeedback
+                    testID={`path-chip-${idx}`}
+                    accessibilityLabel={`Step ${idx + 1}, ${SPOT_NAMES[s]} — tap to remove`}
+                    onPress={() => setPath(path.filter((_, j) => j !== idx))}
+                    style={styles.pathChip}
+                  >
+                    <View style={styles.pathChipNum}>
+                      <AppText size={11} weight="700" color={colors.background}>
+                        {idx + 1}
+                      </AppText>
+                    </View>
+                    <AppText
+                      size={13}
+                      weight="600"
+                      color={colors.accentText}
+                      testID={`path-chip-code-${idx}`}
+                    >
+                      {SPOT_CODES[s]}
+                    </AppText>
+                  </CustomPressable>
+                ))}
+              </View>
               {path.length >= MAX_DRILL_PATH && (
                 <AppText
                   center
@@ -529,7 +567,7 @@ export const DrillPanel = ({
                   color={colors.textMuted}
                   testID="path-full"
                 >
-                  Path is full — Undo a step to change it
+                  Path is full — remove a step to change it
                 </AppText>
               )}
               <View style={styles.pathActions}>
@@ -718,5 +756,30 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     marginTop: 8,
+  },
+  pathChips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 8,
+  },
+  pathChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: colors.accentSurface,
+    borderRadius: 14,
+    paddingVertical: 4,
+    paddingLeft: 4,
+    paddingRight: 10,
+  },
+  pathChipNum: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 3,
+    backgroundColor: colors.accentText,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

@@ -13,6 +13,21 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
+test("badges render an order label only on the spots that have one", () => {
+  const badges = Array.from({ length: 8 }, () => null as string | null);
+  badges[2] = "1";
+  badges[5] = "2·4"; // a spot reused across two steps
+  const { rerender } = render(<CourtMap spots={allOff} badges={badges} />);
+
+  expect(screen.getByTestId("spot-badge-2")).toHaveTextContent("1");
+  expect(screen.getByTestId("spot-badge-5")).toHaveTextContent("2·4");
+  expect(screen.queryByTestId("spot-badge-0")).toBeNull(); // no label → no badge
+
+  // No badges prop at all → no badge anywhere (pairing / other surfaces).
+  rerender(<CourtMap spots={allOff} />);
+  expect(screen.queryByTestId("spot-badge-2")).toBeNull();
+});
+
 test("a spot's state change updates in place and its color fade completes", () => {
   const { rerender } = render(<CourtMap spots={allOff} />);
   expect(screen.getByTestId("spot-0-off")).toBeTruthy();

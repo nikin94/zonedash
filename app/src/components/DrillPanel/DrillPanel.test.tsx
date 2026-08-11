@@ -6,6 +6,13 @@ import type { DrillConfig } from "../../ble/transport";
 import { DEFAULT_SETTINGS, type DrillSettings } from "../../state/AppState";
 import { DrillPanel } from "./DrillPanel";
 
+// The Path step chips, read back as their two-letter spot codes in step order —
+// so a test can assert the authored sequence (and repeats) directly.
+const pathCodes = () =>
+  screen
+    .queryAllByTestId(/^path-chip-code-\d+$/)
+    .map((n) => n.props.children as string);
+
 // Left-side layout from a pairing round: slot 0 = net left (0),
 // slot 1 = mid left (7), slot 2 = back left (6).
 const PAIRED = [0, 7, 6];
@@ -140,9 +147,10 @@ test("path is authored on the same court map — slot-index wire format", async 
   fireEvent.press(screen.getByTestId("spot-6-available"));
   fireEvent.press(screen.getByTestId("spot-0-available"));
   fireEvent.press(screen.getByTestId("spot-6-selected")); // already in path → selected
-  expect(screen.getByTestId("path-sequence")).toHaveTextContent(
-    "back left → net left → back left",
-  );
+  expect(pathCodes()).toEqual(["BL", "FL", "BL"]);
+  // The reused spot 6 carries both its step ordinals as one map badge ("1·3").
+  expect(screen.getByTestId("spot-badge-6")).toHaveTextContent("1·3");
+  expect(screen.getByTestId("spot-badge-0")).toHaveTextContent("2");
 
   fireEvent.press(screen.getByText("Start"));
   await act(() => jest.advanceTimersByTimeAsync(0));
@@ -163,16 +171,34 @@ test("path Undo drops the last step; Clear empties the sequence", async () => {
   fireEvent.press(screen.getByText("Path"));
   fireEvent.press(screen.getByTestId("spot-0-available"));
   fireEvent.press(screen.getByTestId("spot-7-available"));
-  expect(screen.getByTestId("path-sequence")).toHaveTextContent(
-    "net left → mid left",
-  );
+  expect(pathCodes()).toEqual(["FL", "ML"]);
 
   fireEvent.press(screen.getByText("Undo"));
-  expect(screen.getByTestId("path-sequence")).toHaveTextContent(/^net left$/);
+  expect(pathCodes()).toEqual(["FL"]);
 
   fireEvent.press(screen.getByText("Clear"));
   expect(screen.queryByTestId("path-sequence")).toBeNull();
   expect(screen.getByText(/Tap paired spots on the map/)).toBeTruthy();
+});
+
+test("tapping a step chip removes THAT step, and the badges renumber", async () => {
+  const t = await connectedTransport();
+  panel(t);
+
+  fireEvent.press(screen.getByText("Path"));
+  // Author FL(0) → ML(7) → BL(6).
+  fireEvent.press(screen.getByTestId("spot-0-available"));
+  fireEvent.press(screen.getByTestId("spot-7-available"));
+  fireEvent.press(screen.getByTestId("spot-6-available"));
+  expect(pathCodes()).toEqual(["FL", "ML", "BL"]);
+  expect(screen.getByTestId("spot-badge-7")).toHaveTextContent("2");
+
+  // Tap the MIDDLE chip (step 2, ML) — only it drops, and the trailing step
+  // renumbers from 3 to 2 (its badge follows).
+  fireEvent.press(screen.getByTestId("path-chip-1"));
+  expect(pathCodes()).toEqual(["FL", "BL"]);
+  expect(screen.queryByTestId("spot-badge-7")).toBeNull(); // ML no longer in the path
+  expect(screen.getByTestId("spot-badge-6")).toHaveTextContent("2"); // BL is now step 2
 });
 
 // The authored path is bounded so a LoadDrill write always fits one ATT MTU (no
@@ -209,7 +235,7 @@ test("a re-pair filters the authored path — nothing translates to -1", async (
 
   // Re-pair drops spot 6 (kept 0 and 7) — the stale step must vanish.
   rerender(<DrillPanel transport={t} pairedSpots={[0, 7]} settings={SETTINGS} />);
-  expect(screen.getByTestId("path-sequence")).toHaveTextContent(/^net left$/);
+  expect(pathCodes()).toEqual(["FL"]);
 
   fireEvent.press(screen.getByText("Start"));
   await act(() => jest.advanceTimersByTimeAsync(0));
@@ -251,9 +277,12 @@ test("a run arms spots, flashes hits, and ends in a hits-only summary", async ()
   expect(screen.getByText("0.04 s")).toBeTruthy(); // total time
   expect(screen.getByText("Average")).toBeTruthy();
   // Each attempt is tagged with its two-letter spot code: slots 2,0 →
-  // canonical 6 (back left, BL) then 0 (net left, FL).
-  expect(screen.getByText("BL")).toBeTruthy();
-  expect(screen.getByText("FL")).toBeTruthy();
+  // canonical 6 (back left, BL) then 0 (net left, FL). Scoped to the results
+  // list — the authored path's step chips carry the same codes on the surface
+  // above, so an unscoped query is ambiguous.
+  const attempts = screen.getByTestId("attempt-list");
+  expect(within(attempts).getByText("BL")).toBeTruthy();
+  expect(within(attempts).getByText("FL")).toBeTruthy();
 });
 
 test("a finished run's results are tied to its mode — hidden on another mode", async () => {
@@ -340,9 +369,7 @@ test("authoring a new path after a run clears the stale results summary", async 
 
   // Tap the court again — the operator is authoring the next run.
   fireEvent.press(screen.getByTestId("spot-7-available"));
-  expect(screen.getByTestId("path-sequence")).toHaveTextContent(
-    "back left → net left → mid left",
-  );
+  expect(pathCodes()).toEqual(["BL", "FL", "ML"]);
   // The old summary must be gone — it belonged to the two-spot run, not this one.
   expect(screen.queryByTestId("stats-panel")).toBeNull();
 });
@@ -489,9 +516,7 @@ test("a rehydrated run restores the config — path Run again works", async () =
   await act(() => jest.runAllTimersAsync()); // → done
 
   // Slots 2, 0 → canonical spots 6, 0 (back left → net left) — restored, not lost.
-  expect(screen.getByTestId("path-sequence")).toHaveTextContent(
-    "back left → net left",
-  );
+  expect(pathCodes()).toEqual(["BL", "FL"]);
 
   // Run again re-runs the SAME path — not a dead disabled button over an empty one.
   const load = jest.spyOn(t, "loadDrill");
