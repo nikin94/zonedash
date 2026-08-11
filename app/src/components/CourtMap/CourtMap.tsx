@@ -4,6 +4,7 @@ import { StyleSheet, View } from "react-native";
 import { SPOT_NAMES, SPOT_XY } from "../../domain/spot";
 import {
   CENTRE_PAD,
+  DOT,
   HIT,
   HIT_SLOP,
   INSET,
@@ -11,11 +12,13 @@ import {
   MAP_W,
   type SpotVisual,
 } from "../../helpers/court";
+import { rotateNorm } from "../../helpers/courtLines";
 import { colors } from "../../theme";
 import { AppText } from "../AppText";
 import { CustomPressable } from "../CustomPressable";
 import { RotateIcon } from "../Icons";
 import { AnimatedDot } from "./AnimatedDot";
+import { CourtLines } from "./CourtLines";
 
 // Screen-reader wording per state — the label must carry it, since fill and
 // glyph are the only visual differentiators between the states.
@@ -38,20 +41,10 @@ const ICON_BOX = 20; // rotate control's touch box
 // line, so nothing overlaps.
 const ICON_OUT = 10;
 
-/** Rotate a normalised (x, y) by `r` clockwise quarter turns. One turn maps
- *  (x, y) → (1 − y, x); the 8 perimeter spots stay on the perimeter, so a dot
- *  keeps its identity while its drawn position turns with the view. */
-const rotate = (x: number, y: number, r: number) => {
-  let rx = x;
-  let ry = y;
-  for (let k = 0; k < (((r % 4) + 4) % 4); k++) {
-    const nx = 1 - ry;
-    const ny = rx;
-    rx = nx;
-    ry = ny;
-  }
-  return { x: rx, y: ry };
-};
+// Dots and the line markings share one transform (rotateNorm, helpers/court-
+// lines): one turn maps (x, y) → (1 − y, x). The 8 perimeter spots stay on the
+// perimeter, so a dot keeps its identity while its drawn position — and every
+// court line — turns with the view together.
 
 // Which court edge the NET sits on per rotation — the top row of spots turns
 // clockwise with the view: top → right → bottom → left.
@@ -130,17 +123,29 @@ export const CourtMap = ({
           </AppText>
         )}
         <View style={styles.court}>
+          {/* Faint court markings under everything — a schematic backdrop that
+              turns with the view (rotateNorm) but never eats a target's tap. */}
+          <CourtLines rotation={r} width={MAP_W} height={MAP_H} />
           {children != null && (
             // box-none: the centre content is interactive, the empty area around
             // it stays transparent to touches so the perimeter spots keep working.
             <View pointerEvents="box-none" style={styles.centre}>
-              {children}
+              {/* A content-hugging app-background card behind the whole centre
+                  block, so the title / info / controls crossing the centre line
+                  read cleanly over the court markings — no gaps between lines. */}
+              <View
+                pointerEvents="box-none"
+                testID="centre-card"
+                style={styles.centreCard}
+              >
+                {children}
+              </View>
             </View>
           )}
           {SPOT_XY.map((p, i) => {
             // Rotation moves the drawn position only — dot `i` still reports spot
             // `i`, so the wire/identity is untouched.
-            const { x, y } = rotate(p.x, p.y, r);
+            const { x, y } = rotateNorm(p.x, p.y, r);
             const badge = badges?.[i] ?? null;
             return (
               <CustomPressable
@@ -163,6 +168,14 @@ export const CourtMap = ({
                   },
                 ]}
               >
+                {/* An app-background disc under the dot, so the target reads as
+                    a solid button laid over the court schematic — the markings
+                    behind it are masked and never show through a resting dot. */}
+                <View
+                  pointerEvents="none"
+                  testID={`spot-bg-${i}`}
+                  style={styles.dotBg}
+                />
                 <AnimatedDot visual={spots[i]} />
                 {badge != null && (
                   <View
@@ -262,12 +275,31 @@ const styles = StyleSheet.create({
     // space to the bigger, further-inset targets.
     padding: CENTRE_PAD,
   },
+  // Hugs the centre content (alignItems/justify on `centre` keep it centred),
+  // masking the court markings behind the text/controls with the app fill.
+  centreCard: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent",
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
   hit: {
     position: "absolute",
     width: HIT,
     height: HIT,
     alignItems: "center",
     justifyContent: "center",
+  },
+  // Opaque app-background disc the size of the dot, sitting under it so the
+  // court markings never bleed through a resting ("off"/available) target.
+  dotBg: {
+    position: "absolute",
+    width: DOT,
+    height: DOT,
+    borderRadius: DOT / 2,
+    backgroundColor: colors.background,
   },
   // Order pill riding the dot's top-right — a darker accent chip with white
   // digits so it stays legible over the accent-filled selected dot underneath.
