@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -33,6 +34,14 @@ export const DEFAULT_SETTINGS: DrillSettings = {
   allowImmediateRepeat: false,
 };
 
+// Beat between the final bind and revealing the drill controls — long enough for
+// the last dot's fade + green check to register before the surface swaps.
+const HANDOFF_DELAY_MS = 700;
+
+/** Which surface the Drill screen shows: the pairing round, or the drill
+ *  controls once a completed round has handed off. */
+export type DrillView = "pairing" | "drill";
+
 interface AppState {
   transport: CentralTransport;
   connection: ConnectionState;
@@ -48,14 +57,27 @@ interface AppState {
    *  re-pair or reconnect. */
   courtRotation: number;
   rotateCourt: () => void;
+  /** Which surface the Drill screen shows — driven by pairing/connection events
+   *  here (not a screen), so it survives tab switches and a Drill-tab remount. */
+  drillView: DrillView;
+  /** Send the Drill screen back to the pairing surface (Re-pair). */
+  resetToPairing: () => void;
   /** Account status off the AuthProvider seam — "signed-out" is the default and
    *  first-class (local-only). */
   authStatus: AuthStatus;
   authUser: AuthUser | null;
+  /** Why the last sign-in ended back at signed-out (cancel/failure), or null.
+   *  Cleared on any successful transition. */
+  authError: string | null;
   /** Start Google sign-in; the UI tracks progress via authStatus. */
   signIn: () => void;
   /** Sign out — back to local-only. */
   signOut: () => void;
+  /** Monotonic counter bumped whenever the device-local history changes behind
+   *  the UI's back — right now, after a sign-in sync merges the cloud archive
+   *  into the local store. The history list keys a re-read off it, so synced
+   *  sessions appear at once instead of only after a tab round-trip. */
+  historyVersion: number;
 }
 
 const Ctx = createContext<AppState | null>(null);
@@ -101,6 +123,9 @@ export const AppStateProvider = ({
   // session (same rehydrate reason as connection/session snapshots).
   const [authStatus, setAuthStatus] = useState<AuthStatus>(auth.status);
   const [authUser, setAuthUser] = useState<AuthUser | null>(auth.user);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [historyVersion, setHistoryVersion] = useState(0);
+  const [drillView, setDrillView] = useState<DrillView>("pairing");
   const [connection, setConnection] = useState<ConnectionState>("disconnected");
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [settings, setSettings] = useState<DrillSettings>(DEFAULT_SETTINGS);
@@ -137,6 +162,10 @@ export const AppStateProvider = ({
     savePrefs({ settings, courtRotation });
   }, [hydrated, settings, courtRotation]);
 
+  // The pairing → drill handoff timer, kept in a ref so its cleanup survives the
+  // event closure and a re-pair can cancel it mid-flight.
+  const handoffRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     const unsub = transport.onStatus((e) => {
       if (e.kind === "connection") {
@@ -150,19 +179,48 @@ export const AppStateProvider = ({
         // die with it: a reconnect may land on a rebooted or different central
         // that has no map, and a stale layout here would let the exercise
         // screen load a drill onto positions that don't exist.
-        if (e.state !== "connected") setPairedSpots([]);
+        if (e.state !== "connected") {
+          setPairedSpots([]);
+          // A dropped link also invalidates the drill surface — fall back to
+          // pairing and kill any in-flight handoff so a dead round can't flip.
+          if (handoffRef.current !== null) {
+            clearTimeout(handoffRef.current);
+            handoffRef.current = null;
+          }
+          setDrillView("pairing");
+        }
       }
       if (e.kind === "pairing" && e.progress.done) {
         setPairedSpots(e.progress.boundSpots);
+        // Reveal the drill controls a beat later, so the last bind's green check
+        // paints first. The null-guard debounces the several done emits within
+        // one round; it's cleared after firing so a LATER round hands off again.
+        if (handoffRef.current === null) {
+          handoffRef.current = setTimeout(() => {
+            setDrillView("drill");
+            handoffRef.current = null;
+          }, HANDOFF_DELAY_MS);
+        }
       }
     });
     return () => {
       unsub();
+      if (handoffRef.current !== null) {
+        clearTimeout(handoffRef.current);
+        handoffRef.current = null;
+      }
       transport.disconnect();
     };
   }, [transport]);
 
   const rotateCourt = useCallback(() => setCourtRotation((r) => (r + 1) % 4), []);
+  const resetToPairing = useCallback(() => {
+    if (handoffRef.current !== null) {
+      clearTimeout(handoffRef.current);
+      handoffRef.current = null;
+    }
+    setDrillView("pairing");
+  }, []);
 
   // Track auth transitions off the seam — the account UI renders off this, and
   // the sync effect below keys sign-in on it.
@@ -170,6 +228,9 @@ export const AppStateProvider = ({
     const unsub = auth.onAuthChange((e) => {
       setAuthStatus(e.status);
       setAuthUser(e.user);
+      // Surface a failed/cancelled sign-in (signed-out WITH a reason); clear it
+      // on any other transition so a stale error never lingers.
+      setAuthError(e.status === "signed-out" ? (e.reason ?? null) : null);
     });
     return unsub;
   }, [auth]);
@@ -194,9 +255,18 @@ export const AppStateProvider = ({
   useEffect(() => {
     if (authStatus !== "signed-in" || userId === null || !remoteHistory) return;
     let cancelled = false;
-    reconcileHistory(userId, remoteHistory).catch(() => {
-      if (!cancelled) return; // swallow — local store is untouched on failure
-    });
+    reconcileHistory(userId, remoteHistory)
+      .then(() => {
+        // The merged cloud archive is now in the local store — nudge the
+        // history list to re-read so an account's sessions from other devices
+        // (the whole point of signing in) show up immediately, not only after
+        // the operator leaves the Account tab and comes back.
+        if (!cancelled) setHistoryVersion((v) => v + 1);
+      })
+      .catch(() => {
+        // swallow — a failed sync leaves local history untouched (nothing lost,
+        // the push is idempotent on id) and the next sign-in retries.
+      });
     return () => {
       cancelled = true;
     };
@@ -212,10 +282,14 @@ export const AppStateProvider = ({
       pairedSpots,
       courtRotation,
       rotateCourt,
+      drillView,
+      resetToPairing,
       authStatus,
       authUser,
+      authError,
       signIn,
       signOut,
+      historyVersion,
     }),
     [
       transport,
@@ -225,10 +299,14 @@ export const AppStateProvider = ({
       pairedSpots,
       courtRotation,
       rotateCourt,
+      drillView,
+      resetToPairing,
       authStatus,
       authUser,
+      authError,
       signIn,
       signOut,
+      historyVersion,
     ],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

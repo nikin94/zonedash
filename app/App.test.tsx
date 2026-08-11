@@ -51,7 +51,10 @@ test("renders the disconnected surface — an idle court and a connect hint", as
   await renderApp();
   expect(screen.getByText("ZoneDash")).toBeTruthy();
   expect(screen.getByText("offline")).toBeTruthy(); // header status chip
-  expect(screen.getByTestId("settings-button")).toBeTruthy(); // gear always shown
+  // The footer tab bar is the app's chrome now — three tabs, Drill the default.
+  expect(screen.getByTestId("tab-account")).toBeTruthy();
+  expect(screen.getByTestId("tab-drill")).toBeTruthy();
+  expect(screen.getByTestId("tab-settings")).toBeTruthy();
   expect(screen.getByText(/Tap the status in the header to connect/)).toBeTruthy();
   expect(screen.queryAllByTestId(/spot-\d-off/)).toHaveLength(8); // court is present, idle
 });
@@ -192,10 +195,10 @@ test("a second round after Re-pair still hands off to the drill controls", async
   expect(screen.queryByTestId("start-pairing")).toBeNull();
 });
 
-test("the settings gear opens the settings modal — no timeout setting exists", async () => {
+test("the Settings tab shows drill settings — no timeout setting exists", async () => {
   await renderApp();
 
-  fireEvent.press(screen.getByTestId("settings-button"));
+  fireEvent.press(screen.getByTestId("tab-settings"));
   await act(async () => {
     await jest.runAllTimersAsync();
   });
@@ -203,13 +206,59 @@ test("the settings gear opens the settings modal — no timeout setting exists",
   expect(screen.getByText("Delay between targets")).toBeTruthy();
   expect(screen.getByText("Same target twice in a row")).toBeTruthy();
   expect(screen.queryByText(/Timeout/)).toBeNull(); // misses don't exist
+});
 
-  // A tap on the scrim outside the card closes it.
-  fireEvent.press(screen.getByTestId("settings-backdrop"));
+// The Account tab is the sign-in surface + history. Signed-out by default (no
+// backend configured in tests), sign-in walks the mock provider to signed-in,
+// and Sign out returns to the logged-out state.
+test("the Account tab signs in and out over the mock provider", async () => {
+  await renderApp();
+
+  fireEvent.press(screen.getByTestId("tab-account"));
   await act(async () => {
     await jest.runAllTimersAsync();
   });
-  expect(screen.queryByText("Drill settings")).toBeNull();
+  expect(screen.getByTestId("history-empty")).toBeTruthy(); // history lives here now
+  expect(screen.getByTestId("sign-in-google")).toBeTruthy();
+
+  fireEvent.press(screen.getByTestId("sign-in-google"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+  expect(screen.getByTestId("account-name")).toBeTruthy(); // signed in
+  expect(screen.getByTestId("sign-out")).toBeTruthy();
+
+  fireEvent.press(screen.getByTestId("sign-out")); // back to the login state
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+  expect(screen.getByTestId("sign-in-google")).toBeTruthy();
+});
+
+// Navigation must never touch the BLE link: the transport lives above the
+// navigator, so a tab round-trip leaves the connection (and the paired layout)
+// exactly as they were.
+test("switching tabs keeps the BLE link and drill surface intact", async () => {
+  await renderApp();
+  await connect();
+  await pairTwo();
+  expect(screen.getByText("Random")).toBeTruthy(); // on the drill controls
+
+  // Leave to Account and back to Drill.
+  fireEvent.press(screen.getByTestId("tab-account"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+  expect(screen.getByText("mock")).toBeTruthy(); // still connected while away
+  fireEvent.press(screen.getByTestId("tab-drill"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+  // Link held and the drill surface is right where it was — no reconnect, no
+  // reset to pairing.
+  expect(screen.getByText("mock")).toBeTruthy();
+  expect(screen.getByText("Random")).toBeTruthy();
+  expect(screen.queryByTestId("start-pairing")).toBeNull();
 });
 
 test("Disconnect lives in the chip menu behind the confirm — No keeps the link", async () => {

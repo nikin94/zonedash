@@ -9,6 +9,7 @@ import { MockAuthProvider } from "./auth.mock";
 import { appendSession, loadHistory } from "./history";
 import type { RemoteHistoryStore } from "./sync";
 import { Button } from "../components/Button";
+import { HistoryPanel } from "../components/HistoryPanel";
 
 const sess = (endedAt: number): SessionSummary => ({
   id: String(endedAt),
@@ -35,13 +36,14 @@ class FakeRemote implements RemoteHistoryStore {
   }
 }
 
-// A consumer that surfaces auth status and drives sign-in/out.
+// A consumer that surfaces auth status/error and drives sign-in/out.
 const Probe = () => {
-  const { authStatus, authUser, signIn, signOut } = useAppState();
+  const { authStatus, authUser, authError, signIn, signOut } = useAppState();
   return (
     <>
       <Text testID="status">{authStatus}</Text>
       <Text testID="who">{authUser?.name ?? "-"}</Text>
+      <Text testID="error">{authError ?? "-"}</Text>
       <Button testID="in" label="in" onPress={signIn} />
       <Button testID="out" label="out" onPress={signOut} />
     </>
@@ -102,6 +104,61 @@ test("on sign-in the local history is reconciled with the cloud archive", async 
     expect([...remote.rows.keys()].sort()).toEqual(["2", "3"]);
     expect((await loadHistory()).map((s) => s.id)).toEqual(["3", "2"]);
   });
+});
+
+test("a sign-in sync surfaces the synced session with no tab round-trip", async () => {
+  // The account already has session 2 (another device); this device's log is
+  // empty. This mirrors AccountScreen's wiring: historyVersion feeds the history
+  // list's refreshKey, with NO focus/navigation event driving a re-read.
+  const remote = new FakeRemote().seed([sess(2)]);
+  const SyncedHistory = () => {
+    const { signIn, historyVersion } = useAppState();
+    return (
+      <>
+        <Button testID="in" label="in" onPress={signIn} />
+        <HistoryPanel refreshKey={historyVersion} />
+      </>
+    );
+  };
+
+  render(
+    <AppStateProvider
+      transport={new MockCentralTransport()}
+      auth={new MockAuthProvider()}
+      remoteHistory={remote}
+    >
+      <SyncedHistory />
+    </AppStateProvider>,
+  );
+  await act(async () => {}); // flush prefs hydration
+  expect(screen.queryByTestId("history-row-2")).toBeNull(); // nothing before sign-in
+
+  await act(async () => {
+    fireEvent.press(screen.getByTestId("in"));
+  });
+
+  // The synced session appears on its own — historyVersion bumped on sync
+  // completion, so the list re-read without leaving and returning to the tab.
+  await waitFor(() => expect(screen.getByTestId("history-row-2")).toBeTruthy());
+});
+
+test("a failed sign-in surfaces authError, cleared on a later success", async () => {
+  const auth = new MockAuthProvider({ failSignIn: true });
+  await renderApp(auth);
+
+  await act(async () => {
+    fireEvent.press(screen.getByTestId("in"));
+  });
+  expect(screen.getByTestId("status")).toHaveTextContent("signed-out");
+  expect(screen.getByTestId("error")).toHaveTextContent(/cancelled/);
+
+  // Recover: a subsequent successful sign-in clears the stale error.
+  auth.failSignIn = false;
+  await act(async () => {
+    fireEvent.press(screen.getByTestId("in"));
+  });
+  expect(screen.getByTestId("status")).toHaveTextContent("signed-in");
+  expect(screen.getByTestId("error")).toHaveTextContent("-");
 });
 
 test("without a backend, sign-in does not touch history (local-only)", async () => {
