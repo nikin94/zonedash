@@ -7,7 +7,7 @@ import { colors, glowShadow } from "../theme";
 import { AppText } from "./AppText";
 import { ConfirmModal } from "./ConfirmModal";
 import { CustomPressable } from "./CustomPressable";
-import { HistoryIcon, SlidersIcon } from "./Icons";
+import { AccountIcon, HistoryIcon, SlidersIcon } from "./Icons";
 
 /** Brief status-chip label per connection state. */
 const CHIP_LABEL: Record<ConnectionState, string> = {
@@ -27,16 +27,19 @@ const CHIP_LABEL: Record<ConnectionState, string> = {
 export const Header = ({
   onOpenSettings,
   onOpenHistory,
+  onOpenAccount,
   onRepair,
 }: {
   onOpenSettings: () => void;
   /** Open the session-history modal. */
   onOpenHistory: () => void;
+  /** Open the account screen (sign in / out). */
+  onOpenAccount: () => void;
   /** Re-open the pairing surface to rebind the layout. Offered in the chip
    *  menu only once a layout exists. */
   onRepair?: () => void;
 }) => {
-  const { transport, connection, pairedSpots } = useAppState();
+  const { transport, connection, pairedSpots, authStatus } = useAppState();
   const [menuOpen, setMenuOpen] = useState(false);
   const [disconnectAsk, setDisconnectAsk] = useState(false);
   const [repairAsk, setRepairAsk] = useState(false);
@@ -150,6 +153,21 @@ export const Header = ({
           style={styles.headerButton}
         >
           <HistoryIcon />
+        </CustomPressable>
+
+        {/* Account: a person glyph, tinted accent once signed in so the header
+            reflects the auth state at a glance. */}
+        <CustomPressable
+          testID="account-button"
+          accessibilityLabel={
+            authStatus === "signed-in" ? "Account, signed in" : "Sign in"
+          }
+          onPress={onOpenAccount}
+          style={styles.headerButton}
+        >
+          <AccountIcon
+            color={authStatus === "signed-in" ? colors.accent : colors.textSecondary}
+          />
         </CustomPressable>
 
         <CustomPressable

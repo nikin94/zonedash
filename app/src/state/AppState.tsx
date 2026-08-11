@@ -52,6 +52,8 @@ interface AppState {
    *  first-class (local-only). */
   authStatus: AuthStatus;
   authUser: AuthUser | null;
+  /** Last sign-in failure reason, or null. Cleared on any non-failure transition. */
+  authError: string | null;
   /** Start Google sign-in; the UI tracks progress via authStatus. */
   signIn: () => void;
   /** Sign out — back to local-only. */
@@ -101,6 +103,10 @@ export const AppStateProvider = ({
   // session (same rehydrate reason as connection/session snapshots).
   const [authStatus, setAuthStatus] = useState<AuthStatus>(auth.status);
   const [authUser, setAuthUser] = useState<AuthUser | null>(auth.user);
+  // Last sign-in failure, surfaced by the account screen. The provider only
+  // EMITS the reason on the signed-out transition after a failed attempt; kept
+  // here so the UI can show it instead of the app failing silently.
+  const [authError, setAuthError] = useState<string | null>(null);
   const [connection, setConnection] = useState<ConnectionState>("disconnected");
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [settings, setSettings] = useState<DrillSettings>(DEFAULT_SETTINGS);
@@ -170,6 +176,9 @@ export const AppStateProvider = ({
     const unsub = auth.onAuthChange((e) => {
       setAuthStatus(e.status);
       setAuthUser(e.user);
+      // A failed sign-in ends at signed-out WITH a reason; every other
+      // transition — signing-in, signed-in, a clean sign-out — clears it.
+      setAuthError(e.status === "signed-out" ? (e.reason ?? null) : null);
     });
     return unsub;
   }, [auth]);
@@ -214,6 +223,7 @@ export const AppStateProvider = ({
       rotateCourt,
       authStatus,
       authUser,
+      authError,
       signIn,
       signOut,
     }),
@@ -227,6 +237,7 @@ export const AppStateProvider = ({
       rotateCourt,
       authStatus,
       authUser,
+      authError,
       signIn,
       signOut,
     ],

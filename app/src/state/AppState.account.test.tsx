@@ -35,13 +35,14 @@ class FakeRemote implements RemoteHistoryStore {
   }
 }
 
-// A consumer that surfaces auth status and drives sign-in/out.
+// A consumer that surfaces auth status/error and drives sign-in/out.
 const Probe = () => {
-  const { authStatus, authUser, signIn, signOut } = useAppState();
+  const { authStatus, authUser, authError, signIn, signOut } = useAppState();
   return (
     <>
       <Text testID="status">{authStatus}</Text>
       <Text testID="who">{authUser?.name ?? "-"}</Text>
+      <Text testID="err">{authError ?? "-"}</Text>
       <Button testID="in" label="in" onPress={signIn} />
       <Button testID="out" label="out" onPress={signOut} />
     </>
@@ -80,11 +81,25 @@ test("sign-in flips status to signed-in and back out on sign-out", async () => {
   });
   expect(screen.getByTestId("status")).toHaveTextContent("signed-in");
   expect(screen.getByTestId("who")).toHaveTextContent("Tester");
+  expect(screen.getByTestId("err")).toHaveTextContent("-"); // a clean flow shows no error
 
   await act(async () => {
     fireEvent.press(screen.getByTestId("out"));
   });
   expect(screen.getByTestId("status")).toHaveTextContent("signed-out");
+});
+
+test("a failed sign-in surfaces the reason as an error", async () => {
+  await renderApp(new MockAuthProvider({ failSignIn: true }));
+  expect(screen.getByTestId("err")).toHaveTextContent("-"); // none to start
+
+  await act(async () => {
+    fireEvent.press(screen.getByTestId("in"));
+  });
+
+  // Back to signed-out, but now the failure reason is visible instead of silent.
+  expect(screen.getByTestId("status")).toHaveTextContent("signed-out");
+  expect(screen.getByTestId("err")).toHaveTextContent(/cancelled/);
 });
 
 test("on sign-in the local history is reconciled with the cloud archive", async () => {
