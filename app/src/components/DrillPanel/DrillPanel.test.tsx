@@ -164,6 +164,24 @@ test("path is authored on the same court map — slot-index wire format", async 
   } satisfies DrillConfig);
 });
 
+// A spot reused many times would grow a map badge that overflows the dot and
+// clips its LATEST steps off; past the cap the oldest elide to "…" so the newest
+// stay visible (see formatStepBadge).
+test("a heavily reused spot's badge elides its oldest steps, keeping the newest", async () => {
+  const t = await connectedTransport();
+  panel(t);
+
+  fireEvent.press(screen.getByText("Path"));
+  // BL at steps 1, 3, 5, 7 (FL fills the even steps between).
+  for (let i = 0; i < 4; i++) {
+    fireEvent.press(screen.getByTestId(/spot-6-(available|selected)/));
+    fireEvent.press(screen.getByTestId(/spot-0-(available|selected)/));
+  }
+  expect(pathCodes()).toEqual(["BL", "FL", "BL", "FL", "BL", "FL", "BL", "FL"]);
+  // BL's four ordinals (1·3·5·7) elide to the last two behind a leading ellipsis.
+  expect(screen.getByTestId("spot-badge-6")).toHaveTextContent("…5·7");
+});
+
 test("path Undo drops the last step; Clear empties the sequence", async () => {
   const t = await connectedTransport();
   panel(t);

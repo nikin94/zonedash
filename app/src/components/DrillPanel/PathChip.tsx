@@ -41,7 +41,9 @@ export const PathChip = ({
   onRemove: () => void;
 }) => {
   // 1 = fully present, 0 = fully collapsed. Width/margin/opacity ride on it.
-  const progress = useRef(new Animated.Value(1)).current;
+  // Held in a reassignable ref (not `.current` pinned once) so an instance reused
+  // for a different step can swap in a FRESH value in render — see the reset below.
+  const progressRef = useRef(new Animated.Value(1));
   // The chip's natural (laid-out) width, captured continuously while present so
   // a collapse can animate down from the real width, and frozen once collapsing.
   const naturalW = useRef(0);
@@ -51,13 +53,18 @@ export const PathChip = ({
 
   // Render-phase reset: a reused instance now stands for a different step, so
   // clear any inherited collapse before it paints (no invisible-chip flicker).
+  // A FRESH Animated.Value (born at 1) is swapped in rather than setValue(1) on
+  // the live one — the mounted value can't be written during render without a
+  // "setState while rendering" warning; a new, unattached value can. Same idiom
+  // as AnimatedDot's overlay.
   const identity = `${index}:${code}`;
   const idRef = useRef(identity);
   if (idRef.current !== identity) {
     idRef.current = identity;
-    progress.setValue(1);
+    progressRef.current = new Animated.Value(1);
     collapseW.current = null;
   }
+  const progress = progressRef.current;
 
   const onLayout = (e: LayoutChangeEvent) => {
     if (collapseW.current === null) naturalW.current = e.nativeEvent.layout.width;

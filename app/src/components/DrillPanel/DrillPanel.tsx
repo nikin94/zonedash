@@ -16,6 +16,7 @@ import { msOptions, WheelField } from "../WheelField";
 import { SPOT_CODES, SPOT_NAMES } from "../../domain/spot";
 import { summarize, type SessionSummary } from "../../domain/session";
 import { type SpotVisual } from "../../helpers/court";
+import { formatStepBadge } from "../../helpers/pathBadge";
 import { type DrillSettings } from "../../state/AppState";
 import { colors } from "../../theme";
 
@@ -331,8 +332,9 @@ export const DrillPanel = ({
 
   // Order badges for the Path authoring surface: each selected spot carries its
   // step ordinal(s), so the sequence — and a spot reused across steps — reads on
-  // the map. Spot 6 used at steps 1 and 3 shows "1·3". Authoring only; a run's
-  // armed/hit visuals own the map instead.
+  // the map. Spot 6 used at steps 1 and 3 shows "1·3"; a spot reused past the cap
+  // elides its oldest steps to "…" so the newest stay legible on the dot
+  // (formatStepBadge). Authoring only; a run's armed/hit visuals own the map.
   const showPathBadges = !running && uiMode === "path";
   const pathBadges: (string | null)[] | undefined = showPathBadges
     ? Array.from({ length: 8 }, (_, i) => {
@@ -340,7 +342,7 @@ export const DrillPanel = ({
           (acc, s, idx) => (s === i ? [...acc, idx + 1] : acc),
           [],
         );
-        return steps.length > 0 ? steps.join("·") : null;
+        return formatStepBadge(steps);
       })
     : undefined;
 
