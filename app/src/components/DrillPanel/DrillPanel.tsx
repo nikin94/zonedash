@@ -395,6 +395,7 @@ export const DrillPanel = ({
       <CourtMap
         spots={visuals}
         badges={pathBadges}
+        route={showPathBadges ? path : undefined}
         onPressSpot={
           liveRunning || (!running && uiMode === "path")
             ? onCourtTap
