@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { Animated, Easing, StyleSheet } from "react-native";
 
 import { polylineLength, routePolyline } from "../../helpers/pathRoute";
+import { useSettled } from "../../helpers/useSettled";
 import { colors } from "../../theme";
 
 /** Marker diameter, px. */
@@ -12,13 +13,23 @@ const SPEED = 0.14;
  *  isn't a crawl. */
 const MIN_MS = 900;
 const MAX_MS = 6000;
+/** Quiet window after the last edit before the loop rebuilds. While the operator
+ *  keeps tapping out a path, the marker keeps looping the previous track instead
+ *  of restarting on every step — only once the edits settle does it adopt the
+ *  new sequence and play it from the top. */
+const SETTLE_MS = 450;
 
 /**
  * The Path route's animated preview: a single marker that loops along the route
  * curve, tracing the sequence so its shape and direction read at a glance
- * without a play button. It runs continuously and RESTARTS from the first spot
- * whenever the path changes (a step added or removed), so the newest sequence
- * always plays from the top.
+ * without a play button.
+ *
+ * It restarts from the first spot when the path changes — but NOT on every tap:
+ * the committed track is debounced (SETTLE_MS), so authoring a long path in a
+ * quick burst doesn't keep resetting the marker mid-loop (it would never finish
+ * a pass). The marker loops the last settled sequence until the tapping pauses,
+ * then rebuilds and plays the new one from the top. A view rotation is a
+ * deliberate one-off, so it applies immediately.
  *
  * It rides the EXACT curve the drawn segments use — both derive from
  * routeQuadratics (pathRoute.ts) — sampled into one pixel polyline. A single
@@ -34,10 +45,14 @@ export const RoutePreview = ({
   path: number[]; // canonical spot indices, in step order
   rotation: number;
 }) => {
-  // A change in the step sequence (or the view) rebuilds the track and restarts
-  // the loop; the signature keys both the memo and the restart effect.
-  const sig = `${path.join(",")}|${rotation}`;
-  const pts = useMemo(() => routePolyline(path, rotation), [sig]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The track follows a SETTLED copy of the path: rapid edits hold the previous
+  // sequence rather than restarting the loop, so a quick burst doesn't keep
+  // resetting the marker mid-pass — it rebuilds once, when the tapping pauses.
+  const drawn = useSettled(path, path.join(","), SETTLE_MS);
+
+  // Rotation applies immediately (a deliberate one-off); only the path lags.
+  const trackSig = `${drawn.join(",")}|${rotation}`;
+  const pts = useMemo(() => routePolyline(drawn, rotation), [trackSig]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const progress = useRef(new Animated.Value(0)).current;
 
@@ -57,7 +72,7 @@ export const RoutePreview = ({
 
   useEffect(() => {
     if (track === null) return;
-    progress.setValue(0); // restart from the first spot on every path change
+    progress.setValue(0); // restart from the first spot on a settled path change
     const anim = Animated.loop(
       Animated.timing(progress, {
         toValue: track.last,

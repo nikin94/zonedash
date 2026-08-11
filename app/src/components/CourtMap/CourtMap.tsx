@@ -142,8 +142,8 @@ export const CourtMap = ({
             <>
               <CourtRoute path={route} rotation={r} width={MAP_W} height={MAP_H} />
               {/* A marker looping the route curve, tracing the sequence so its
-                  shape reads at a glance; restarts when a step changes. Over the
-                  route line, under the dots. */}
+                  shape reads at a glance; rebuilds once the edits settle (not on
+                  every tap). Over the route line, under the dots. */}
               <RoutePreview path={route} rotation={r} />
             </>
           )}
