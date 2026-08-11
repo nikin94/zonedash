@@ -10,7 +10,7 @@ import type {
 } from "../../ble/transport";
 import { AppText } from "../AppText";
 import { Button } from "../Button";
-import { PathChip } from "./PathChip";
+import { PathChipStrip } from "./PathChipStrip";
 import { MAX_DRILL_PATH } from "../../ble/codec";
 import { CourtMap, SpotIcon } from "../CourtMap";
 import { msOptions, WheelField } from "../WheelField";
@@ -42,7 +42,7 @@ const fmtSec = (ms: number) => `${(ms / 1000).toFixed(2)} ${UNIT}`;
 
 // Fixed footprints for the court-centre block, so idle → running → done never
 // shifts the layout.
-const TEXT_SLOT_H = 44; // fixed status area: room for the 2-line running status
+const TEXT_SLOT_H = 40; // fixed status area: room for the 2-line running status
 const ERROR_SLOT_H = 18;
 // Breathing room between the last scrolled item and the tab bar's centre
 // (Drill) disc, on top of the bar clearance (tabBarClearance + TAB_BAR_DISC_RISE).
@@ -175,17 +175,6 @@ export const DrillPanel = ({
   const [records, setRecords] = useState<HitRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // The Path step-chip strip, scrolled to its end whenever a step is appended so
-  // the newest chips stay in view instead of running off the right edge.
-  const pathChipsRef = useRef<ScrollView>(null);
-  const prevPathLen = useRef(path.length);
-  useEffect(() => {
-    if (path.length > prevPathLen.current) {
-      pathChipsRef.current?.scrollToEnd({ animated: true });
-    }
-    prevPathLen.current = path.length;
-  }, [path.length]);
-
   useEffect(() => {
     const unsub = transport.onStatus((e) => {
       if (e.kind === "progress") {
@@ -426,7 +415,27 @@ export const DrillPanel = ({
           onRotate={onRotate}
         />
 
-        {/* Status line, just below the court. Fixed height so switching between
+        {/* The primary action, immediately under the court — a full-width
+            Start/Stop/Run again. It scrolls with the content (no pinned bar) but
+            sits right below the map so it's always the first control in reach. */}
+        {running ? (
+          <Button
+            label="Stop"
+            onPress={stop}
+            testID="primary-action"
+            style={styles.runButton}
+          />
+        ) : (
+          <Button
+            label={showDone ? "Run again" : "Start"}
+            disabled={!canStart}
+            onPress={start}
+            testID="primary-action"
+            style={styles.runButton}
+          />
+        )}
+
+        {/* Status line, below the primary action. Fixed height so switching between
             a one-line (idle) and two-line (running) status never nudges the
             config below it. */}
         <View testID="status-slot" style={styles.statusSlot}>
@@ -466,7 +475,7 @@ export const DrillPanel = ({
               color={colors.textMuted}
               style={styles.slotText}
             >
-              Pick a drill below, then Start
+              Pick a drill below to run
             </AppText>
           )}
         </View>
@@ -559,30 +568,15 @@ export const DrillPanel = ({
             <>
               {/* Ordered step chips — the sequence, in order, each removable by
                   a tap (a targeted delete the map badges point back to). A
-                  repeat shows twice, so the sequence stays unambiguous. A single
-                  horizontal strip (the path can run to MAX_DRILL_PATH steps): it
-                  auto-scrolls to the end on each append, so the LATEST steps stay
-                  in view rather than the row spilling its newest off-screen. */}
-              <ScrollView
-                ref={pathChipsRef}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                testID="path-sequence"
-                style={styles.pathChips}
-                contentContainerStyle={styles.pathChipsContent}
-              >
-                {path.map((s, idx) => (
-                  <PathChip
-                    key={idx}
-                    index={idx}
-                    code={SPOT_CODES[s]}
-                    label={SPOT_NAMES[s]}
-                    onRemove={() =>
-                      setPath((p) => p.filter((_, j) => j !== idx))
-                    }
-                  />
-                ))}
-              </ScrollView>
+                  repeat shows twice, so the sequence stays unambiguous. The
+                  strip scrolls (the path can run to MAX_DRILL_PATH steps) and
+                  fades its overflowing edges so it reads as scrollable, not a
+                  row silently running off-screen; it auto-scrolls to the end on
+                  each append so the newest steps stay in view. */}
+              <PathChipStrip
+                path={path}
+                onRemove={(idx) => setPath((p) => p.filter((_, j) => j !== idx))}
+              />
               {path.length >= MAX_DRILL_PATH && (
                 <AppText
                   center
@@ -614,20 +608,6 @@ export const DrillPanel = ({
             </AppText>
           ))}
       </View>
-
-      {/* The primary action, in the scrolling column right under the config —
-          a full-width Start/Stop/Run again. It flows with the content (no
-          pinned bar), so it sits naturally at the end of the drill setup. */}
-      {running ? (
-        <Button label="Stop" onPress={stop} style={styles.runButton} />
-      ) : (
-        <Button
-          label={showDone ? "Run again" : "Start"}
-          disabled={!canStart}
-          onPress={start}
-          style={styles.runButton}
-        />
-      )}
 
       {showDone && records !== null && (
         <View style={styles.stats} testID="stats-panel">
@@ -713,7 +693,7 @@ const styles = StyleSheet.create({
     // clears the floating bar.
     marginTop: SURFACE_MARGIN_TOP,
     alignItems: "center",
-    gap: 12,
+    gap: 8,
     alignSelf: "stretch",
     paddingHorizontal: 24,
   },
@@ -731,18 +711,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   // Full-width Start/Stop/Run again — the hero action in the scrolling column,
-  // stretched across the surface right under the config.
+  // stretched across the surface right under the court.
   runButton: {
     alignSelf: "stretch",
-    marginTop: 4,
   },
   dimmed: {
     opacity: 0.4,
   },
   config: {
     alignSelf: "stretch",
-    gap: 12,
-    marginTop: 8,
+    gap: 8,
   },
   heading: {
     letterSpacing: 2,
@@ -751,7 +729,7 @@ const styles = StyleSheet.create({
   stats: {
     alignSelf: "stretch",
     gap: 10,
-    marginTop: 20,
+    marginTop: 8,
     paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: colors.border,
@@ -796,18 +774,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     marginTop: 8,
-  },
-  // A single horizontal strip (not a wrapping block): the path can be long, so
-  // it scrolls, and the content is centred only until it overflows.
-  pathChips: {
-    alignSelf: "stretch",
-    flexGrow: 0,
-  },
-  pathChipsContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    flexGrow: 1,
-    paddingHorizontal: 8,
   },
 });

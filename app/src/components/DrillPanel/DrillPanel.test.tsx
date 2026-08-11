@@ -605,15 +605,22 @@ test("the drill surface sits at the shared surface top offset", async () => {
 
 // Layout (option A): the court is clean — the status, config and the primary
 // action all live OUTSIDE the court, in the scrolling column below it. Start
-// flows with the content (no pinned bar), and the court draws no centre card
-// (no children), so its schema/targets/route read unobstructed.
-test("the primary action lives in the scrolling court surface, under the config", async () => {
+// sits IMMEDIATELY under the court — before the status line and the config — so
+// it's the first control in reach. The court draws no centre card (no children),
+// so its schema/targets/route read unobstructed.
+test("the primary action sits right under the court, above the status and config", async () => {
   const t = await connectedTransport();
   panel(t);
 
   const surface = screen.getByTestId("drill-surface");
   // Start is a full-width button in the scrolling column, not a pinned bar.
   expect(within(surface).getByText("Start")).toBeTruthy();
+  // In tree (render) order: the primary action comes before the status slot and
+  // the mode description — i.e. right below the court.
+  const order = within(surface)
+    .getAllByTestId(/^(primary-action|status-slot|mode-desc)$/)
+    .map((n) => n.props.testID);
+  expect(order).toEqual(["primary-action", "status-slot", "mode-desc"]);
 });
 
 test("the drill court is clean — no centre card over the schema", async () => {
