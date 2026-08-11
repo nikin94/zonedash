@@ -597,3 +597,25 @@ test("the drill surface sits at the shared surface top offset", async () => {
   );
   expect(cc.marginTop).toBe(SURFACE_MARGIN_TOP);
 });
+
+// Layout (option B): the court is clean — the status, config and the primary
+// action all live OUTSIDE the court. The primary action is PINNED, so it sits
+// outside the scrolling surface (always one tap away), and the court draws no
+// centre card (no children), so its schema/targets/route read unobstructed.
+test("the primary action is pinned outside the scrolling court surface", async () => {
+  const t = await connectedTransport();
+  panel(t);
+
+  const surface = screen.getByTestId("drill-surface");
+  // Start exists, but NOT inside the scrolling surface — it's in the pinned bar.
+  expect(screen.getByText("Start")).toBeTruthy();
+  expect(within(surface).queryByText("Start")).toBeNull();
+});
+
+test("the drill court is clean — no centre card over the schema", async () => {
+  const t = await connectedTransport();
+  panel(t);
+  // CourtMap only draws its frosted centre card for centre children; the drill
+  // surface passes none now, so the court stays clear.
+  expect(screen.queryByTestId("centre-card")).toBeNull();
+});

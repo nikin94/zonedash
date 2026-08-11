@@ -18,7 +18,7 @@ import { summarize, type SessionSummary } from "../../domain/session";
 import { SURFACE_MARGIN_TOP, type SpotVisual } from "../../helpers/court";
 import { formatStepBadge } from "../../helpers/pathBadge";
 import { type DrillSettings } from "../../state/AppState";
-import { colors } from "../../theme";
+import { alpha, colors } from "../../theme";
 
 const COUNT_OPTIONS = Array.from({ length: 99 }, (_, i) => ({
   value: i + 1,
@@ -37,8 +37,11 @@ const fmtSec = (ms: number) => `${(ms / 1000).toFixed(2)} ${UNIT}`;
 
 // Fixed footprints for the court-centre block, so idle → running → done never
 // shifts the layout.
-const TEXT_SLOT_H = 60; // 3 lines at lineHeight 20
+const TEXT_SLOT_H = 44; // fixed status area: room for the 2-line running status
 const ERROR_SLOT_H = 18;
+// Keeps the pinned Start/Stop button clear of the tab bar's protruding centre
+// (Drill) disc, which pokes ~22 px up into the scene above the bar.
+const ACTION_BAR_PAD_BOTTOM = 30;
 
 /** UI modes. The engine's `random` and `time` differ only in the stop
  *  condition (rep count vs duration window), so the UI folds them into one
@@ -388,24 +391,32 @@ export const DrillPanel = ({
   const runStatusHit = !liveBusy && lastReactionMs !== null;
 
   return (
-    <ScrollView
-      testID="drill-surface"
-      contentContainerStyle={styles.panel}
-      showsVerticalScrollIndicator={false}
-    >
-      <CourtMap
-        spots={visuals}
-        badges={pathBadges}
-        route={showPathBadges ? path : undefined}
-        onPressSpot={
-          liveRunning || (!running && uiMode === "path")
-            ? onCourtTap
-            : undefined
-        }
-        rotation={rotation}
-        onRotate={onRotate}
+    <View style={styles.container}>
+      <ScrollView
+        testID="drill-surface"
+        contentContainerStyle={styles.panel}
+        showsVerticalScrollIndicator={false}
       >
-        <View style={styles.textSlot}>
+        {/* A clean court — its schema, targets, route and preview read
+            unobstructed. The status line, drill config and the primary action
+            all live OUTSIDE the court now: below it, or pinned at the bottom. */}
+        <CourtMap
+          spots={visuals}
+          badges={pathBadges}
+          route={showPathBadges ? path : undefined}
+          onPressSpot={
+            liveRunning || (!running && uiMode === "path")
+              ? onCourtTap
+              : undefined
+          }
+          rotation={rotation}
+          onRotate={onRotate}
+        />
+
+        {/* Status line, just below the court. Fixed height so switching between
+            a one-line (idle) and two-line (running) status never nudges the
+            config below it. */}
+        <View testID="status-slot" style={styles.statusSlot}>
           {running ? (
             <>
               <AppText center size={16} weight="600" style={styles.slotText}>
@@ -454,18 +465,6 @@ export const DrillPanel = ({
             </AppText>
           )}
         </View>
-
-        {running ? (
-          <Button label="Stop" onPress={stop} style={styles.runButton} />
-        ) : (
-          <Button
-            label={showDone ? "Run again" : "Start"}
-            disabled={!canStart}
-            onPress={start}
-            style={styles.runButton}
-          />
-        )}
-      </CourtMap>
 
       {/* The drill config lives under the court; locked while a run is on so
           the loaded drill always matches what is on screen. */}
@@ -675,11 +674,33 @@ export const DrillPanel = ({
           </View>
         </View>
       )}
-    </ScrollView>
+      </ScrollView>
+
+      {/* The primary action, pinned above the tab bar so Start/Stop is always
+          one tap away no matter how far the config (path chips, wheels,
+          results) scrolls — the config scrolls, the action doesn't. */}
+      <View style={styles.actionBar}>
+        {running ? (
+          <Button label="Stop" onPress={stop} style={styles.actionButton} />
+        ) : (
+          <Button
+            label={showDone ? "Run again" : "Start"}
+            disabled={!canStart}
+            onPress={start}
+            style={styles.actionButton}
+          />
+        )}
+      </View>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
+  // Fills the Drill surface: the scrolling config sits above, the pinned action
+  // bar below. flex:1 so the ScrollView takes the space left over the bar.
+  container: {
+    flex: 1,
+  },
   panel: {
     // Shared with the idle + pairing surfaces so the court doesn't jump when one
     // replaces another (notably the pairing → drill handoff). See court.ts.
@@ -690,12 +711,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 32,
   },
-  textSlot: {
+  // The status line under the clean court. Fixed height so a one-line (idle) and
+  // a two-line (running) status keep the config below them from jumping.
+  statusSlot: {
     height: TEXT_SLOT_H,
-    // Seat the status at the BOTTOM of its fixed slot so a short line (e.g.
-    // "Session complete") sits close to the button below instead of floating
-    // centred with a wide gap. The height stays fixed, so no cross-phase jump.
-    justifyContent: "flex-end",
+    justifyContent: "center",
   },
   slotText: {
     lineHeight: 20,
@@ -704,10 +724,19 @@ const styles = StyleSheet.create({
     height: ERROR_SLOT_H,
     justifyContent: "center",
   },
-  // The in-court Start/Stop/Run again button — the shared Button owns its
-  // chrome and disabled state; this only spaces it below the status slots.
-  runButton: {
-    marginTop: 8,
+  // The pinned primary action, above the tab bar: a solid strip with a hairline
+  // top border so the scrolling config never bleeds through behind the button.
+  actionBar: {
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: ACTION_BAR_PAD_BOTTOM,
+    borderTopWidth: 1,
+    borderTopColor: alpha(colors.border, 0.4),
+    backgroundColor: colors.background,
+  },
+  // Full-width Start/Stop/Run again — the hero action stretches the bar.
+  actionButton: {
+    alignSelf: "stretch",
   },
   dimmed: {
     opacity: 0.4,
