@@ -23,6 +23,11 @@ import { alpha, colors, glowShadow } from "../theme";
  *
  * Presentation only: focus state and the route list come from the navigator.
  */
+// Floor for the bar's bottom padding. On a device with a home-indicator gap
+// `insets.bottom` already lifts the icons off the edge; on a square/legacy
+// device it reports 0, so this keeps the icons from hugging the screen bottom.
+const MIN_BOTTOM_PADDING = 16;
+
 const pressStyle = ({ pressed }: { pressed: boolean }) => [
   styles.tap,
   pressed && styles.tapPressed,
@@ -41,7 +46,12 @@ export const GlassTabBar = ({ state, navigation }: BottomTabBarProps) => {
   };
 
   return (
-    <View style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+    <View
+      style={[
+        styles.wrap,
+        { paddingBottom: Math.max(insets.bottom, MIN_BOTTOM_PADDING) },
+      ]}
+    >
       {/* The frost. tint "light" over the white page reads as a subtle glass
           strip; on Android expo-blur falls back to a translucent fill. */}
       <BlurView intensity={40} tint="light" style={StyleSheet.absoluteFill} />
