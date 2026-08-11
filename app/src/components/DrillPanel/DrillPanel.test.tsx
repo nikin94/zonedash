@@ -193,9 +193,13 @@ test("tapping a step chip removes THAT step, and the badges renumber", async () 
   expect(pathCodes()).toEqual(["FL", "ML", "BL"]);
   expect(screen.getByTestId("spot-badge-7")).toHaveTextContent("2");
 
-  // Tap the MIDDLE chip (step 2, ML) — only it drops, and the trailing step
-  // renumbers from 3 to 2 (its badge follows).
+  // Tap the MIDDLE chip (step 2, ML): it collapses (a ~180 ms width animation),
+  // THEN drops — so it's still present until the animation runs out.
   fireEvent.press(screen.getByTestId("path-chip-1"));
+  expect(pathCodes()).toEqual(["FL", "ML", "BL"]); // still there mid-collapse
+  await act(() => jest.advanceTimersByTimeAsync(200)); // collapse completes → removed
+
+  // Only it drops, and the trailing step renumbers from 3 to 2 (its badge follows).
   expect(pathCodes()).toEqual(["FL", "BL"]);
   expect(screen.queryByTestId("spot-badge-7")).toBeNull(); // ML no longer in the path
   expect(screen.getByTestId("spot-badge-6")).toHaveTextContent("2"); // BL is now step 2

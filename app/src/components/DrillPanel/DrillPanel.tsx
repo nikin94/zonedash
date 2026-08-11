@@ -9,7 +9,7 @@ import type {
 } from "../../ble/transport";
 import { AppText } from "../AppText";
 import { Button } from "../Button";
-import { CustomPressable } from "../CustomPressable";
+import { PathChip } from "./PathChip";
 import { MAX_DRILL_PATH } from "../../ble/codec";
 import { CourtMap, SpotIcon } from "../CourtMap";
 import { msOptions, WheelField } from "../WheelField";
@@ -157,6 +157,16 @@ export const DrillPanel = ({
   const [records, setRecords] = useState<HitRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The Path step-chip strip, scrolled to its end whenever a step is appended so
+  // the newest chips stay in view instead of running off the right edge.
+  const pathChipsRef = useRef<ScrollView>(null);
+  const prevPathLen = useRef(path.length);
+  useEffect(() => {
+    if (path.length > prevPathLen.current) {
+      pathChipsRef.current?.scrollToEnd({ animated: true });
+    }
+    prevPathLen.current = path.length;
+  }, [path.length]);
 
   useEffect(() => {
     const unsub = transport.onStatus((e) => {
@@ -533,33 +543,30 @@ export const DrillPanel = ({
             <>
               {/* Ordered step chips — the sequence, in order, each removable by
                   a tap (a targeted delete the map badges point back to). A
-                  repeat shows twice, so the sequence stays unambiguous. */}
-              <View style={styles.pathChips} testID="path-sequence">
+                  repeat shows twice, so the sequence stays unambiguous. A single
+                  horizontal strip (the path can run to MAX_DRILL_PATH steps): it
+                  auto-scrolls to the end on each append, so the LATEST steps stay
+                  in view rather than the row spilling its newest off-screen. */}
+              <ScrollView
+                ref={pathChipsRef}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                testID="path-sequence"
+                style={styles.pathChips}
+                contentContainerStyle={styles.pathChipsContent}
+              >
                 {path.map((s, idx) => (
-                  <CustomPressable
+                  <PathChip
                     key={idx}
-                    noFeedback
-                    testID={`path-chip-${idx}`}
-                    accessibilityLabel={`Step ${idx + 1}, ${SPOT_NAMES[s]} — tap to remove`}
-                    onPress={() => setPath(path.filter((_, j) => j !== idx))}
-                    style={styles.pathChip}
-                  >
-                    <View style={styles.pathChipNum}>
-                      <AppText size={11} weight="700" color={colors.background}>
-                        {idx + 1}
-                      </AppText>
-                    </View>
-                    <AppText
-                      size={13}
-                      weight="600"
-                      color={colors.accentText}
-                      testID={`path-chip-code-${idx}`}
-                    >
-                      {SPOT_CODES[s]}
-                    </AppText>
-                  </CustomPressable>
+                    index={idx}
+                    code={SPOT_CODES[s]}
+                    label={SPOT_NAMES[s]}
+                    onRemove={() =>
+                      setPath((p) => p.filter((_, j) => j !== idx))
+                    }
+                  />
                 ))}
-              </View>
+              </ScrollView>
               {path.length >= MAX_DRILL_PATH && (
                 <AppText
                   center
@@ -757,29 +764,17 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 8,
   },
+  // A single horizontal strip (not a wrapping block): the path can be long, so
+  // it scrolls, and the content is centred only until it overflows.
   pathChips: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "center",
-    gap: 8,
+    alignSelf: "stretch",
+    flexGrow: 0,
   },
-  pathChip: {
+  pathChipsContent: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    backgroundColor: colors.accentSurface,
-    borderRadius: 14,
-    paddingVertical: 4,
-    paddingLeft: 4,
-    paddingRight: 10,
-  },
-  pathChipNum: {
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    paddingHorizontal: 3,
-    backgroundColor: colors.accentText,
-    alignItems: "center",
     justifyContent: "center",
+    flexGrow: 1,
+    paddingHorizontal: 8,
   },
 });
