@@ -49,6 +49,11 @@ const TEXT_SLOT_H = 40; // fixed status area: room for the 2-line running status
 // Breathing room between the last scrolled item and the tab bar's centre
 // (Drill) disc, on top of the bar clearance (tabBarClearance + TAB_BAR_DISC_RISE).
 const ACTION_BAR_GAP = 12;
+// CourtMap reserves a fixed bottom strip (its net-line frame, CourtMap STRIP_H)
+// UNDER the court box, so the gap above Start already includes it while the gap
+// below is just the panel's own gap — Start ends up hugging the Mode row. Match
+// that strip below the button so Start sits centred between the court and Mode.
+const START_STRIP_BALANCE = 22;
 
 /** UI modes. The engine's `random` and `time` differ only in the stop
  *  condition (rep count vs duration window), so the UI folds them into one
@@ -426,16 +431,20 @@ export const DrillPanel = ({
           <Button
             label="Stop"
             onPress={stop}
+            danger
+            textSize={17}
             testID="primary-action"
             style={styles.runButton}
           />
         ) : (
           <Button
             label={showDone ? "Run again" : "Start"}
+            primary
+            textSize={17}
             disabled={!canStart}
             onPress={start}
             testID="primary-action"
-            style={styles.runButton}
+            style={styles.runButtonPrimary}
           />
         )}
 
@@ -734,6 +743,14 @@ const styles = StyleSheet.create({
   // stretched across the surface right under the court.
   runButton: {
     alignSelf: "stretch",
+  },
+  // The idle primary action, balanced so it sits centred between the court and
+  // the Mode row (the court's bottom strip pads the gap above it — see
+  // START_STRIP_BALANCE). Running/done use the plain runButton (a status line
+  // follows them, so there's nothing to centre against).
+  runButtonPrimary: {
+    alignSelf: "stretch",
+    marginBottom: START_STRIP_BALANCE,
   },
   dimmed: {
     opacity: 0.4,

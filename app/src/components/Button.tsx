@@ -1,7 +1,7 @@
 import { type ReactNode } from "react";
 import { StyleSheet, type StyleProp, type ViewStyle } from "react-native";
 
-import { colors } from "../theme";
+import { colors, glowShadow } from "../theme";
 import { AppText } from "./AppText";
 import { CustomPressable } from "./CustomPressable";
 
@@ -20,6 +20,10 @@ export interface ButtonProps {
   dashed?: boolean;
   /** Selected/toggle state — accent fill + border + label (Mode / length chips). */
   selected?: boolean;
+  /** Primary/hero action — a solid accent fill with a white label and a soft
+   *  lift, so the page's main call-to-action (Start) reads above the outline
+   *  chips around it. */
+  primary?: boolean;
   /** Skip the pressed-surface flash — for selection chips that carry their own
    *  state, so a press doesn't wash their fill. */
   noFeedback?: boolean;
@@ -50,6 +54,7 @@ export const Button = ({
   danger = false,
   dashed = false,
   selected = false,
+  primary = false,
   noFeedback = false,
   size = "regular",
   textColor,
@@ -71,6 +76,7 @@ export const Button = ({
       danger && styles.danger,
       dashed && styles.dashed,
       selected && styles.selected,
+      primary && styles.primary,
       disabled && styles.disabled,
       style,
     ]}
@@ -84,7 +90,9 @@ export const Button = ({
         color={
           selected
             ? colors.accentText
-            : (textColor ?? (danger ? colors.danger : colors.text))
+            : primary
+              ? colors.background
+              : (textColor ?? (danger ? colors.danger : colors.text))
         }
       >
         {label}
@@ -112,5 +120,14 @@ const styles = StyleSheet.create({
   danger: { borderColor: colors.danger },
   dashed: { borderStyle: "dashed" },
   selected: { borderColor: colors.accent, backgroundColor: colors.accentSurface },
+  // Hero fill: solid accent with a matching border and a soft shadow so the
+  // primary action lifts off the white page. A taller footprint than a regular
+  // button gives it more presence. The white label is set on the AppText above.
+  primary: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+    paddingVertical: 13,
+    ...glowShadow,
+  },
   disabled: { opacity: 0.4 },
 });

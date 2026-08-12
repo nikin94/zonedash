@@ -11,6 +11,7 @@ import {
 import { MockCentralTransport } from "../../ble/mock";
 import type { DrillConfig } from "../../ble/transport";
 import { DEFAULT_SETTINGS, type DrillSettings } from "../../state/AppState";
+import { colors } from "../../theme";
 import { DrillPanel } from "./DrillPanel";
 
 // The Path step chips, read back as their two-letter spot codes in step order —
@@ -675,4 +676,17 @@ test("the mode info icon opens a modal describing each drill mode", async () => 
   // The backdrop dismisses.
   fireEvent.press(screen.getByTestId("mode-info-backdrop"));
   expect(screen.queryByTestId("mode-info")).toBeNull();
+});
+
+// The idle Start is the page's hero: a solid accent fill (not a plain outline
+// chip like Mode/length), and it's balanced with a bottom margin so it sits
+// centred between the court and the Mode row rather than hugging the modes.
+test("the idle Start is an accent hero button, centred below the court", async () => {
+  const t = await connectedTransport();
+  panel(t);
+  const s = StyleSheet.flatten(
+    screen.getByTestId("primary-action").props.style,
+  );
+  expect(s.backgroundColor).toBe(colors.accent); // solid accent hero, not outline
+  expect(s.marginBottom).toBeGreaterThan(0); // balances the court's bottom strip
 });
