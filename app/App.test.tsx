@@ -55,7 +55,9 @@ test("renders the disconnected surface — an idle court and a connect hint", as
   expect(screen.getByTestId("tab-account")).toBeTruthy();
   expect(screen.getByTestId("tab-drill")).toBeTruthy();
   expect(screen.getByTestId("tab-settings")).toBeTruthy();
-  expect(screen.getByText(/Tap the status in the header to connect/)).toBeTruthy();
+  expect(
+    screen.getByText(/Tap the status in the header to connect/),
+  ).toBeTruthy();
   expect(screen.queryAllByTestId(/spot-\d-off/)).toHaveLength(8); // court is present, idle
 });
 
@@ -90,12 +92,16 @@ test("court orientation persists across an app restart", async () => {
   await act(async () => {
     await jest.runAllTimersAsync(); // let the save effect flush to storage
   });
-  expect(screen.getByTestId("court-rotate").props.accessibilityState.selected).toBe(true);
+  expect(
+    screen.getByTestId("court-rotate").props.accessibilityState.selected,
+  ).toBe(true);
 
   first.unmount(); // "quit" the app — in-memory state is gone, storage remains
   await renderApp();
   // Rehydrated from storage: the court comes back rotated, not upright.
-  expect(screen.getByTestId("court-rotate").props.accessibilityState.selected).toBe(true);
+  expect(
+    screen.getByTestId("court-rotate").props.accessibilityState.selected,
+  ).toBe(true);
 });
 
 // Connecting turns the court into the pairing surface — Start pairing over the
@@ -115,7 +121,7 @@ test("a completed round reveals the drill controls under the court", async () =>
   await connect();
   await pairTwo();
 
-  expect(screen.getByText("Random")).toBeTruthy();
+  expect(screen.getByTestId("drill-settings-button")).toBeTruthy();
   expect(screen.getByText("Start")).toBeTruthy();
   // Re-pair now lives in the chip menu (not under the court), so it isn't
   // visible until the menu is opened.
@@ -133,7 +139,7 @@ test("the dev complete-pairing shortcut reveals the drill controls", async () =>
   await act(async () => {
     await jest.runAllTimersAsync();
   });
-  expect(screen.getByText("Random")).toBeTruthy();
+  expect(screen.getByTestId("drill-settings-button")).toBeTruthy();
   expect(screen.getByText("Start")).toBeTruthy();
 });
 
@@ -143,18 +149,18 @@ test("re-pair from the chip menu confirms, then returns to the pairing surface",
   await renderApp();
   await connect();
   await pairTwo();
-  expect(screen.getByText("Random")).toBeTruthy();
+  expect(screen.getByTestId("drill-settings-button")).toBeTruthy();
 
   // The menu item only arms the confirm — the layout is still up behind it.
   fireEvent.press(screen.getByTestId("status-chip")); // open the chip menu
   fireEvent.press(screen.getByTestId("repair-button"));
   expect(screen.getByTestId("repair-confirm")).toBeTruthy();
-  expect(screen.getByText("Random")).toBeTruthy(); // not re-paired yet
+  expect(screen.getByTestId("drill-settings-button")).toBeTruthy(); // not re-paired yet
 
   // Keep going backs out with the layout intact.
   fireEvent.press(screen.getByText("Keep going"));
   expect(screen.queryByTestId("repair-confirm")).toBeNull();
-  expect(screen.getByText("Random")).toBeTruthy();
+  expect(screen.getByTestId("drill-settings-button")).toBeTruthy();
 
   // Confirming Re-pair opens the pairing surface.
   fireEvent.press(screen.getByTestId("status-chip"));
@@ -164,7 +170,7 @@ test("re-pair from the chip menu confirms, then returns to the pairing surface",
     await jest.runAllTimersAsync();
   });
   expect(screen.getByTestId("start-pairing")).toBeTruthy(); // pairing surface again
-  expect(screen.queryByText("Random")).toBeNull();
+  expect(screen.queryByTestId("drill-settings-button")).toBeNull();
 });
 
 // Regression: the pairing→drill handoff must re-arm for EVERY round, not just
@@ -176,7 +182,7 @@ test("a second round after Re-pair still hands off to the drill controls", async
   await renderApp();
   await connect();
   await pairTwo(); // first round → drill controls
-  expect(screen.getByText("Random")).toBeTruthy();
+  expect(screen.getByTestId("drill-settings-button")).toBeTruthy();
 
   // Re-pair (confirmed) back to the pairing surface.
   fireEvent.press(screen.getByTestId("status-chip"));
@@ -186,11 +192,11 @@ test("a second round after Re-pair still hands off to the drill controls", async
     await jest.runAllTimersAsync();
   });
   expect(screen.getByTestId("start-pairing")).toBeTruthy();
-  expect(screen.queryByText("Random")).toBeNull();
+  expect(screen.queryByTestId("drill-settings-button")).toBeNull();
 
   // Second round completes → the handoff fires again → drill controls return.
   await pairTwo();
-  expect(screen.getByText("Random")).toBeTruthy();
+  expect(screen.getByTestId("drill-settings-button")).toBeTruthy();
   expect(screen.getByText("Start")).toBeTruthy(); // drill's Start, not pairing's
   expect(screen.queryByTestId("start-pairing")).toBeNull();
 });
@@ -242,7 +248,7 @@ test("switching tabs keeps the BLE link and drill surface intact", async () => {
   await renderApp();
   await connect();
   await pairTwo();
-  expect(screen.getByText("Random")).toBeTruthy(); // on the drill controls
+  expect(screen.getByTestId("drill-settings-button")).toBeTruthy(); // on the drill controls
 
   // Leave to Account and back to Drill.
   fireEvent.press(screen.getByTestId("tab-account"));
@@ -257,7 +263,7 @@ test("switching tabs keeps the BLE link and drill surface intact", async () => {
   // Link held and the drill surface is right where it was — no reconnect, no
   // reset to pairing.
   expect(screen.getByText("mock")).toBeTruthy();
-  expect(screen.getByText("Random")).toBeTruthy();
+  expect(screen.getByTestId("drill-settings-button")).toBeTruthy();
   expect(screen.queryByTestId("start-pairing")).toBeNull();
 });
 
@@ -281,7 +287,9 @@ test("Disconnect lives in the chip menu behind the confirm — No keeps the link
     await jest.runAllTimersAsync();
   });
   expect(screen.getByText("offline")).toBeTruthy();
-  expect(screen.getByText(/Tap the status in the header to connect/)).toBeTruthy();
+  expect(
+    screen.getByText(/Tap the status in the header to connect/),
+  ).toBeTruthy();
 });
 
 test("an outside tap closes the chip menu without acting", async () => {
@@ -302,7 +310,7 @@ test("a disconnect clears the paired layout — reconnect returns to pairing", a
   await renderApp();
   await connect();
   await pairTwo(); // drill controls, over a real layout
-  expect(screen.getByText("Random")).toBeTruthy();
+  expect(screen.getByTestId("drill-settings-button")).toBeTruthy();
 
   fireEvent.press(screen.getByTestId("status-chip"));
   fireEvent.press(screen.getByText("Disconnect"));
@@ -314,6 +322,6 @@ test("a disconnect clears the paired layout — reconnect returns to pairing", a
 
   // Back on the pairing surface with a clean map — no phantom drill controls.
   expect(screen.getByTestId("start-pairing")).toBeTruthy();
-  expect(screen.queryByText("Random")).toBeNull();
+  expect(screen.queryByTestId("drill-settings-button")).toBeNull();
   expect(screen.queryAllByTestId(/spot-\d-bound/)).toHaveLength(0);
 });

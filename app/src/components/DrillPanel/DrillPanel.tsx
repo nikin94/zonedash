@@ -10,13 +10,19 @@ import type {
 } from "../../ble/transport";
 import { AppText } from "../AppText";
 import { Button } from "../Button";
-import { CustomPressable } from "../CustomPressable";
-import { InfoIcon } from "../Icons";
+import { GearIcon } from "../Icons";
 import { PathChipStrip } from "./PathChipStrip";
 import { ModeInfoModal } from "./ModeInfoModal";
+import { DrillSettingsModal } from "./DrillSettingsModal";
+import {
+  MODES,
+  MODE_DESC,
+  uiFromWire,
+  type StopBy,
+  type UiMode,
+} from "./drillMode";
 import { MAX_DRILL_PATH } from "../../ble/codec";
 import { CourtMap, SpotIcon } from "../CourtMap";
-import { msOptions, WheelField } from "../WheelField";
 import { SPOT_CODES, SPOT_NAMES } from "../../domain/spot";
 import { summarize, type SessionSummary } from "../../domain/session";
 import { type SpotVisual } from "../../helpers/court";
@@ -28,12 +34,6 @@ import {
   tabBarClearance,
 } from "../../navigation/GlassTabBar";
 import { colors } from "../../theme";
-
-const COUNT_OPTIONS = Array.from({ length: 99 }, (_, i) => ({
-  value: i + 1,
-  label: String(i + 1),
-}));
-const DURATION_OPTIONS = msOptions(15000, 300000, 15000);
 
 /** How long a resolved step's green flash stays on the map. Shorter than the
  *  engine's default step cadence so the flash clears before the next arm. */
@@ -59,37 +59,6 @@ const ACTION_BAR_GAP = 12;
 // below is just the panel's own gap — Start ends up hugging the Mode row. Match
 // that strip below the button so Start sits centred between the court and Mode.
 const START_STRIP_BALANCE = 22;
-
-/** UI modes. The engine's `random` and `time` differ only in the stop
- *  condition (rep count vs duration window), so the UI folds them into one
- *  Random mode with a stop-by selector — the wire mode is derived from it and
- *  the firmware DrillConfig is untouched. */
-type UiMode = "random" | "path" | "live";
-type StopBy = "count" | "time";
-
-const MODES: { key: UiMode; label: string }[] = [
-  { key: "random", label: "Random" },
-  { key: "path", label: "Path" },
-  { key: "live", label: "Live" },
-];
-
-/** One-line explanation shown under the mode selector. */
-const MODE_DESC: Record<UiMode, string> = {
-  random: "Targets light in a random order until the session ends.",
-  path: "Run a fixed sequence you tap out on the map.",
-  live: "Light targets by hand during the run — one tap each.",
-};
-
-/** Inverse of `wireMode`: the UI mode + stop-by a wire config resolves back to,
- *  so a mount over a running/finished session restores the matching controls. */
-const uiFromWire = (
-  mode: DrillConfig["mode"],
-): { uiMode: UiMode; stopBy: StopBy } => {
-  if (mode === "time") return { uiMode: "random", stopBy: "time" };
-  if (mode === "path") return { uiMode: "path", stopBy: "count" };
-  if (mode === "live") return { uiMode: "live", stopBy: "count" };
-  return { uiMode: "random", stopBy: "count" };
-};
 
 /**
  * The drill screen — reached once a layout is paired. One court map does
@@ -189,6 +158,7 @@ export const DrillPanel = ({
   const [error, setError] = useState<string | null>(null);
   // The drill-modes explainer (opened from the info icon by the Mode selector).
   const [modeInfoOpen, setModeInfoOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     const unsub = transport.onStatus((e) => {
@@ -431,26 +401,43 @@ export const DrillPanel = ({
       contentContainerStyle={[styles.panel, { paddingBottom: scrollPadBottom }]}
       showsVerticalScrollIndicator={false}
     >
-        {/* A clean court — its schema, targets, route and preview read
+      {/* A clean court — its schema, targets, route and preview read
             unobstructed. The status line, drill config and the primary action
             all live OUTSIDE the court now: below it in the scrolling column. */}
-        <CourtMap
-          spots={visuals}
-          badges={pathBadges}
-          route={showPathBadges ? path : undefined}
-          onPressSpot={
-            liveRunning || (!running && uiMode === "path")
-              ? onCourtTap
-              : undefined
-          }
-          rotation={rotation}
-          onRotate={onRotate}
-        />
+      <CourtMap
+        spots={visuals}
+        badges={pathBadges}
+        route={showPathBadges ? path : undefined}
+        onPressSpot={
+          liveRunning || (!running && uiMode === "path")
+            ? onCourtTap
+            : undefined
+        }
+        rotation={rotation}
+        onRotate={onRotate}
+      />
 
-        {/* The primary action, immediately under the court — a full-width
-            Start (constant label, even after a finished run) / Stop. It scrolls
-            with the content (no pinned bar) but sits right below the map so it's
-            always the first control in reach. */}
+      {/* Under the court: a compact settings gear beside the primary action
+            (Start — constant label, even after a finished run — or Stop). The
+            gear is an outline square — white fill, thick accent border, icon +
+            equal padding — sitting just left of the full-width Start, a gap
+            between them, both with the normal rounded corners. It opens the
+            drill-setup page; disabled while a run is on, when the config is
+            locked. The idle row carries the strip-balance margin so it sits
+            centred under the court. */}
+      <View
+        testID="action-row"
+        style={[styles.actionRow, !running && styles.actionRowBalance]}
+      >
+        <Button
+          disabled={running}
+          onPress={() => setSettingsOpen(true)}
+          testID="drill-settings-button"
+          accessibilityLabel="Drill setup"
+          style={styles.settingsButton}
+        >
+          <GearIcon size={22} color={colors.accent} />
+        </Button>
         {running ? (
           <Button
             label="Stop"
@@ -458,7 +445,7 @@ export const DrillPanel = ({
             danger
             textSize={17}
             testID="primary-action"
-            style={styles.runButton}
+            style={styles.actionButton}
           />
         ) : (
           <Button
@@ -468,129 +455,52 @@ export const DrillPanel = ({
             disabled={!canStart}
             onPress={start}
             testID="primary-action"
-            style={styles.runButtonPrimary}
+            style={styles.actionButton}
           />
         )}
+      </View>
 
-        {/* Status line — only WHILE a run is live (Step + reaction). Completion
+      {/* Status line — only WHILE a run is live (Step + reaction). Completion
             is announced by the header toast now, not a line here, and the
             numbers live in the results panel below — so a finished run shows
             nothing in this slot. Fixed height so the two-line running status
             never nudges the config below. */}
-        {running && (
-          <View testID="status-slot" style={styles.statusSlot}>
-            <AppText center size={16} weight="600" style={styles.slotText}>
-              Step {resolvedCount + 1}
-            </AppText>
-            <AppText
-              center
-              size={13}
-              color={runStatusHit ? colors.success : colors.textMuted}
-              style={styles.slotText}
-            >
-              {runStatus}
-            </AppText>
-          </View>
-        )}
-
-        {error !== null && (
+      {running && (
+        <View testID="status-slot" style={styles.statusSlot}>
+          <AppText center size={16} weight="600" style={styles.slotText}>
+            Step {resolvedCount + 1}
+          </AppText>
           <AppText
             center
             size={13}
-            numberOfLines={1}
-            color={colors.danger}
-            style={styles.errorLine}
+            color={runStatusHit ? colors.success : colors.textMuted}
+            style={styles.slotText}
           >
-            {error}
+            {runStatus}
           </AppText>
-        )}
+        </View>
+      )}
 
-      {/* The drill config lives under the court; locked while a run is on so
-          the loaded drill always matches what is on screen. */}
+      {error !== null && (
+        <AppText
+          center
+          size={13}
+          numberOfLines={1}
+          color={colors.danger}
+          style={styles.errorLine}
+        >
+          {error}
+        </AppText>
+      )}
+
+      {/* Under the court: only the Path sequence authoring stays here (the
+          operator taps the court, so its chips belong beside it). Mode and the
+          Random params moved to the drill-setup page behind the gear. Locked
+          while a run is on so the loaded drill always matches what is on screen. */}
       <View
         pointerEvents={running ? "none" : "auto"}
         style={[styles.config, running && styles.dimmed]}
       >
-        <View style={styles.stopRow}>
-          <View style={styles.modeLabel}>
-            <AppText color={colors.textSecondary} style={styles.paramLabel}>
-              Mode
-            </AppText>
-            {/* The per-mode descriptions moved off the always-on line into this
-                on-demand modal, so the setup stays compact. */}
-            <CustomPressable
-              noFeedback
-              hitSlop={10}
-              testID="mode-info-button"
-              accessibilityLabel="About drill modes"
-              onPress={() => setModeInfoOpen(true)}
-              style={styles.infoButton}
-            >
-              <InfoIcon size={16} color={colors.textMuted} />
-            </CustomPressable>
-          </View>
-          <View style={styles.stopChips}>
-            {MODES.map((m) => (
-              <Button
-                key={m.key}
-                label={m.label}
-                size="small"
-                textSize={14}
-                noFeedback
-                selected={uiMode === m.key}
-                textColor={colors.textSecondary}
-                onPress={() => setUiMode(m.key)}
-              />
-            ))}
-          </View>
-        </View>
-
-        {uiMode === "random" && (
-          <>
-            <View style={styles.stopRow}>
-              <AppText color={colors.textSecondary} style={styles.paramLabel}>
-                Session length
-              </AppText>
-              <View style={styles.stopChips}>
-                {(
-                  [
-                    { key: "count", label: "Hits" },
-                    { key: "time", label: "Time" },
-                  ] as const
-                ).map((s) => (
-                  <Button
-                    key={s.key}
-                    label={s.label}
-                    size="small"
-                    textSize={14}
-                    noFeedback
-                    selected={stopBy === s.key}
-                    textColor={colors.textSecondary}
-                    onPress={() => setStopBy(s.key)}
-                  />
-                ))}
-              </View>
-            </View>
-            {stopBy === "count" ? (
-              <WheelField
-                value={count}
-                label="Targets to hit"
-                testID="drill-count"
-                options={COUNT_OPTIONS}
-                onChange={setCount}
-              />
-            ) : (
-              <WheelField
-                value={durationMs}
-                label="Duration"
-                testID="drill-duration"
-                options={DURATION_OPTIONS}
-                onChange={setDurationMs}
-              />
-            )}
-          </>
-        )}
-
         {uiMode === "path" &&
           (path.length > 0 ? (
             <>
@@ -603,7 +513,9 @@ export const DrillPanel = ({
                   each append so the newest steps stay in view. */}
               <PathChipStrip
                 path={path}
-                onRemove={(idx) => setPath((p) => p.filter((_, j) => j !== idx))}
+                onRemove={(idx) =>
+                  setPath((p) => p.filter((_, j) => j !== idx))
+                }
               />
               {path.length >= MAX_DRILL_PATH && (
                 <AppText
@@ -710,6 +622,20 @@ export const DrillPanel = ({
         </View>
       )}
 
+      <DrillSettingsModal
+        visible={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onModeInfo={() => setModeInfoOpen(true)}
+        uiMode={uiMode}
+        setUiMode={setUiMode}
+        stopBy={stopBy}
+        setStopBy={setStopBy}
+        count={count}
+        setCount={setCount}
+        durationMs={durationMs}
+        setDurationMs={setDurationMs}
+      />
+
       <ModeInfoModal
         visible={modeInfoOpen}
         onDismiss={() => setModeInfoOpen(false)}
@@ -718,7 +644,7 @@ export const DrillPanel = ({
           description: MODE_DESC[m.key],
         }))}
       />
-      </ScrollView>
+    </ScrollView>
   );
 };
 
@@ -745,18 +671,31 @@ const styles = StyleSheet.create({
   errorLine: {
     alignSelf: "stretch",
   },
-  // Full-width Start / Stop — the hero action in the scrolling column,
-  // stretched across the surface right under the court.
-  runButton: {
+  // The gear + Start/Stop row: a compact outline gear beside the full-width
+  // primary action, a gap between them, both with the normal rounded corners.
+  actionRow: {
     alignSelf: "stretch",
+    flexDirection: "row",
+    gap: 8,
   },
-  // The idle primary action, balanced so it sits centred between the court and
-  // the Mode row (the court's bottom strip pads the gap above it — see
-  // START_STRIP_BALANCE). Running/done use the plain runButton (a status line
-  // follows them, so there's nothing to centre against).
-  runButtonPrimary: {
-    alignSelf: "stretch",
+  // Idle: balance the row so it sits centred between the court and the config
+  // below (the court's bottom strip pads the gap above — see START_STRIP_BALANCE).
+  // Running/done drop it (a status line follows, nothing to centre against).
+  actionRowBalance: {
     marginBottom: START_STRIP_BALANCE,
+  },
+  // The gear: a compact outline square — white fill, thick accent border, sized
+  // to the icon with equal padding all round (no flex, so it stays small).
+  settingsButton: {
+    backgroundColor: colors.background,
+    borderColor: colors.accent,
+    borderWidth: 2,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
+  // Start / Stop fills the rest of the row.
+  actionButton: {
+    flex: 1,
   },
   dimmed: {
     opacity: 0.4,
@@ -797,30 +736,6 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: colors.border,
     marginTop: 2,
-  },
-  stopRow: {
-    alignSelf: "stretch",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  stopChips: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  paramLabel: {
-    flexShrink: 1,
-  },
-  // "Mode" label + its info icon, kept together on the left of the row.
-  modeLabel: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  infoButton: {
-    alignItems: "center",
-    justifyContent: "center",
   },
   pathActions: {
     flexDirection: "row",
