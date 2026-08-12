@@ -34,6 +34,7 @@ export const DrillScreen = () => {
     connectionError,
     pairedSpots,
     settings,
+    setSettings,
     courtRotation,
     rotateCourt,
     drillView,
@@ -44,6 +45,7 @@ export const DrillScreen = () => {
       connectionError: s.connectionError,
       pairedSpots: s.pairedSpots,
       settings: s.settings,
+      setSettings: s.setSettings,
       courtRotation: s.courtRotation,
       rotateCourt: s.rotateCourt,
       drillView: s.drillView,
@@ -62,6 +64,7 @@ export const DrillScreen = () => {
           transport={transport}
           pairedSpots={pairedSpots}
           settings={settings}
+          onSettingsChange={setSettings}
           rotation={courtRotation}
           onRotate={rotateCourt}
           onSessionComplete={(s) => void appendSession(s)}

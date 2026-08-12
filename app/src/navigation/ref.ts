@@ -8,7 +8,7 @@ import { createNavigationContainerRef } from "@react-navigation/native";
 export type RootTabParamList = {
   Account: undefined;
   Drill: undefined;
-  Settings: undefined;
+  History: undefined;
 };
 
 /**

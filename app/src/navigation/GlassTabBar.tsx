@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppText } from "../components/AppText";
-import { AccountIcon, DrillIcon, GearIcon } from "../components/Icons";
+import { AccountIcon, DrillIcon, HistoryIcon } from "../components/Icons";
 import { alpha, colors, glowShadow } from "../theme";
 
 /**
@@ -111,7 +111,7 @@ export const GlassTabBar = ({ state, navigation }: BottomTabBarProps) => {
                 {route.name === "Account" ? (
                   <AccountIcon color={color} size={26} />
                 ) : (
-                  <GearIcon color={color} size={26} />
+                  <HistoryIcon color={color} size={26} />
                 )}
                 <AppText size={11} weight="600" color={color}>
                   {route.name}

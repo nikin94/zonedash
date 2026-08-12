@@ -1,11 +1,13 @@
 import { Modal, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { type DrillSettings } from "../../state/AppState";
 import { colors } from "../../theme";
 import { AppText } from "../AppText";
 import { Button } from "../Button";
 import { CustomPressable } from "../CustomPressable";
 import { CloseIcon, InfoIcon } from "../Icons";
+import { SettingsPanel } from "../SettingsPanel";
 import { WheelField } from "../WheelField";
 import {
   COUNT_OPTIONS,
@@ -42,6 +44,8 @@ export const DrillSettingsModal = ({
   setCount,
   durationMs,
   setDurationMs,
+  settings,
+  onSettingsChange,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -55,6 +59,10 @@ export const DrillSettingsModal = ({
   setCount: (n: number) => void;
   durationMs: number;
   setDurationMs: (ms: number) => void;
+  /** The session-wide drill settings (delay + immediate repeat), edited here now
+   *  that the Settings tab is gone — the History list took its place. */
+  settings: DrillSettings;
+  onSettingsChange: (next: DrillSettings) => void;
 }) => {
   const insets = useSafeAreaInsets();
   return (
@@ -167,6 +175,17 @@ export const DrillSettingsModal = ({
                 : "Light targets by hand during the run — one tap each."}
             </AppText>
           )}
+
+          {/* The session-wide drill settings (delay + immediate repeat) live
+              here under a divider now — the Settings tab became History. The
+              embedded style drops the panel's own screen padding so it flows in
+              this page's column. */}
+          <View style={styles.divider} />
+          <SettingsPanel
+            settings={settings}
+            onChange={onSettingsChange}
+            style={styles.settings}
+          />
         </ScrollView>
       </View>
     </Modal>
@@ -222,5 +241,17 @@ const styles = StyleSheet.create({
   },
   hint: {
     lineHeight: 18,
+  },
+  // Separates the mode/params from the session-wide settings below.
+  divider: {
+    height: 1,
+    marginTop: 4,
+    backgroundColor: colors.border,
+  },
+  // The embedded SettingsPanel: drop its own screen padding (the page column
+  // already insets), keep it flush with the rest of the setup.
+  settings: {
+    paddingHorizontal: 0,
+    paddingTop: 0,
   },
 });

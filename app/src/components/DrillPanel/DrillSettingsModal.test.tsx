@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react-native";
 
+import { DEFAULT_SETTINGS } from "../../state/AppState";
 import { DrillSettingsModal } from "./DrillSettingsModal";
 
 const setup = (overrides: Record<string, unknown> = {}) => {
@@ -15,6 +16,8 @@ const setup = (overrides: Record<string, unknown> = {}) => {
     setCount: jest.fn(),
     durationMs: 30000,
     setDurationMs: jest.fn(),
+    settings: DEFAULT_SETTINGS,
+    onSettingsChange: jest.fn(),
     ...overrides,
   };
   render(<DrillSettingsModal {...props} />);
@@ -53,4 +56,19 @@ test("picking a mode reports it; the info icon and close fire their callbacks", 
   expect(p.onModeInfo).toHaveBeenCalled();
   fireEvent.press(screen.getByTestId("drill-settings-close"));
   expect(p.onClose).toHaveBeenCalled();
+});
+
+// The session-wide drill settings (delay + immediate repeat) moved onto this
+// page under a divider — the Settings tab became History. Toggling the repeat
+// switch reports the changed settings up to the caller.
+test("the drill settings live on the page and edit through onSettingsChange", () => {
+  const p = setup();
+  expect(screen.getByText("Delay between targets")).toBeTruthy();
+  expect(screen.getByText("Same target twice in a row")).toBeTruthy();
+
+  fireEvent(screen.getByTestId("repeat-switch"), "valueChange", true);
+  expect(p.onSettingsChange).toHaveBeenCalledWith({
+    ...DEFAULT_SETTINGS,
+    allowImmediateRepeat: true,
+  });
 });

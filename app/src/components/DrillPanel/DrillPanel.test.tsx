@@ -53,8 +53,19 @@ const connectedTransport = async () => {
   return t;
 };
 
+// Settings persistence is exercised on its own (DrillSettingsModal); these
+// render helpers just need a no-op so the required prop is satisfied.
+const noop = () => {};
+
 const panel = (t: MockCentralTransport, paired = PAIRED, settings = SETTINGS) =>
-  render(<DrillPanel transport={t} pairedSpots={paired} settings={settings} />);
+  render(
+    <DrillPanel
+      transport={t}
+      pairedSpots={paired}
+      settings={settings}
+      onSettingsChange={noop}
+    />,
+  );
 
 // Mode + the Random params moved to the drill-setup page (a modal behind the
 // gear beside Start). These open it, make the selection, and close — the way the
@@ -299,7 +310,12 @@ test("a re-pair filters the authored path — nothing translates to -1", async (
   const t = await connectedTransport();
   const load = jest.spyOn(t, "loadDrill");
   const { rerender } = render(
-    <DrillPanel transport={t} pairedSpots={PAIRED} settings={SETTINGS} />,
+    <DrillPanel
+      transport={t}
+      pairedSpots={PAIRED}
+      settings={SETTINGS}
+      onSettingsChange={noop}
+    />,
   );
 
   selectMode("Path");
@@ -308,7 +324,12 @@ test("a re-pair filters the authored path — nothing translates to -1", async (
 
   // Re-pair drops spot 6 (kept 0 and 7) — the stale step must vanish.
   rerender(
-    <DrillPanel transport={t} pairedSpots={[0, 7]} settings={SETTINGS} />,
+    <DrillPanel
+      transport={t}
+      pairedSpots={[0, 7]}
+      settings={SETTINGS}
+      onSettingsChange={noop}
+    />,
   );
   expect(pathCodes()).toEqual(["FL"]);
 
@@ -459,6 +480,7 @@ test("a layout change after a run clears the stale results summary", async () =>
       transport={t}
       pairedSpots={PAIRED}
       settings={DEFAULT_SETTINGS}
+      onSettingsChange={noop}
     />,
   );
 
@@ -475,6 +497,7 @@ test("a layout change after a run clears the stale results summary", async () =>
       transport={t}
       pairedSpots={[1, 2, 3]}
       settings={DEFAULT_SETTINGS}
+      onSettingsChange={noop}
     />,
   );
   expect(screen.queryByTestId("stats-panel")).toBeNull();
@@ -488,6 +511,7 @@ test("a finished run reports a summary to onSessionComplete exactly once", async
       transport={t}
       pairedSpots={PAIRED}
       settings={SETTINGS}
+      onSettingsChange={noop}
       onSessionComplete={onSessionComplete}
     />,
   );
@@ -518,6 +542,7 @@ test("an aborted run with no attempts is not logged", async () => {
       transport={t}
       pairedSpots={PAIRED}
       settings={SETTINGS}
+      onSettingsChange={noop}
       onSessionComplete={onSessionComplete}
     />,
   );
