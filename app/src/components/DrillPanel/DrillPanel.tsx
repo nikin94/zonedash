@@ -417,25 +417,26 @@ export const DrillPanel = ({
         onRotate={onRotate}
       />
 
-      {/* Under the court: a settings gear beside the primary action (Start —
-            constant label, even after a finished run — or Stop). The two read as
-            one segmented control: a gap between them, outer corners rounded,
-            touching corners square. The gear opens the drill-setup page; it's
-            disabled while a run is on, when the config is locked. The idle row
-            carries the strip-balance margin so it sits centred under the court. */}
+      {/* Under the court: a compact settings gear beside the primary action
+            (Start — constant label, even after a finished run — or Stop). The
+            gear is an outline square — white fill, thick accent border, icon +
+            equal padding — sitting just left of the full-width Start, a gap
+            between them, both with the normal rounded corners. It opens the
+            drill-setup page; disabled while a run is on, when the config is
+            locked. The idle row carries the strip-balance margin so it sits
+            centred under the court. */}
       <View
         testID="action-row"
         style={[styles.actionRow, !running && styles.actionRowBalance]}
       >
         <Button
-          primary
           disabled={running}
           onPress={() => setSettingsOpen(true)}
           testID="drill-settings-button"
           accessibilityLabel="Drill setup"
-          style={[styles.settingsButton, styles.segStart]}
+          style={styles.settingsButton}
         >
-          <GearIcon size={22} color={colors.background} />
+          <GearIcon size={22} color={colors.accent} />
         </Button>
         {running ? (
           <Button
@@ -444,7 +445,7 @@ export const DrillPanel = ({
             danger
             textSize={17}
             testID="primary-action"
-            style={[styles.actionButton, styles.segEnd]}
+            style={styles.actionButton}
           />
         ) : (
           <Button
@@ -454,7 +455,7 @@ export const DrillPanel = ({
             disabled={!canStart}
             onPress={start}
             testID="primary-action"
-            style={[styles.actionButton, styles.segEnd]}
+            style={styles.actionButton}
           />
         )}
       </View>
@@ -670,8 +671,8 @@ const styles = StyleSheet.create({
   errorLine: {
     alignSelf: "stretch",
   },
-  // The gear + Start/Stop row, read as one segmented control (gap between,
-  // outer corners rounded, touching corners squared by segStart/segEnd).
+  // The gear + Start/Stop row: a compact outline gear beside the full-width
+  // primary action, a gap between them, both with the normal rounded corners.
   actionRow: {
     alignSelf: "stretch",
     flexDirection: "row",
@@ -683,22 +684,18 @@ const styles = StyleSheet.create({
   actionRowBalance: {
     marginBottom: START_STRIP_BALANCE,
   },
-  // The gear: a compact accent square, ~1/3 the row (Start takes the rest).
+  // The gear: a compact outline square — white fill, thick accent border, sized
+  // to the icon with equal padding all round (no flex, so it stays small).
   settingsButton: {
-    flex: 1,
+    backgroundColor: colors.background,
+    borderColor: colors.accent,
+    borderWidth: 2,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
   },
   // Start / Stop fills the rest of the row.
   actionButton: {
-    flex: 2,
-  },
-  // Squared touching corners so the pair reads as one segmented control.
-  segStart: {
-    borderTopRightRadius: 0,
-    borderBottomRightRadius: 0,
-  },
-  segEnd: {
-    borderTopLeftRadius: 0,
-    borderBottomLeftRadius: 0,
+    flex: 1,
   },
   dimmed: {
     opacity: 0.4,

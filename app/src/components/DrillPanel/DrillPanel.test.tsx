@@ -756,10 +756,11 @@ test("the idle Start is an accent hero button, its row centred below the court",
   expect(row.marginBottom).toBeGreaterThan(0);
 });
 
-// The gear + Start read as one segmented control: a gap between them, outer
-// corners rounded, the touching (inner) corners squared. The gear opens the
-// drill-setup page and is an accent square (~1/3 the row).
-test("the gear + Start form a segmented pair — touching corners squared", async () => {
+// The gear is a compact outline square beside the full-width Start: a white
+// fill with a thick accent border and equal padding (sized to the icon, no
+// flex), and BOTH buttons keep the normal rounded corners — no segmented
+// squaring. It opens the drill-setup page.
+test("the gear is a compact white outline square; both buttons keep rounded corners", async () => {
   const t = await connectedTransport();
   panel(t);
 
@@ -769,13 +770,15 @@ test("the gear + Start form a segmented pair — touching corners squared", asyn
   const start = StyleSheet.flatten(
     screen.getByTestId("primary-action").props.style,
   );
-  // The gear is an accent square; its RIGHT corners (facing Start) are squared.
-  expect(gear.backgroundColor).toBe(colors.accent);
-  expect(gear.borderTopRightRadius).toBe(0);
-  expect(gear.borderBottomRightRadius).toBe(0);
-  // Start's LEFT corners (facing the gear) are squared; outer corners keep the
-  // base radius (so borderRadius stays > 0).
-  expect(start.borderTopLeftRadius).toBe(0);
-  expect(start.borderBottomLeftRadius).toBe(0);
+  // White fill, thick accent border — an outline gear, not a filled accent square.
+  expect(gear.backgroundColor).toBe(colors.background);
+  expect(gear.borderColor).toBe(colors.accent);
+  expect(gear.borderWidth).toBeGreaterThan(1);
+  // Equal padding round the icon, and content-sized (no flex, so it stays small).
+  expect(gear.paddingVertical).toBe(gear.paddingHorizontal);
+  expect(gear.flex).toBeUndefined();
+  // Neither button squares its corners — both keep the base rounded radius.
+  expect(gear.borderTopRightRadius).toBeUndefined();
+  expect(start.borderTopLeftRadius).toBeUndefined();
   expect(start.borderRadius).toBeGreaterThan(0);
 });
