@@ -6,7 +6,7 @@ import { AppHeader } from "../components/AppHeader";
 import { AccountScreen } from "../screens/AccountScreen";
 import { DrillScreen } from "../screens/DrillScreen";
 import { SettingsScreen } from "../screens/SettingsScreen";
-import { useAppState } from "../state/AppState";
+import { useAppStore } from "../state/AppState";
 import { colors } from "../theme";
 import { GlassTabBar } from "./GlassTabBar";
 import { navigationRef, type RootTabParamList } from "./ref";
@@ -26,7 +26,7 @@ const Tab = createBottomTabNavigator<RootTabParamList>();
  * from the transport snapshot, so even a Drill-tab remount is seamless.
  */
 export const RootNavigator = () => {
-  const { resetToPairing } = useAppState();
+  const resetToPairing = useAppStore((s) => s.resetToPairing);
 
   // Re-pair from the header: reset the drill surface to pairing and jump to the
   // Drill tab so the operator sees the round they just started.

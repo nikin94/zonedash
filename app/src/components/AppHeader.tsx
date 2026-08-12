@@ -3,7 +3,9 @@ import { StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import type { ConnectionState } from "../ble/transport";
-import { useAppState } from "../state/AppState";
+import { useShallow } from "zustand/react/shallow";
+
+import { useAppStore } from "../state/AppState";
 import { colors, glowShadow } from "../theme";
 import { AppText } from "./AppText";
 import { ConfirmModal } from "./ConfirmModal";
@@ -44,7 +46,13 @@ export const AppHeader = ({
    *  Offered in the pill menu only once a layout exists. */
   onRepair?: () => void;
 }) => {
-  const { transport, connection, pairedSpots } = useAppState();
+  const { transport, connection, pairedSpots } = useAppStore(
+    useShallow((s) => ({
+      transport: s.transport,
+      connection: s.connection,
+      pairedSpots: s.pairedSpots,
+    })),
+  );
   const insets = useSafeAreaInsets();
   const [menuOpen, setMenuOpen] = useState(false);
   const [disconnectAsk, setDisconnectAsk] = useState(false);

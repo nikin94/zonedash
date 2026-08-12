@@ -2,12 +2,13 @@ import { useCallback, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
 import { useFocusEffect } from "@react-navigation/native";
+import { useShallow } from "zustand/react/shallow";
 
 import { AccountSection } from "../components/AccountSection";
 import { AppText } from "../components/AppText";
 import { HistoryPanel } from "../components/HistoryPanel";
 import { ScreenWrapper } from "../components/ScreenWrapper";
-import { useAppState } from "../state/AppState";
+import { useAppStore } from "../state/AppState";
 import { colors } from "../theme";
 
 /**
@@ -22,7 +23,16 @@ import { colors } from "../theme";
  */
 export const AccountScreen = () => {
   const { authStatus, authUser, authError, signIn, signOut, historyVersion } =
-    useAppState();
+    useAppStore(
+      useShallow((s) => ({
+        authStatus: s.authStatus,
+        authUser: s.authUser,
+        authError: s.authError,
+        signIn: s.signIn,
+        signOut: s.signOut,
+        historyVersion: s.historyVersion,
+      })),
+    );
 
   // Bump on focus so HistoryPanel re-reads the log each time the tab is shown.
   const [focusKey, setFocusKey] = useState(0);

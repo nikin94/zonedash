@@ -1,5 +1,7 @@
 import { StyleSheet, View } from "react-native";
 
+import { useShallow } from "zustand/react/shallow";
+
 import { AppText } from "../components/AppText";
 import { CourtMap } from "../components/CourtMap";
 import { DrillPanel } from "../components/DrillPanel";
@@ -7,7 +9,7 @@ import { PairingPanel } from "../components/PairingPanel";
 import { ScreenWrapper } from "../components/ScreenWrapper";
 import { type SpotVisual } from "../helpers/court";
 import { appendSession } from "../state/history";
-import { useAppState } from "../state/AppState";
+import { useAppStore } from "../state/AppState";
 import { colors } from "../theme";
 
 const OFF_SPOTS: SpotVisual[] = Array.from({ length: 8 }, () => "off");
@@ -22,7 +24,7 @@ const OFF_SPOTS: SpotVisual[] = Array.from({ length: 8 }, () => "off");
  *
  * The pairing → drill handoff and Re-pair now live in AppState (`drillView`), so
  * they survive a tab switch or a remount of this screen. The transport is read
- * from context (owned above the navigator), so navigating away and back never
+ * from the store (owned above the navigator), so navigating away and back never
  * drops the live session — DrillPanel rehydrates from its snapshot.
  */
 export const DrillScreen = () => {
@@ -35,7 +37,18 @@ export const DrillScreen = () => {
     courtRotation,
     rotateCourt,
     drillView,
-  } = useAppState();
+  } = useAppStore(
+    useShallow((s) => ({
+      transport: s.transport,
+      connection: s.connection,
+      connectionError: s.connectionError,
+      pairedSpots: s.pairedSpots,
+      settings: s.settings,
+      courtRotation: s.courtRotation,
+      rotateCourt: s.rotateCourt,
+      drillView: s.drillView,
+    })),
+  );
 
   const connected = connection === "connected";
   const paired = pairedSpots.length > 0;
