@@ -23,10 +23,24 @@ import { alpha, colors, glowShadow } from "../theme";
  *
  * Presentation only: focus state and the route list come from the navigator.
  */
-// Floor for the bar's bottom padding. On a device with a home-indicator gap
-// `insets.bottom` already lifts the icons off the edge; on a square/legacy
-// device it reports 0, so this keeps the icons from hugging the screen bottom.
-const MIN_BOTTOM_PADDING = 16;
+// Bar geometry — the single source of truth for both the bar itself and the
+// content-side clearance a screen must leave so its own bottom content isn't
+// hidden behind this floating (translucent) bar.
+/** The icon row's height. */
+export const TAB_BAR_ROW_H = 58;
+/** Floor for the bar's bottom padding. On a device with a home-indicator gap
+ *  `insets.bottom` already lifts the icons off the edge; on a square/legacy
+ *  device it reports 0, so this keeps the icons from hugging the screen bottom. */
+export const TAB_BAR_MIN_BOTTOM = 16;
+/** How far the centre (Drill) disc pokes UP above the bar's row — content that
+ *  sits under the disc (e.g. a full-width pinned button) must clear this too. */
+export const TAB_BAR_DISC_RISE = 22;
+
+/** Vertical space a screen's own bottom content must leave to clear the floating
+ *  bar (its row + the home-indicator gap). Add TAB_BAR_DISC_RISE on top for
+ *  content under the centre disc. */
+export const tabBarClearance = (insetBottom: number): number =>
+  TAB_BAR_ROW_H + Math.max(insetBottom, TAB_BAR_MIN_BOTTOM);
 
 const pressStyle = ({ pressed }: { pressed: boolean }) => [
   styles.tap,
@@ -49,7 +63,7 @@ export const GlassTabBar = ({ state, navigation }: BottomTabBarProps) => {
     <View
       style={[
         styles.wrap,
-        { paddingBottom: Math.max(insets.bottom, MIN_BOTTOM_PADDING) },
+        { paddingBottom: Math.max(insets.bottom, TAB_BAR_MIN_BOTTOM) },
       ]}
     >
       {/* The frost. tint "light" over the white page reads as a subtle glass
@@ -120,7 +134,7 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    height: 58,
+    height: TAB_BAR_ROW_H,
   },
   // A side column — fills half the remaining space so its centred tap target
   // lands midway between the centre disc and the screen edge.
@@ -155,7 +169,7 @@ const styles = StyleSheet.create({
     width: 58,
     height: 58,
     borderRadius: 29,
-    marginTop: -22,
+    marginTop: -TAB_BAR_DISC_RISE,
     backgroundColor: colors.accent,
     alignItems: "center",
     justifyContent: "center",

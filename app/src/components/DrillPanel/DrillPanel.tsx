@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import type { HitRecord } from "../../ble/contract";
 import type {
@@ -9,15 +10,22 @@ import type {
 } from "../../ble/transport";
 import { AppText } from "../AppText";
 import { Button } from "../Button";
-import { PathChip } from "./PathChip";
+import { CustomPressable } from "../CustomPressable";
+import { InfoIcon } from "../Icons";
+import { PathChipStrip } from "./PathChipStrip";
+import { ModeInfoModal } from "./ModeInfoModal";
 import { MAX_DRILL_PATH } from "../../ble/codec";
 import { CourtMap, SpotIcon } from "../CourtMap";
 import { msOptions, WheelField } from "../WheelField";
 import { SPOT_CODES, SPOT_NAMES } from "../../domain/spot";
 import { summarize, type SessionSummary } from "../../domain/session";
-import { SURFACE_MARGIN_TOP, type SpotVisual } from "../../helpers/court";
+import { type SpotVisual } from "../../helpers/court";
 import { formatStepBadge } from "../../helpers/pathBadge";
 import { type DrillSettings } from "../../state/AppState";
+import {
+  TAB_BAR_DISC_RISE,
+  tabBarClearance,
+} from "../../navigation/GlassTabBar";
 import { colors } from "../../theme";
 
 const COUNT_OPTIONS = Array.from({ length: 99 }, (_, i) => ({
@@ -37,8 +45,15 @@ const fmtSec = (ms: number) => `${(ms / 1000).toFixed(2)} ${UNIT}`;
 
 // Fixed footprints for the court-centre block, so idle → running → done never
 // shifts the layout.
-const TEXT_SLOT_H = 60; // 3 lines at lineHeight 20
-const ERROR_SLOT_H = 18;
+const TEXT_SLOT_H = 40; // fixed status area: room for the 2-line running status
+// Breathing room between the last scrolled item and the tab bar's centre
+// (Drill) disc, on top of the bar clearance (tabBarClearance + TAB_BAR_DISC_RISE).
+const ACTION_BAR_GAP = 12;
+// CourtMap reserves a fixed bottom strip (its net-line frame, CourtMap STRIP_H)
+// UNDER the court box, so the gap above Start already includes it while the gap
+// below is just the panel's own gap — Start ends up hugging the Mode row. Match
+// that strip below the button so Start sits centred between the court and Mode.
+const START_STRIP_BALANCE = 22;
 
 /** UI modes. The engine's `random` and `time` differ only in the stop
  *  condition (rep count vs duration window), so the UI folds them into one
@@ -114,6 +129,15 @@ export const DrillPanel = ({
   // pairedSpots, on the session axis. Scoped to `running`: a finished session
   // rehydrates to a fresh idle Start (the operator left; re-authoring is the
   // likely next step, and its records were never theirs to keep across a leave).
+  const insets = useSafeAreaInsets();
+  // The scrolling column extends under the FLOATING (translucent) tab bar, so
+  // its bottom padding must clear the bar's full footprint plus the centre
+  // disc's upward poke, plus a gap — otherwise the last item (Start, when the
+  // config is short) sits under the bar. Derived from the bar's own exported
+  // geometry so a bar resize can't silently re-hide it.
+  const scrollPadBottom =
+    tabBarClearance(insets.bottom) + TAB_BAR_DISC_RISE + ACTION_BAR_GAP;
+
   const [snap] = useState(() => transport.sessionSnapshot);
   const live = snap.state === "running";
   const ui = uiFromWire(snap.mode);
@@ -157,18 +181,9 @@ export const DrillPanel = ({
   const [liveBusy, setLiveBusy] = useState(live && snap.armedPosition != null);
   const [records, setRecords] = useState<HitRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The drill-modes explainer (opened from the info icon by the Mode selector).
+  const [modeInfoOpen, setModeInfoOpen] = useState(false);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // The Path step-chip strip, scrolled to its end whenever a step is appended so
-  // the newest chips stay in view instead of running off the right edge.
-  const pathChipsRef = useRef<ScrollView>(null);
-  const prevPathLen = useRef(path.length);
-  useEffect(() => {
-    if (path.length > prevPathLen.current) {
-      pathChipsRef.current?.scrollToEnd({ animated: true });
-    }
-    prevPathLen.current = path.length;
-  }, [path.length]);
-
   useEffect(() => {
     const unsub = transport.onStatus((e) => {
       if (e.kind === "progress") {
@@ -390,82 +405,99 @@ export const DrillPanel = ({
   return (
     <ScrollView
       testID="drill-surface"
-      contentContainerStyle={styles.panel}
+      contentContainerStyle={[styles.panel, { paddingBottom: scrollPadBottom }]}
       showsVerticalScrollIndicator={false}
     >
-      <CourtMap
-        spots={visuals}
-        badges={pathBadges}
-        route={showPathBadges ? path : undefined}
-        onPressSpot={
-          liveRunning || (!running && uiMode === "path")
-            ? onCourtTap
-            : undefined
-        }
-        rotation={rotation}
-        onRotate={onRotate}
-      >
-        <View style={styles.textSlot}>
-          {running ? (
-            <>
-              <AppText center size={16} weight="600" style={styles.slotText}>
-                Step {resolvedCount + 1}
-              </AppText>
-              <AppText
-                center
-                size={13}
-                color={runStatusHit ? colors.success : colors.textMuted}
-                style={styles.slotText}
-              >
-                {runStatus}
-              </AppText>
-            </>
-          ) : showDone && records !== null ? (
-            // Numbers live in the results panel below — the court just marks
-            // the session done, so the map stays uncluttered.
-            <AppText center size={16} weight="600" style={styles.slotText}>
-              Session complete
-            </AppText>
-          ) : showDone ? (
-            <AppText
-              center
-              size={13}
-              color={colors.textMuted}
-              style={styles.slotText}
-            >
-              Fetching results…
-            </AppText>
-          ) : (
-            <AppText
-              center
-              size={13}
-              color={colors.textMuted}
-              style={styles.slotText}
-            >
-              Pick a drill below, then Start
-            </AppText>
-          )}
-        </View>
+        {/* A clean court — its schema, targets, route and preview read
+            unobstructed. The status line, drill config and the primary action
+            all live OUTSIDE the court now: below it in the scrolling column. */}
+        <CourtMap
+          spots={visuals}
+          badges={pathBadges}
+          route={showPathBadges ? path : undefined}
+          onPressSpot={
+            liveRunning || (!running && uiMode === "path")
+              ? onCourtTap
+              : undefined
+          }
+          rotation={rotation}
+          onRotate={onRotate}
+        />
 
-        <View style={styles.errorSlot}>
-          {error !== null && (
-            <AppText center size={13} numberOfLines={1} color={colors.danger}>
-              {error}
-            </AppText>
-          )}
-        </View>
-
+        {/* The primary action, immediately under the court — a full-width
+            Start/Stop/Run again. It scrolls with the content (no pinned bar) but
+            sits right below the map so it's always the first control in reach. */}
         {running ? (
-          <Button label="Stop" onPress={stop} style={styles.runButton} />
+          <Button
+            label="Stop"
+            onPress={stop}
+            danger
+            textSize={17}
+            testID="primary-action"
+            style={styles.runButton}
+          />
         ) : (
           <Button
             label={showDone ? "Run again" : "Start"}
+            primary
+            textSize={17}
             disabled={!canStart}
             onPress={start}
-            style={styles.runButton}
+            testID="primary-action"
+            style={styles.runButtonPrimary}
           />
         )}
-      </CourtMap>
+
+        {/* Status line — only while a run is live or has just finished. Idle
+            shows nothing here, so the Mode selector sits directly under Start.
+            Fixed height so a one-line (done) and two-line (running) status never
+            nudge the config below. */}
+        {(running || showDone) && (
+          <View testID="status-slot" style={styles.statusSlot}>
+            {running ? (
+              <>
+                <AppText center size={16} weight="600" style={styles.slotText}>
+                  Step {resolvedCount + 1}
+                </AppText>
+                <AppText
+                  center
+                  size={13}
+                  color={runStatusHit ? colors.success : colors.textMuted}
+                  style={styles.slotText}
+                >
+                  {runStatus}
+                </AppText>
+              </>
+            ) : showDone && records !== null ? (
+              // Numbers live in the results panel below — the court just marks
+              // the session done, so the map stays uncluttered.
+              <AppText center size={16} weight="600" style={styles.slotText}>
+                Session complete
+              </AppText>
+            ) : (
+              <AppText
+                center
+                size={13}
+                color={colors.textMuted}
+                style={styles.slotText}
+              >
+                Fetching results…
+              </AppText>
+            )}
+          </View>
+        )}
+
+        {error !== null && (
+          <AppText
+            center
+            size={13}
+            numberOfLines={1}
+            color={colors.danger}
+            style={styles.errorLine}
+          >
+            {error}
+          </AppText>
+        )}
 
       {/* The drill config lives under the court; locked while a run is on so
           the loaded drill always matches what is on screen. */}
@@ -474,9 +506,23 @@ export const DrillPanel = ({
         style={[styles.config, running && styles.dimmed]}
       >
         <View style={styles.stopRow}>
-          <AppText color={colors.textSecondary} style={styles.paramLabel}>
-            Mode
-          </AppText>
+          <View style={styles.modeLabel}>
+            <AppText color={colors.textSecondary} style={styles.paramLabel}>
+              Mode
+            </AppText>
+            {/* The per-mode descriptions moved off the always-on line into this
+                on-demand modal, so the setup stays compact. */}
+            <CustomPressable
+              noFeedback
+              hitSlop={10}
+              testID="mode-info-button"
+              accessibilityLabel="About drill modes"
+              onPress={() => setModeInfoOpen(true)}
+              style={styles.infoButton}
+            >
+              <InfoIcon size={16} color={colors.textMuted} />
+            </CustomPressable>
+          </View>
           <View style={styles.stopChips}>
             {MODES.map((m) => (
               <Button
@@ -492,9 +538,6 @@ export const DrillPanel = ({
             ))}
           </View>
         </View>
-        <AppText center size={12} color={colors.textMuted} testID="mode-desc">
-          {MODE_DESC[uiMode]}
-        </AppText>
 
         {uiMode === "random" && (
           <>
@@ -547,30 +590,15 @@ export const DrillPanel = ({
             <>
               {/* Ordered step chips — the sequence, in order, each removable by
                   a tap (a targeted delete the map badges point back to). A
-                  repeat shows twice, so the sequence stays unambiguous. A single
-                  horizontal strip (the path can run to MAX_DRILL_PATH steps): it
-                  auto-scrolls to the end on each append, so the LATEST steps stay
-                  in view rather than the row spilling its newest off-screen. */}
-              <ScrollView
-                ref={pathChipsRef}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                testID="path-sequence"
-                style={styles.pathChips}
-                contentContainerStyle={styles.pathChipsContent}
-              >
-                {path.map((s, idx) => (
-                  <PathChip
-                    key={idx}
-                    index={idx}
-                    code={SPOT_CODES[s]}
-                    label={SPOT_NAMES[s]}
-                    onRemove={() =>
-                      setPath((p) => p.filter((_, j) => j !== idx))
-                    }
-                  />
-                ))}
-              </ScrollView>
+                  repeat shows twice, so the sequence stays unambiguous. The
+                  strip scrolls (the path can run to MAX_DRILL_PATH steps) and
+                  fades its overflowing edges so it reads as scrollable, not a
+                  row silently running off-screen; it auto-scrolls to the end on
+                  each append so the newest steps stay in view. */}
+              <PathChipStrip
+                path={path}
+                onRemove={(idx) => setPath((p) => p.filter((_, j) => j !== idx))}
+              />
               {path.length >= MAX_DRILL_PATH && (
                 <AppText
                   center
@@ -675,47 +703,61 @@ export const DrillPanel = ({
           </View>
         </View>
       )}
-    </ScrollView>
+
+      <ModeInfoModal
+        visible={modeInfoOpen}
+        onDismiss={() => setModeInfoOpen(false)}
+        modes={MODES.map((m) => ({
+          label: m.label,
+          description: MODE_DESC[m.key],
+        }))}
+      />
+      </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
   panel: {
-    // Shared with the idle + pairing surfaces so the court doesn't jump when one
-    // replaces another (notably the pairing → drill handoff). See court.ts.
-    marginTop: SURFACE_MARGIN_TOP,
+    // The shared top offset now lives on ScreenWrapper (one place, uniform
+    // across tabs), so all three Drill surfaces share it and none jumps the
+    // court. paddingBottom is applied inline (tab-bar clearance) so the scrolled
+    // column clears the floating bar.
     alignItems: "center",
-    gap: 12,
+    gap: 8,
     alignSelf: "stretch",
     paddingHorizontal: 24,
-    paddingBottom: 32,
   },
-  textSlot: {
+  // The status line, shown only while running/done. Fixed height so a one-line
+  // (done) and a two-line (running) status don't nudge the config below them.
+  statusSlot: {
     height: TEXT_SLOT_H,
-    // Seat the status at the BOTTOM of its fixed slot so a short line (e.g.
-    // "Session complete") sits close to the button below instead of floating
-    // centred with a wide gap. The height stays fixed, so no cross-phase jump.
-    justifyContent: "flex-end",
+    justifyContent: "center",
   },
   slotText: {
     lineHeight: 20,
   },
-  errorSlot: {
-    height: ERROR_SLOT_H,
-    justifyContent: "center",
+  errorLine: {
+    alignSelf: "stretch",
   },
-  // The in-court Start/Stop/Run again button — the shared Button owns its
-  // chrome and disabled state; this only spaces it below the status slots.
+  // Full-width Start/Stop/Run again — the hero action in the scrolling column,
+  // stretched across the surface right under the court.
   runButton: {
-    marginTop: 8,
+    alignSelf: "stretch",
+  },
+  // The idle primary action, balanced so it sits centred between the court and
+  // the Mode row (the court's bottom strip pads the gap above it — see
+  // START_STRIP_BALANCE). Running/done use the plain runButton (a status line
+  // follows them, so there's nothing to centre against).
+  runButtonPrimary: {
+    alignSelf: "stretch",
+    marginBottom: START_STRIP_BALANCE,
   },
   dimmed: {
     opacity: 0.4,
   },
   config: {
     alignSelf: "stretch",
-    gap: 12,
-    marginTop: 8,
+    gap: 8,
   },
   heading: {
     letterSpacing: 2,
@@ -724,7 +766,7 @@ const styles = StyleSheet.create({
   stats: {
     alignSelf: "stretch",
     gap: 10,
-    marginTop: 20,
+    marginTop: 8,
     paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: colors.border,
@@ -764,23 +806,20 @@ const styles = StyleSheet.create({
   paramLabel: {
     flexShrink: 1,
   },
+  // "Mode" label + its info icon, kept together on the left of the row.
+  modeLabel: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  infoButton: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
   pathActions: {
     flexDirection: "row",
     justifyContent: "center",
     gap: 8,
     marginTop: 8,
-  },
-  // A single horizontal strip (not a wrapping block): the path can be long, so
-  // it scrolls, and the content is centred only until it overflows.
-  pathChips: {
-    alignSelf: "stretch",
-    flexGrow: 0,
-  },
-  pathChipsContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    flexGrow: 1,
-    paddingHorizontal: 8,
   },
 });

@@ -4,7 +4,7 @@ import { StyleSheet, View } from "react-native";
 import type { PairingProgress } from "../../ble/contract";
 import type { CentralTransport } from "../../ble/transport";
 import { SPOT_NAMES } from "../../domain/spot";
-import { SURFACE_MARGIN_TOP, type SpotVisual } from "../../helpers/court";
+import { type SpotVisual } from "../../helpers/court";
 import { colors } from "../../theme";
 import { AppText } from "../AppText";
 import { Button } from "../Button";
@@ -295,7 +295,9 @@ export const PairingPanel = ({
 
 const styles = StyleSheet.create({
   panel: {
-    marginTop: SURFACE_MARGIN_TOP,
+    // The shared top offset lives on ScreenWrapper now (uniform across tabs),
+    // so all three Drill surfaces sit at the same height with no per-surface
+    // margin — the pairing → drill handoff can't jump the court.
     alignItems: "center",
     gap: 12,
   },

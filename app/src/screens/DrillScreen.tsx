@@ -4,7 +4,8 @@ import { AppText } from "../components/AppText";
 import { CourtMap } from "../components/CourtMap";
 import { DrillPanel } from "../components/DrillPanel";
 import { PairingPanel } from "../components/PairingPanel";
-import { SURFACE_MARGIN_TOP, type SpotVisual } from "../helpers/court";
+import { ScreenWrapper } from "../components/ScreenWrapper";
+import { type SpotVisual } from "../helpers/court";
 import { appendSession } from "../state/history";
 import { useAppState } from "../state/AppState";
 import { colors } from "../theme";
@@ -42,7 +43,7 @@ export const DrillScreen = () => {
   const showPairing = connected && !showDrill;
 
   return (
-    <View style={styles.screen}>
+    <ScreenWrapper>
       {showDrill ? (
         <DrillPanel
           transport={transport}
@@ -80,17 +81,12 @@ export const DrillScreen = () => {
           </CourtMap>
         </View>
       )}
-    </View>
+    </ScreenWrapper>
   );
 };
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
   idle: {
-    marginTop: SURFACE_MARGIN_TOP,
     alignItems: "center",
   },
   hint: {
