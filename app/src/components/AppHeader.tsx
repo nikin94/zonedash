@@ -8,6 +8,19 @@ import { colors, glowShadow } from "../theme";
 import { AppText } from "./AppText";
 import { ConfirmModal } from "./ConfirmModal";
 import { CustomPressable } from "./CustomPressable";
+import { ToastHost } from "./Toast";
+
+/** Header vertical padding, above and below the row. The safe-area top inset is
+ *  added ON TOP of the top pad, so the header's total height is
+ *  `insets.top + HEADER_HEIGHT`. */
+const HEADER_V_PAD = 8;
+/** The status chip is the tallest header content, so it sets the row height. */
+const CHIP_H = 44;
+/** Header height BELOW the safe-area top inset (top pad + row + bottom pad). The
+ *  toast anchors to the header's bottom edge (`insets.top + HEADER_HEIGHT`) so it
+ *  always clears the notch — a percent `top` against the auto-height header
+ *  resolved to ~0 under the New Architecture and drew over the brow. */
+export const HEADER_HEIGHT = HEADER_V_PAD + CHIP_H + HEADER_V_PAD;
 
 /** Brief status-chip label per connection state. */
 const CHIP_LABEL: Record<ConnectionState, string> = {
@@ -71,7 +84,7 @@ export const AppHeader = ({
   };
 
   return (
-    <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+    <View style={[styles.header, { paddingTop: insets.top + HEADER_V_PAD }]}>
       <AppText size={20} weight="700" style={styles.headerTitle}>
         ZoneDash
       </AppText>
@@ -152,6 +165,12 @@ export const AppHeader = ({
           { label: "Re-pair", danger: true, onPress: repair },
         ]}
       />
+
+      {/* App-wide toast, anchored to the header's bottom edge — the header hands
+          it a safe-area-aware offset (below the notch) so it never draws over
+          the brow. Its own store subscription (memoised) means a fired toast
+          re-renders ONLY the toast, never this header. */}
+      <ToastHost topOffset={insets.top + HEADER_HEIGHT} />
     </View>
   );
 };
@@ -163,7 +182,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingBottom: 8,
+    paddingBottom: HEADER_V_PAD,
     zIndex: 20, // the menu + confirm overlay the content below
   },
   headerTitle: {
@@ -173,7 +192,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    height: 44,
+    height: CHIP_H,
     borderRadius: 22,
     borderWidth: 1,
     borderColor: colors.border,
