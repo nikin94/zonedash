@@ -1,0 +1,56 @@
+import { fireEvent, render, screen } from "@testing-library/react-native";
+
+import { DrillSettingsModal } from "./DrillSettingsModal";
+
+const setup = (overrides: Record<string, unknown> = {}) => {
+  const props = {
+    visible: true,
+    onClose: jest.fn(),
+    onModeInfo: jest.fn(),
+    uiMode: "random" as const,
+    setUiMode: jest.fn(),
+    stopBy: "count" as const,
+    setStopBy: jest.fn(),
+    count: 10,
+    setCount: jest.fn(),
+    durationMs: 30000,
+    setDurationMs: jest.fn(),
+    ...overrides,
+  };
+  render(<DrillSettingsModal {...props} />);
+  return props;
+};
+
+test("shows nothing while closed", () => {
+  setup({ visible: false });
+  expect(screen.queryByText("Drill setup")).toBeNull();
+});
+
+test("random mode shows the mode selector, stop-by and the hits wheel", () => {
+  setup();
+  expect(screen.getByText("Drill setup")).toBeTruthy();
+  expect(screen.getByText("Session length")).toBeTruthy();
+  expect(screen.getByText("Targets to hit")).toBeTruthy();
+});
+
+test("stop-by time swaps the hits wheel for the duration wheel", () => {
+  setup({ stopBy: "time" });
+  expect(screen.queryByText("Targets to hit")).toBeNull();
+  expect(screen.getByText("Duration")).toBeTruthy();
+});
+
+test("path/live modes hide the Random params — only a court-authoring hint", () => {
+  setup({ uiMode: "path" });
+  expect(screen.queryByText("Session length")).toBeNull();
+  expect(screen.getByText(/Tap the paired spots/)).toBeTruthy();
+});
+
+test("picking a mode reports it; the info icon and close fire their callbacks", () => {
+  const p = setup();
+  fireEvent.press(screen.getByText("Path"));
+  expect(p.setUiMode).toHaveBeenCalledWith("path");
+  fireEvent.press(screen.getByTestId("mode-info-button"));
+  expect(p.onModeInfo).toHaveBeenCalled();
+  fireEvent.press(screen.getByTestId("drill-settings-close"));
+  expect(p.onClose).toHaveBeenCalled();
+});

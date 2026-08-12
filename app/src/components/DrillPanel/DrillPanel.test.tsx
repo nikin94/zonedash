@@ -1,4 +1,10 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react-native";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react-native";
 
 import { StyleSheet } from "react-native";
 
@@ -36,7 +42,11 @@ const SETTINGS: DrillSettings = {
 // A fixed tap delay makes reaction times deterministic (the app leaves it
 // random in the 750–1000 ms human-paced frame).
 const connectedTransport = async () => {
-  const t = new MockCentralTransport({ latencyMs: 0, stepMs: 100, tapDelayMs: 20 });
+  const t = new MockCentralTransport({
+    latencyMs: 0,
+    stepMs: 100,
+    tapDelayMs: 20,
+  });
   const p = t.connect();
   await jest.runAllTimersAsync();
   await p;
@@ -45,6 +55,20 @@ const connectedTransport = async () => {
 
 const panel = (t: MockCentralTransport, paired = PAIRED, settings = SETTINGS) =>
   render(<DrillPanel transport={t} pairedSpots={paired} settings={settings} />);
+
+// Mode + the Random params moved to the drill-setup page (a modal behind the
+// gear beside Start). These open it, make the selection, and close — the way the
+// operator now drives the config. Path authoring itself still happens on the
+// court, so only the mode/param pick needs the page open.
+const openSetup = () =>
+  fireEvent.press(screen.getByTestId("drill-settings-button"));
+const closeSetup = () =>
+  fireEvent.press(screen.getByTestId("drill-settings-close"));
+const selectMode = (label: string) => {
+  openSetup();
+  fireEvent.press(screen.getByText(label));
+  closeSetup();
+};
 
 beforeEach(() => jest.useFakeTimers());
 afterEach(() => {
@@ -78,9 +102,11 @@ test("stop-by-time resolves to the engine's time mode with a duration", async ()
   const load = jest.spyOn(t, "loadDrill");
   panel(t);
 
+  openSetup();
   fireEvent.press(screen.getByText("Time"));
   expect(screen.queryByText("Targets to hit")).toBeNull();
   expect(screen.getByText("Duration")).toBeTruthy();
+  closeSetup();
 
   fireEvent.press(screen.getByText("Start"));
   await act(() => jest.advanceTimersByTimeAsync(0));
@@ -97,8 +123,10 @@ test("live mode sends exactly mode and positions — no delay or repeat leak", a
   const load = jest.spyOn(t, "loadDrill");
   panel(t);
 
+  openSetup();
   fireEvent.press(screen.getByText("Live"));
   expect(screen.queryByText("Session length")).toBeNull();
+  closeSetup();
   fireEvent.press(screen.getByText("Start"));
   await act(() => jest.advanceTimersByTimeAsync(0));
 
@@ -111,14 +139,18 @@ test("live mode sends exactly mode and positions — no delay or repeat leak", a
 test("live mode is operator-driven — a court tap lights a target at once, then it resolves", async () => {
   // A small fixed tap delay makes the hit beat deterministic (the app leaves
   // it random, 750–1000 ms).
-  const t = new MockCentralTransport({ latencyMs: 0, stepMs: 100, tapDelayMs: 20 });
+  const t = new MockCentralTransport({
+    latencyMs: 0,
+    stepMs: 100,
+    tapDelayMs: 20,
+  });
   const p = t.connect();
   await jest.runAllTimersAsync();
   await p;
   const arm = jest.spyOn(t, "armLiveTarget");
   panel(t, PAIRED, DEFAULT_SETTINGS);
 
-  fireEvent.press(screen.getByText("Live"));
+  selectMode("Live");
   fireEvent.press(screen.getByText("Start"));
   await act(() => jest.advanceTimersByTimeAsync(0));
 
@@ -148,7 +180,7 @@ test("path is authored on the same court map — slot-index wire format", async 
   const load = jest.spyOn(t, "loadDrill");
   panel(t);
 
-  fireEvent.press(screen.getByText("Path"));
+  selectMode("Path");
   // Only paired spots are offered; unpaired stay off. Empty path can't start.
   expect(screen.queryAllByTestId(/spot-\d-available/)).toHaveLength(3);
   expect(screen.getByTestId("spot-2-off")).toBeTruthy();
@@ -183,7 +215,7 @@ test("a heavily reused spot's badge elides its oldest steps, keeping the newest"
   const t = await connectedTransport();
   panel(t);
 
-  fireEvent.press(screen.getByText("Path"));
+  selectMode("Path");
   // BL at steps 1, 3, 5, 7 (FL fills the even steps between).
   for (let i = 0; i < 4; i++) {
     fireEvent.press(screen.getByTestId(/spot-6-(available|selected)/));
@@ -198,7 +230,7 @@ test("path Undo drops the last step; Clear empties the sequence", async () => {
   const t = await connectedTransport();
   panel(t);
 
-  fireEvent.press(screen.getByText("Path"));
+  selectMode("Path");
   fireEvent.press(screen.getByTestId("spot-0-available"));
   fireEvent.press(screen.getByTestId("spot-7-available"));
   expect(pathCodes()).toEqual(["FL", "ML"]);
@@ -215,7 +247,7 @@ test("tapping a step chip removes THAT step, and the badges renumber", async () 
   const t = await connectedTransport();
   panel(t);
 
-  fireEvent.press(screen.getByText("Path"));
+  selectMode("Path");
   // Author FL(0) → ML(7) → BL(6).
   fireEvent.press(screen.getByTestId("spot-0-available"));
   fireEvent.press(screen.getByTestId("spot-7-available"));
@@ -245,27 +277,23 @@ test("tapping a step chip removes THAT step, and the badges renumber", async () 
 // but the boundary is exactly what this test guards, so it can't tap fewer. A
 // generous timeout keeps it green on a slow CI runner (it ran ~2 s locally but
 // tripped the default 5 s cap on CI); real usage never approaches this size.
-test(
-  "authoring past the cap no-ops — the wire path never exceeds MAX_DRILL_PATH",
-  async () => {
-    const t = await connectedTransport();
-    const load = jest.spyOn(t, "loadDrill");
-    panel(t);
+test("authoring past the cap no-ops — the wire path never exceeds MAX_DRILL_PATH", async () => {
+  const t = await connectedTransport();
+  const load = jest.spyOn(t, "loadDrill");
+  panel(t);
 
-    fireEvent.press(screen.getByText("Path"));
-    fireEvent.press(screen.getByTestId("spot-0-available")); // first step (repeats ok)
-    // Tap well past the cap; every append beyond MAX_DRILL_PATH is dropped.
-    for (let i = 1; i < MAX_DRILL_PATH + 10; i++) {
-      fireEvent.press(screen.getByTestId("spot-0-selected"));
-    }
-    expect(screen.getByTestId("path-full")).toBeTruthy();
+  selectMode("Path");
+  fireEvent.press(screen.getByTestId("spot-0-available")); // first step (repeats ok)
+  // Tap well past the cap; every append beyond MAX_DRILL_PATH is dropped.
+  for (let i = 1; i < MAX_DRILL_PATH + 10; i++) {
+    fireEvent.press(screen.getByTestId("spot-0-selected"));
+  }
+  expect(screen.getByTestId("path-full")).toBeTruthy();
 
-    fireEvent.press(screen.getByText("Start"));
-    await act(() => jest.advanceTimersByTimeAsync(0));
-    expect(load.mock.calls[0][0].path).toHaveLength(MAX_DRILL_PATH);
-  },
-  20000,
-);
+  fireEvent.press(screen.getByText("Start"));
+  await act(() => jest.advanceTimersByTimeAsync(0));
+  expect(load.mock.calls[0][0].path).toHaveLength(MAX_DRILL_PATH);
+}, 20000);
 
 test("a re-pair filters the authored path — nothing translates to -1", async () => {
   const t = await connectedTransport();
@@ -274,12 +302,14 @@ test("a re-pair filters the authored path — nothing translates to -1", async (
     <DrillPanel transport={t} pairedSpots={PAIRED} settings={SETTINGS} />,
   );
 
-  fireEvent.press(screen.getByText("Path"));
+  selectMode("Path");
   fireEvent.press(screen.getByTestId("spot-6-available"));
   fireEvent.press(screen.getByTestId("spot-0-available"));
 
   // Re-pair drops spot 6 (kept 0 and 7) — the stale step must vanish.
-  rerender(<DrillPanel transport={t} pairedSpots={[0, 7]} settings={SETTINGS} />);
+  rerender(
+    <DrillPanel transport={t} pairedSpots={[0, 7]} settings={SETTINGS} />,
+  );
   expect(pathCodes()).toEqual(["FL"]);
 
   fireEvent.press(screen.getByText("Start"));
@@ -294,7 +324,7 @@ test("a run arms spots, flashes hits, and ends in a hits-only summary", async ()
   panel(t, PAIRED, DEFAULT_SETTINGS); // no delay — deterministic step cadence
 
   // Author a deterministic path drill: slots 2, 0 → canonical spots 6, 0.
-  fireEvent.press(screen.getByText("Path"));
+  selectMode("Path");
   fireEvent.press(screen.getByTestId("spot-6-available"));
   fireEvent.press(screen.getByTestId("spot-0-available"));
   fireEvent.press(screen.getByText("Start"));
@@ -336,7 +366,7 @@ test("a finished run's results are tied to its mode — hidden on another mode",
   panel(t, PAIRED, DEFAULT_SETTINGS);
 
   // Run a path drill to completion.
-  fireEvent.press(screen.getByText("Path"));
+  selectMode("Path");
   fireEvent.press(screen.getByTestId("spot-6-available"));
   fireEvent.press(screen.getByTestId("spot-0-available"));
   fireEvent.press(screen.getByText("Start"));
@@ -346,12 +376,12 @@ test("a finished run's results are tied to its mode — hidden on another mode",
 
   // Switch to another mode: the path run's stats belong to Path, so they go
   // away and the screen reads fresh (Start).
-  fireEvent.press(screen.getByText("Live"));
+  selectMode("Live");
   expect(screen.queryByTestId("stats-panel")).toBeNull();
   expect(screen.getByText("Start")).toBeTruthy();
 
   // Back on Path, the same run's results return.
-  fireEvent.press(screen.getByText("Path"));
+  selectMode("Path");
   expect(screen.getByTestId("stats-panel")).toBeTruthy();
   expect(screen.getByText("Start")).toBeTruthy();
 });
@@ -360,7 +390,7 @@ test("the hit flash clears back to available after its window", async () => {
   const t = await connectedTransport();
   panel(t, PAIRED, DEFAULT_SETTINGS);
 
-  fireEvent.press(screen.getByText("Path"));
+  selectMode("Path");
   fireEvent.press(screen.getByTestId("spot-6-available"));
   fireEvent.press(screen.getByTestId("spot-0-available"));
   fireEvent.press(screen.getByText("Start"));
@@ -375,7 +405,7 @@ test("Stop aborts the run and still summarizes the partial records", async () =>
   const t = await connectedTransport();
   panel(t, PAIRED, DEFAULT_SETTINGS);
 
-  fireEvent.press(screen.getByText("Path"));
+  selectMode("Path");
   fireEvent.press(screen.getByTestId("spot-6-available"));
   fireEvent.press(screen.getByTestId("spot-0-available"));
   fireEvent.press(screen.getByTestId("spot-7-available"));
@@ -405,7 +435,7 @@ test("authoring a new path after a run clears the stale results summary", async 
   const t = await connectedTransport();
   panel(t, PAIRED, DEFAULT_SETTINGS);
 
-  fireEvent.press(screen.getByText("Path"));
+  selectMode("Path");
   fireEvent.press(screen.getByTestId("spot-6-available"));
   fireEvent.press(screen.getByTestId("spot-0-available"));
   fireEvent.press(screen.getByText("Start"));
@@ -425,10 +455,14 @@ test("authoring a new path after a run clears the stale results summary", async 
 test("a layout change after a run clears the stale results summary", async () => {
   const t = await connectedTransport();
   const { rerender } = render(
-    <DrillPanel transport={t} pairedSpots={PAIRED} settings={DEFAULT_SETTINGS} />,
+    <DrillPanel
+      transport={t}
+      pairedSpots={PAIRED}
+      settings={DEFAULT_SETTINGS}
+    />,
   );
 
-  fireEvent.press(screen.getByText("Path"));
+  selectMode("Path");
   fireEvent.press(screen.getByTestId("spot-6-available"));
   fireEvent.press(screen.getByTestId("spot-0-available"));
   fireEvent.press(screen.getByText("Start"));
@@ -436,7 +470,13 @@ test("a layout change after a run clears the stale results summary", async () =>
   expect(screen.getByTestId("stats-panel")).toBeTruthy();
 
   // Re-pair to a different layout — the old slot-indexed records no longer map.
-  rerender(<DrillPanel transport={t} pairedSpots={[1, 2, 3]} settings={DEFAULT_SETTINGS} />);
+  rerender(
+    <DrillPanel
+      transport={t}
+      pairedSpots={[1, 2, 3]}
+      settings={DEFAULT_SETTINGS}
+    />,
+  );
   expect(screen.queryByTestId("stats-panel")).toBeNull();
 });
 
@@ -453,7 +493,7 @@ test("a finished run reports a summary to onSessionComplete exactly once", async
   );
 
   // A two-step path run (slots 2, 0), each resolving at the fixed 20 ms tap.
-  fireEvent.press(screen.getByText("Path"));
+  selectMode("Path");
   fireEvent.press(screen.getByTestId("spot-6-available"));
   fireEvent.press(screen.getByTestId("spot-0-available"));
   fireEvent.press(screen.getByText("Start"));
@@ -494,7 +534,9 @@ test("an aborted run with no attempts is not logged", async () => {
 
 test("a failed start surfaces as an inline error, not a crash", async () => {
   const t = await connectedTransport();
-  jest.spyOn(t, "startSession").mockRejectedValueOnce(new Error("write failed"));
+  jest
+    .spyOn(t, "startSession")
+    .mockRejectedValueOnce(new Error("write failed"));
   panel(t);
 
   fireEvent.press(screen.getByText("Start"));
@@ -509,7 +551,12 @@ test("a failed start surfaces as an inline error, not a crash", async () => {
 // otherwise a remount shows idle "Start" over a live run with no way to stop.
 test("a remount over a running session rehydrates it — Stop and the armed target", async () => {
   const t = await connectedTransport();
-  await t.loadDrill({ mode: "path", numPositions: 3, path: [2, 0], delayMs: 0 });
+  await t.loadDrill({
+    mode: "path",
+    numPositions: 3,
+    path: [2, 0],
+    delayMs: 0,
+  });
   await t.startSession();
   await act(() => jest.advanceTimersByTimeAsync(10)); // seq 0 armed, not resolved
   expect(t.sessionSnapshot.state).toBe("running");
@@ -533,7 +580,12 @@ test("a remount over a running session rehydrates it — Stop and the armed targ
 // longer holds) — the operator left, and re-authoring is the likely next step.
 test("a remount over a finished session lands on a fresh idle Start", async () => {
   const t = await connectedTransport();
-  await t.loadDrill({ mode: "path", numPositions: 3, path: [2, 0], delayMs: 0 });
+  await t.loadDrill({
+    mode: "path",
+    numPositions: 3,
+    path: [2, 0],
+    delayMs: 0,
+  });
   await t.startSession();
   await act(() => jest.runAllTimersAsync()); // whole run resolves → done
   expect(t.sessionSnapshot.state).toBe("done");
@@ -549,7 +601,12 @@ test("a remount over a finished session lands on a fresh idle Start", async () =
 // the same drill instead of dead-ending on an empty (disabled) path.
 test("a rehydrated run restores the config — Start re-runs the same path", async () => {
   const t = await connectedTransport();
-  await t.loadDrill({ mode: "path", numPositions: 3, path: [2, 0], delayMs: 0 });
+  await t.loadDrill({
+    mode: "path",
+    numPositions: 3,
+    path: [2, 0],
+    delayMs: 0,
+  });
   await t.startSession();
   await act(() => jest.advanceTimersByTimeAsync(10)); // running, seq 0 armed
 
@@ -608,26 +665,26 @@ test("the drill surface carries no top margin — the offset is on ScreenWrapper
 });
 
 // Layout (option A): the court is clean — the config and the primary action all
-// live OUTSIDE the court, in the scrolling column below it. Start sits
-// IMMEDIATELY under the court, and the Mode selector directly under Start.
-// Idle shows NO status line ("Pick a drill" is gone) and NO inline mode
-// description, so nothing pads the gap between Start and Mode.
-test("idle: Start sits right under the court, Mode directly under it — no status or description filler", async () => {
+// live OUTSIDE the court, in the scrolling column below it. Under the court sits
+// the [gear][Start] row (the gear opens the drill-setup page); the Mode selector
+// is no longer inline, it lives behind the gear. Idle shows NO status line
+// ("Pick a drill" is gone) and NO inline mode selector.
+test("idle: the gear + Start row sits right under the court — no inline mode selector or status filler", async () => {
   const t = await connectedTransport();
   panel(t);
 
   const surface = screen.getByTestId("drill-surface");
   expect(within(surface).getByText("Start")).toBeTruthy();
-  // The idle status filler and the inline mode description are gone.
+  // The idle status filler is gone, and Mode moved behind the gear (no inline
+  // selector / info affordance until the setup page is opened).
   expect(screen.queryByTestId("status-slot")).toBeNull();
-  expect(screen.queryByTestId("mode-desc")).toBeNull();
+  expect(screen.queryByTestId("mode-info-button")).toBeNull();
   expect(screen.queryByText("Pick a drill below to run")).toBeNull();
-  // In tree order: the primary action comes before the Mode selector's info
-  // affordance — i.e. Start right under the court, then Mode right under Start.
+  // In tree order the gear comes before Start — the segmented row under the court.
   const order = within(surface)
-    .getAllByTestId(/^(primary-action|mode-info-button)$/)
+    .getAllByTestId(/^(drill-settings-button|primary-action)$/)
     .map((n) => n.props.testID);
-  expect(order).toEqual(["primary-action", "mode-info-button"]);
+  expect(order).toEqual(["drill-settings-button", "primary-action"]);
 });
 
 test("the drill court is clean — no centre card over the schema", async () => {
@@ -652,7 +709,9 @@ test("the scrolling column clears the floating tab bar and its centre disc", asy
   // insets are 0 in jest → tabBarClearance(0) + disc rise + the gap.
   expect(cc.paddingBottom).toBe(tabBarClearance(0) + TAB_BAR_DISC_RISE + 12);
   // And it genuinely clears both the bar row and the poking disc.
-  expect(cc.paddingBottom).toBeGreaterThanOrEqual(TAB_BAR_ROW_H + TAB_BAR_DISC_RISE);
+  expect(cc.paddingBottom).toBeGreaterThanOrEqual(
+    TAB_BAR_ROW_H + TAB_BAR_DISC_RISE,
+  );
 });
 
 // The per-mode descriptions moved off an always-on line into a modal opened
@@ -667,6 +726,8 @@ test("the mode info icon opens a modal describing each drill mode", async () => 
   expect(screen.queryByTestId("mode-info")).toBeNull();
   expect(screen.queryByText(/Targets light in a random order/)).toBeNull();
 
+  // The info icon lives on the drill-setup page, beside the Mode selector.
+  openSetup();
   fireEvent.press(screen.getByTestId("mode-info-button"));
 
   // Every mode's name + description is listed in the modal.
@@ -683,12 +744,38 @@ test("the mode info icon opens a modal describing each drill mode", async () => 
 // The idle Start is the page's hero: a solid accent fill (not a plain outline
 // chip like Mode/length), and it's balanced with a bottom margin so it sits
 // centred between the court and the Mode row rather than hugging the modes.
-test("the idle Start is an accent hero button, centred below the court", async () => {
+test("the idle Start is an accent hero button, its row centred below the court", async () => {
   const t = await connectedTransport();
   panel(t);
   const s = StyleSheet.flatten(
     screen.getByTestId("primary-action").props.style,
   );
   expect(s.backgroundColor).toBe(colors.accent); // solid accent hero, not outline
-  expect(s.marginBottom).toBeGreaterThan(0); // balances the court's bottom strip
+  // The balance margin that centres the pair under the court now rides the row.
+  const row = StyleSheet.flatten(screen.getByTestId("action-row").props.style);
+  expect(row.marginBottom).toBeGreaterThan(0);
+});
+
+// The gear + Start read as one segmented control: a gap between them, outer
+// corners rounded, the touching (inner) corners squared. The gear opens the
+// drill-setup page and is an accent square (~1/3 the row).
+test("the gear + Start form a segmented pair — touching corners squared", async () => {
+  const t = await connectedTransport();
+  panel(t);
+
+  const gear = StyleSheet.flatten(
+    screen.getByTestId("drill-settings-button").props.style,
+  );
+  const start = StyleSheet.flatten(
+    screen.getByTestId("primary-action").props.style,
+  );
+  // The gear is an accent square; its RIGHT corners (facing Start) are squared.
+  expect(gear.backgroundColor).toBe(colors.accent);
+  expect(gear.borderTopRightRadius).toBe(0);
+  expect(gear.borderBottomRightRadius).toBe(0);
+  // Start's LEFT corners (facing the gear) are squared; outer corners keep the
+  // base radius (so borderRadius stays > 0).
+  expect(start.borderTopLeftRadius).toBe(0);
+  expect(start.borderBottomLeftRadius).toBe(0);
+  expect(start.borderRadius).toBeGreaterThan(0);
 });
