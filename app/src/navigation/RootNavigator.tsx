@@ -5,7 +5,7 @@ import { StyleSheet, View } from "react-native";
 import { AppHeader } from "../components/AppHeader";
 import { AccountScreen } from "../screens/AccountScreen";
 import { DrillScreen } from "../screens/DrillScreen";
-import { SettingsScreen } from "../screens/SettingsScreen";
+import { HistoryScreen } from "../screens/HistoryScreen";
 import { useAppStore } from "../state/AppState";
 import { colors } from "../theme";
 import { GlassTabBar } from "./GlassTabBar";
@@ -15,7 +15,7 @@ const Tab = createBottomTabNavigator<RootTabParamList>();
 
 /**
  * The app's navigation root: a persistent header (title + status pill) above a
- * three-tab footer — Account · Drill (centre, default) · Settings. Each tab is
+ * three-tab footer — Account · Drill (centre, default) · History. Each tab is
  * its own screen; new screens slot in as nested stacks under a tab without
  * touching the others.
  *
@@ -46,7 +46,7 @@ export const RootNavigator = () => {
         >
           <Tab.Screen name="Account" component={AccountScreen} />
           <Tab.Screen name="Drill" component={DrillScreen} />
-          <Tab.Screen name="Settings" component={SettingsScreen} />
+          <Tab.Screen name="History" component={HistoryScreen} />
         </Tab.Navigator>
       </View>
     </NavigationContainer>

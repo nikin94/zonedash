@@ -1,4 +1,10 @@
-import { StyleSheet, Switch, View } from "react-native";
+import {
+  StyleSheet,
+  Switch,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
 
 import { type DrillSettings } from "../state/AppState";
 import { colors } from "../theme";
@@ -10,18 +16,23 @@ import { NumberField } from "./NumberField";
 const DELAY_MAX_MS = 3000;
 
 /**
- * Drill settings panel — shown in a modal opened from the header's settings
- * gear. No timeout setting on purpose: the app never arms auto-miss, so a run
- * counts hits only.
+ * Drill settings panel — the delay + immediate-repeat controls. Lives on the
+ * drill setup page (below the mode/params, under a divider); `style` lets that
+ * host drop the panel's own screen padding so it flows in the page's column. No
+ * timeout setting on purpose: the app never arms auto-miss, so a run counts hits.
  */
 export const SettingsPanel = ({
   settings,
   onChange,
+  style,
 }: {
   settings: DrillSettings;
   onChange: (next: DrillSettings) => void;
+  /** Merged over the panel container — e.g. to drop the screen padding when
+   *  embedded in a page that already insets its column. */
+  style?: StyleProp<ViewStyle>;
 }) => (
-  <View style={styles.panel}>
+  <View style={[styles.panel, style]}>
     <AppText size={12} color={colors.textSecondary} style={styles.heading}>
       Drill settings
     </AppText>

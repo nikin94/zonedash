@@ -80,6 +80,7 @@ export const DrillPanel = ({
   transport,
   pairedSpots,
   settings,
+  onSettingsChange,
   rotation,
   onRotate,
   onSessionComplete,
@@ -87,6 +88,10 @@ export const DrillPanel = ({
   transport: CentralTransport;
   pairedSpots: number[]; // canonical spots in bind order (slot order)
   settings: DrillSettings;
+  /** Persist an edit to the session-wide drill settings (delay + immediate
+   *  repeat) — driven from the drill setup page now that the Settings tab is
+   *  gone. */
+  onSettingsChange: (next: DrillSettings) => void;
   /** Court view orientation + its rotate control, threaded to the map (see CourtMap). */
   rotation?: number;
   onRotate?: () => void;
@@ -634,6 +639,8 @@ export const DrillPanel = ({
         setCount={setCount}
         durationMs={durationMs}
         setDurationMs={setDurationMs}
+        settings={settings}
+        onSettingsChange={onSettingsChange}
       />
 
       <ModeInfoModal

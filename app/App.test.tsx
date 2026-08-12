@@ -2,6 +2,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 
 import App from "./App";
+import type { SessionSummary } from "./src/domain/session";
+import { appendSession } from "./src/state/history";
 
 // Persisted prefs live in one process-wide store, so a test that saves an
 // orientation would otherwise leak into the next test's hydration. Clear it
@@ -54,7 +56,7 @@ test("renders the disconnected surface — an idle court and a connect hint", as
   // The footer tab bar is the app's chrome now — three tabs, Drill the default.
   expect(screen.getByTestId("tab-account")).toBeTruthy();
   expect(screen.getByTestId("tab-drill")).toBeTruthy();
-  expect(screen.getByTestId("tab-settings")).toBeTruthy();
+  expect(screen.getByTestId("tab-history")).toBeTruthy();
   expect(
     screen.getByText(/Tap the status in the header to connect/),
   ).toBeTruthy();
@@ -201,22 +203,38 @@ test("a second round after Re-pair still hands off to the drill controls", async
   expect(screen.queryByTestId("start-pairing")).toBeNull();
 });
 
-test("the Settings tab shows drill settings — no timeout setting exists", async () => {
+// The former Settings tab is now History — the session log lives here (moved off
+// Account). Drill settings moved onto the drill setup page (behind the gear), so
+// they no longer have a tab of their own.
+test("the History tab shows the session log", async () => {
+  const logged: SessionSummary = {
+    id: "hist-1",
+    endedAt: 1_000,
+    mode: "random",
+    numPositions: 6,
+    attempts: 3,
+    totalMs: 1200,
+    avgMs: 400,
+    bestMs: 300,
+  };
+  await appendSession(logged);
+
   await renderApp();
 
-  fireEvent.press(screen.getByTestId("tab-settings"));
+  fireEvent.press(screen.getByTestId("tab-history"));
   await act(async () => {
     await jest.runAllTimersAsync();
   });
-  expect(screen.getByText("Drill settings")).toBeTruthy();
-  expect(screen.getByText("Delay between targets")).toBeTruthy();
-  expect(screen.getByText("Same target twice in a row")).toBeTruthy();
-  expect(screen.queryByText(/Timeout/)).toBeNull(); // misses don't exist
+  // The logged session shows on the History tab (it moved here off Account).
+  expect(screen.getByTestId("history-row-hist-1")).toBeTruthy();
+  expect(screen.queryByTestId("history-empty")).toBeNull();
+  // Drill settings are no longer a tab — they moved to the drill setup page.
+  expect(screen.queryByText("Drill settings")).toBeNull();
 });
 
-// The Account tab is the sign-in surface + history. Signed-out by default (no
-// backend configured in tests), sign-in walks the mock provider to signed-in,
-// and Sign out returns to the logged-out state.
+// The Account tab is the sign-in surface (history moved to its own tab).
+// Signed-out by default (no backend configured in tests), sign-in walks the mock
+// provider to signed-in, and Sign out returns to the logged-out state.
 test("the Account tab signs in and out over the mock provider", async () => {
   await renderApp();
 
@@ -224,7 +242,7 @@ test("the Account tab signs in and out over the mock provider", async () => {
   await act(async () => {
     await jest.runAllTimersAsync();
   });
-  expect(screen.getByTestId("history-empty")).toBeTruthy(); // history lives here now
+  expect(screen.queryByTestId("history-empty")).toBeNull(); // history moved to its tab
   expect(screen.getByTestId("sign-in-google")).toBeTruthy();
 
   fireEvent.press(screen.getByTestId("sign-in-google"));
