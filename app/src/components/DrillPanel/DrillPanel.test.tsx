@@ -73,8 +73,12 @@ const panel = (t: MockCentralTransport, paired = PAIRED, settings = SETTINGS) =>
 // court, so only the mode/param pick needs the page open.
 const openSetup = () =>
   fireEvent.press(screen.getByTestId("drill-settings-button"));
-const closeSetup = () =>
-  fireEvent.press(screen.getByTestId("drill-settings-close"));
+const closeSetup = () => {
+  // Done confirms + dismisses; run the horizontal slide-out so the page
+  // unmounts (it trails `visible` until the exit animation completes).
+  fireEvent.press(screen.getByTestId("drill-settings-done"));
+  act(() => jest.runAllTimers());
+};
 const selectMode = (label: string) => {
   openSetup();
   fireEvent.press(screen.getByText(label));
@@ -247,7 +251,10 @@ test("path Undo drops the last step; Clear empties the sequence", async () => {
   fireEvent.press(screen.getByTestId("spot-7-available"));
   expect(pathCodes()).toEqual(["FL", "ML"]);
 
+  // Undo collapses the last chip (same animation as a tap), so its drop lands
+  // once the slide-out completes — run the timers out.
   fireEvent.press(screen.getByText("Undo"));
+  act(() => jest.runAllTimers());
   expect(pathCodes()).toEqual(["FL"]);
 
   fireEvent.press(screen.getByText("Clear"));
@@ -777,9 +784,27 @@ test("the idle Start is an accent hero button, its row centred below the court",
     screen.getByTestId("primary-action").props.style,
   );
   expect(s.backgroundColor).toBe(colors.accent); // solid accent hero, not outline
-  // The balance margin that centres the pair under the court now rides the row.
-  const row = StyleSheet.flatten(screen.getByTestId("action-row").props.style);
-  expect(row.marginBottom).toBeGreaterThan(0);
+  // The balance margin that centres the pair under the court rides the block
+  // (gear + Start row plus the mode caption under it).
+  const block = StyleSheet.flatten(
+    screen.getByTestId("action-block").props.style,
+  );
+  expect(block.marginBottom).toBeGreaterThan(0);
+});
+
+// A muted caption under Start names what will run — the current mode and its
+// key parameter — so the setup reads without opening the gear. It tracks the
+// live config: the default random/10-hits, and updates when the mode changes.
+test("idle: a mode caption under Start names the current setup", async () => {
+  const t = await connectedTransport();
+  panel(t);
+
+  const caption = screen.getByTestId("mode-summary");
+  expect(caption).toHaveTextContent("Random · 10 hits");
+
+  // Switch to Path on the setup page → the caption follows.
+  selectMode("Path");
+  expect(screen.getByTestId("mode-summary")).toHaveTextContent("Path");
 });
 
 // The gear is a compact outline square beside the full-width Start: a white

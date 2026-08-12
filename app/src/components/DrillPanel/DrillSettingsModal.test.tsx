@@ -48,13 +48,15 @@ test("path/live modes hide the Random params — only a court-authoring hint", (
   expect(screen.getByText(/Tap the paired spots/)).toBeTruthy();
 });
 
-test("picking a mode reports it; the info icon and close fire their callbacks", () => {
+test("picking a mode reports it; the info icon and Done fire their callbacks", () => {
   const p = setup();
   fireEvent.press(screen.getByText("Path"));
   expect(p.setUiMode).toHaveBeenCalledWith("path");
   fireEvent.press(screen.getByTestId("mode-info-button"));
   expect(p.onModeInfo).toHaveBeenCalled();
-  fireEvent.press(screen.getByTestId("drill-settings-close"));
+  // The corner close icon is gone — a bottom Done button confirms instead.
+  expect(screen.queryByTestId("drill-settings-close")).toBeNull();
+  fireEvent.press(screen.getByTestId("drill-settings-done"));
   expect(p.onClose).toHaveBeenCalled();
 });
 

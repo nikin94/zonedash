@@ -1,12 +1,21 @@
-import { Modal, ScrollView, StyleSheet, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import {
+  Animated,
+  Dimensions,
+  Easing,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { type DrillSettings } from "../../state/AppState";
-import { colors } from "../../theme";
+import { alpha, colors } from "../../theme";
 import { AppText } from "../AppText";
 import { Button } from "../Button";
 import { CustomPressable } from "../CustomPressable";
-import { CloseIcon, InfoIcon } from "../Icons";
+import { InfoIcon } from "../Icons";
 import { SettingsPanel } from "../SettingsPanel";
 import { WheelField } from "../WheelField";
 import {
@@ -22,12 +31,25 @@ const STOP_OPTIONS: { key: StopBy; label: string }[] = [
   { key: "time", label: "Time" },
 ];
 
+// The page slides in from the right (a lateral push, like a pushed nav screen)
+// rather than up from the bottom — the Modal itself renders with no animation
+// and we drive the horizontal translate.
+const SCREEN_W = Dimensions.get("window").width;
+const OPEN_MS = 260;
+const CLOSE_MS = 220;
+
 /**
- * The drill setup as its own full-screen page (a slide-up modal), opened from
- * the gear beside Start. It holds the mode selector and the Random-mode
- * parameters (stop-by + the hits/duration wheel) — the config that used to sit
- * inline under the court. Path/Live authoring stays on the court itself (tapping
- * out a sequence), so only the mode and its numeric params live here.
+ * The drill setup as its own full-screen page, opened from the gear beside
+ * Start. It holds the mode selector, the Random-mode parameters (stop-by + the
+ * hits/duration wheel) and the session-wide settings — the config that used to
+ * sit inline under the court. Path/Live authoring stays on the court itself, so
+ * only the mode and its numeric params live here.
+ *
+ * It slides in HORIZONTALLY (from the right, like a pushed screen) instead of
+ * the Modal's default bottom-up slide, and is confirmed with a Done button
+ * pinned at the bottom rather than a corner close icon. The exit animation needs
+ * the Modal to stay mounted past `visible` going false, so `mounted` trails it
+ * and only drops once the slide-out completes.
  *
  * Presentation only: it reads and writes the caller's drill-config state, so the
  * court surface (which runs the drill) and this page never drift.
@@ -65,34 +87,58 @@ export const DrillSettingsModal = ({
   onSettingsChange: (next: DrillSettings) => void;
 }) => {
   const insets = useSafeAreaInsets();
+  // Keep the Modal mounted through the slide-out; `mounted` trails `visible`.
+  const [mounted, setMounted] = useState(visible);
+  // Off-screen right when closed, 0 when open. Native-driven (transform only).
+  const translateX = useRef(new Animated.Value(visible ? 0 : SCREEN_W)).current;
+  const wasVisible = useRef(visible);
+
+  useEffect(() => {
+    if (visible === wasVisible.current) return; // no change (initial mount)
+    wasVisible.current = visible;
+    if (visible) {
+      setMounted(true);
+      translateX.setValue(SCREEN_W);
+      Animated.timing(translateX, {
+        toValue: 0,
+        duration: OPEN_MS,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+    } else {
+      Animated.timing(translateX, {
+        toValue: SCREEN_W,
+        duration: CLOSE_MS,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        if (finished) setMounted(false);
+      });
+    }
+  }, [visible, translateX]);
+
   return (
     <Modal
-      visible={visible}
-      animationType="slide"
+      visible={mounted}
+      animationType="none"
       onRequestClose={onClose}
       testID="drill-settings-modal"
     >
-      <View style={[styles.page, { paddingTop: insets.top + 8 }]}>
+      <Animated.View
+        style={[
+          styles.page,
+          { paddingTop: insets.top + 8, transform: [{ translateX }] },
+        ]}
+      >
         <View style={styles.header}>
           <AppText size={18} weight="700">
             Drill setup
           </AppText>
-          <CustomPressable
-            hitSlop={10}
-            testID="drill-settings-close"
-            accessibilityLabel="Close drill setup"
-            onPress={onClose}
-            style={styles.close}
-          >
-            <CloseIcon />
-          </CustomPressable>
         </View>
 
         <ScrollView
-          contentContainerStyle={[
-            styles.content,
-            { paddingBottom: insets.bottom + 24 },
-          ]}
+          style={styles.scroll}
+          contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.row}>
@@ -187,7 +233,19 @@ export const DrillSettingsModal = ({
             style={styles.settings}
           />
         </ScrollView>
-      </View>
+
+        {/* Confirm the setup and return to the court — a pinned Done button
+            instead of a corner close icon. It just dismisses (edits already
+            wrote through to the caller as they were made). */}
+        <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
+          <Button
+            label="Done"
+            primary
+            testID="drill-settings-done"
+            onPress={onClose}
+          />
+        </View>
+      </Animated.View>
     </Modal>
   );
 };
@@ -198,21 +256,16 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
     paddingHorizontal: 24,
     paddingBottom: 12,
   },
-  close: {
-    width: 32,
-    height: 32,
-    alignItems: "center",
-    justifyContent: "center",
+  scroll: {
+    flex: 1,
   },
   content: {
     paddingHorizontal: 24,
     paddingTop: 8,
+    paddingBottom: 24,
     gap: 16,
   },
   row: {
@@ -253,5 +306,14 @@ const styles = StyleSheet.create({
   settings: {
     paddingHorizontal: 0,
     paddingTop: 0,
+  },
+  // The pinned Done bar: a hairline top border sets it off from the scrolling
+  // content so it always reads as the confirm affordance.
+  footer: {
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: alpha(colors.border, 0.4),
+    backgroundColor: colors.background,
   },
 });

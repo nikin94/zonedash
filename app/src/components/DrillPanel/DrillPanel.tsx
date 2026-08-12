@@ -11,12 +11,13 @@ import type {
 import { AppText } from "../AppText";
 import { Button } from "../Button";
 import { GearIcon } from "../Icons";
-import { PathChipStrip } from "./PathChipStrip";
+import { PathChipStrip, type PathChipStripHandle } from "./PathChipStrip";
 import { ModeInfoModal } from "./ModeInfoModal";
 import { DrillSettingsModal } from "./DrillSettingsModal";
 import {
   MODES,
   MODE_DESC,
+  drillSummary,
   uiFromWire,
   type StopBy,
   type UiMode,
@@ -143,6 +144,9 @@ export const DrillPanel = ({
           .filter((s): s is number => s != null)
       : [],
   ); // canonical spots, in order
+  // Drives the step-chip strip so Undo can collapse the last chip with the same
+  // animation a chip tap runs, instead of dropping the step instantly.
+  const pathStripRef = useRef<PathChipStripHandle>(null);
   const [session, setSession] = useState<SessionState>(
     live ? "running" : "idle",
   );
@@ -437,37 +441,54 @@ export const DrillPanel = ({
             locked. The idle row carries the strip-balance margin so it sits
             centred under the court. */}
       <View
-        testID="action-row"
-        style={[styles.actionRow, !running && styles.actionRowBalance]}
+        testID="action-block"
+        style={!running ? styles.actionBlock : undefined}
       >
-        <Button
-          disabled={running}
-          onPress={() => setSettingsOpen(true)}
-          testID="drill-settings-button"
-          accessibilityLabel="Drill setup"
-          style={styles.settingsButton}
-        >
-          <GearIcon size={22} color={colors.accent} />
-        </Button>
-        {running ? (
+        <View testID="action-row" style={styles.actionRow}>
           <Button
-            label="Stop"
-            onPress={stop}
-            danger
-            textSize={17}
-            testID="primary-action"
-            style={styles.actionButton}
-          />
-        ) : (
-          <Button
-            label="Start"
-            primary
-            textSize={17}
-            disabled={!canStart}
-            onPress={start}
-            testID="primary-action"
-            style={styles.actionButton}
-          />
+            disabled={running}
+            onPress={() => setSettingsOpen(true)}
+            testID="drill-settings-button"
+            accessibilityLabel="Drill setup"
+            style={styles.settingsButton}
+          >
+            <GearIcon size={22} color={colors.accent} />
+          </Button>
+          {running ? (
+            <Button
+              label="Stop"
+              onPress={stop}
+              danger
+              textSize={17}
+              testID="primary-action"
+              style={styles.actionButton}
+            />
+          ) : (
+            <Button
+              label="Start"
+              primary
+              textSize={17}
+              disabled={!canStart}
+              onPress={start}
+              testID="primary-action"
+              style={styles.actionButton}
+            />
+          )}
+        </View>
+        {/* A muted caption under Start naming what will run — the current mode
+            and its key parameter ("Random · 10 hits", "Path") — so the setup
+            reads at a glance without opening the gear. Idle only: a live run
+            shows the Step status here instead. */}
+        {!running && (
+          <AppText
+            center
+            size={12}
+            color={colors.textMuted}
+            testID="mode-summary"
+            style={styles.modeSummary}
+          >
+            {drillSummary(uiMode, stopBy, count, durationMs)}
+          </AppText>
         )}
       </View>
 
@@ -523,6 +544,7 @@ export const DrillPanel = ({
                   row silently running off-screen; it auto-scrolls to the end on
                   each append so the newest steps stay in view. */}
               <PathChipStrip
+                ref={pathStripRef}
                 path={path}
                 onRemove={(idx) =>
                   setPath((p) => p.filter((_, j) => j !== idx))
@@ -543,7 +565,9 @@ export const DrillPanel = ({
                   label="Undo"
                   size="small"
                   textSize={15}
-                  onPress={() => setPath(path.slice(0, -1))}
+                  // Collapse the last chip (same animation as tapping it), which
+                  // fires onRemove for that index when the slide-out completes.
+                  onPress={() => pathStripRef.current?.removeLast()}
                 />
                 <Button
                   label="Clear"
@@ -686,16 +710,22 @@ const styles = StyleSheet.create({
   },
   // The gear + Start/Stop row: a compact outline gear beside the full-width
   // primary action, a gap between them, both with the normal rounded corners.
+  // Idle: the gear + Start row plus the muted mode caption under it, balanced so
+  // the pair sits centred between the court and the config below (the court's
+  // bottom strip pads the gap above — see START_STRIP_BALANCE). Running/done
+  // drop the block (a status line follows, nothing to centre against).
+  actionBlock: {
+    alignSelf: "stretch",
+    marginBottom: START_STRIP_BALANCE,
+  },
   actionRow: {
     alignSelf: "stretch",
     flexDirection: "row",
     gap: 8,
   },
-  // Idle: balance the row so it sits centred between the court and the config
-  // below (the court's bottom strip pads the gap above — see START_STRIP_BALANCE).
-  // Running/done drop it (a status line follows, nothing to centre against).
-  actionRowBalance: {
-    marginBottom: START_STRIP_BALANCE,
+  // The mode caption sits tight under the Start row.
+  modeSummary: {
+    marginTop: 6,
   },
   // The gear: a compact outline square — white fill, thick accent border, sized
   // to the icon with equal padding all round (no flex, so it stays small).

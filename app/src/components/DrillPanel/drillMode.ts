@@ -35,6 +35,24 @@ export const COUNT_OPTIONS = Array.from({ length: 99 }, (_, i) => ({
 }));
 export const DURATION_OPTIONS = msOptions(15000, 300000, 15000);
 
+/** Compact one-line summary of the current setup, shown in a muted caption
+ *  under the Start button so the operator sees what will run without opening the
+ *  setup page — e.g. "Random · 10 hits", "Random · 30 s", "Path", "Live". */
+export const drillSummary = (
+  uiMode: UiMode,
+  stopBy: StopBy,
+  count: number,
+  durationMs: number,
+): string => {
+  if (uiMode === "path") return "Path";
+  if (uiMode === "live") return "Live";
+  const tail =
+    stopBy === "time"
+      ? `${Math.round(durationMs / 1000)} s`
+      : `${count} ${count === 1 ? "hit" : "hits"}`;
+  return `Random · ${tail}`;
+};
+
 /** Inverse of the wire mode: the UI mode + stop-by a wire config resolves back
  *  to, so a mount over a running/finished session restores the matching
  *  controls. */
