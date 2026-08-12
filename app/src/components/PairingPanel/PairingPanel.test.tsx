@@ -246,3 +246,23 @@ test("the pairing surface carries no top margin — the offset is on ScreenWrapp
   const style = StyleSheet.flatten(screen.getByTestId("pairing-surface").props.style);
   expect(style.marginTop).toBeUndefined();
 });
+
+// Layout: the court is clean (no centre card), and the action + status live
+// OUTSIDE it, below — Start reads "Start pairing" and the hint sits under it.
+test("idle layout: clean court, Start pairing hero, hint under the button", async () => {
+  const t = await connectedTransport();
+  render(<PairingPanel transport={t} />);
+
+  // No centre card over the schema — CourtMap draws it only for centre children.
+  expect(screen.queryByTestId("centre-card")).toBeNull();
+  // The idle action reads "Start pairing" (not the old "Start").
+  expect(screen.getByText("Start pairing")).toBeTruthy();
+  // The hint sits below and references the button.
+  expect(screen.getByText(/Tap Start pairing/)).toBeTruthy();
+  // In tree order the action comes before the status slot — i.e. text is under
+  // the button.
+  const order = screen
+    .getAllByTestId(/^(start-pairing|status-slot)$/)
+    .map((n) => n.props.testID);
+  expect(order).toEqual(["start-pairing", "status-slot"]);
+});
