@@ -102,7 +102,7 @@ export const CourtStatusControl = () => {
       >
         <View
           testID={`court-status-dot-${connection}`}
-          style={[styles.dot, { backgroundColor: DOT_COLOR[connection] }]}
+          style={[styles.cornerDot, { backgroundColor: DOT_COLOR[connection] }]}
         />
       </CustomPressable>
 
@@ -207,6 +207,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  // The corner status indicator — the same small footprint the header status
+  // dot had (8 px), so it reads as a discreet link light in the court corner.
+  cornerDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  // The larger inline dot in the modal's status row, paired with the 15 px label.
   dot: {
     width: 12,
     height: 12,
