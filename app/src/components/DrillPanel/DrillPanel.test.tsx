@@ -8,6 +8,8 @@ import {
 
 import { StyleSheet } from "react-native";
 
+import { NavigationContainer } from "@react-navigation/native";
+
 import { MAX_DRILL_PATH } from "../../ble/codec";
 import {
   TAB_BAR_DISC_RISE,
@@ -53,8 +55,8 @@ const connectedTransport = async () => {
   return t;
 };
 
-// Settings persistence is exercised on its own (DrillSettingsModal); these
-// render helpers just need a no-op so the required prop is satisfied.
+// Settings persistence is exercised on its own (DrillSetupPage); these render
+// helpers just need a no-op so the required prop is satisfied.
 const noop = () => {};
 
 const panel = (t: MockCentralTransport, paired = PAIRED, settings = SETTINGS) =>
@@ -65,16 +67,27 @@ const panel = (t: MockCentralTransport, paired = PAIRED, settings = SETTINGS) =>
       settings={settings}
       onSettingsChange={noop}
     />,
+    // DrillPanel hosts a nested native-stack (the drill surface + the pushed
+    // setup route), so it needs a NavigationContainer ancestor. The wrapper
+    // applies to rerender() too.
+    { wrapper: NavigationContainer },
   );
 
-// Mode + the Random params moved to the drill-setup page (a modal behind the
-// gear beside Start). These open it, make the selection, and close — the way the
-// operator now drives the config. Path authoring itself still happens on the
+// Mode + the Random params moved to the drill-setup page (a route pushed from
+// the gear beside Start). These open it, make the selection, and close — the way
+// the operator now drives the config. Path authoring itself still happens on the
 // court, so only the mode/param pick needs the page open.
+// The gear PUSHES the setup route onto the drill's nested stack; Done pops it.
+// The navigator drives the transition, so a press flushes the mount/unmount
+// inside act — no hand-rolled animation timers to run out.
 const openSetup = () =>
-  fireEvent.press(screen.getByTestId("drill-settings-button"));
+  act(() => {
+    fireEvent.press(screen.getByTestId("drill-settings-button"));
+  });
 const closeSetup = () =>
-  fireEvent.press(screen.getByTestId("drill-settings-close"));
+  act(() => {
+    fireEvent.press(screen.getByTestId("drill-settings-done"));
+  });
 const selectMode = (label: string) => {
   openSetup();
   fireEvent.press(screen.getByText(label));
@@ -247,7 +260,10 @@ test("path Undo drops the last step; Clear empties the sequence", async () => {
   fireEvent.press(screen.getByTestId("spot-7-available"));
   expect(pathCodes()).toEqual(["FL", "ML"]);
 
+  // Undo collapses the last chip (same animation as a tap), so its drop lands
+  // once the slide-out completes — run the timers out.
   fireEvent.press(screen.getByText("Undo"));
+  act(() => jest.runAllTimers());
   expect(pathCodes()).toEqual(["FL"]);
 
   fireEvent.press(screen.getByText("Clear"));
@@ -317,6 +333,7 @@ test("a re-pair filters the authored path — nothing translates to -1", async (
       settings={SETTINGS}
       onSettingsChange={noop}
     />,
+    { wrapper: NavigationContainer },
   );
 
   selectMode("Path");
@@ -483,6 +500,7 @@ test("a layout change after a run clears the stale results summary", async () =>
       settings={DEFAULT_SETTINGS}
       onSettingsChange={noop}
     />,
+    { wrapper: NavigationContainer },
   );
 
   selectMode("Path");
@@ -515,6 +533,7 @@ test("a finished run reports a summary to onSessionComplete exactly once", async
       onSettingsChange={noop}
       onSessionComplete={onSessionComplete}
     />,
+    { wrapper: NavigationContainer },
   );
 
   // A two-step path run (slots 2, 0), each resolving at the fixed 20 ms tap.
@@ -546,6 +565,7 @@ test("an aborted run with no attempts is not logged", async () => {
       onSettingsChange={noop}
       onSessionComplete={onSessionComplete}
     />,
+    { wrapper: NavigationContainer },
   );
 
   fireEvent.press(screen.getByText("Start")); // random run
@@ -594,6 +614,13 @@ test("a remount over a running session rehydrates it — Stop and the armed targ
   expect(screen.queryByText("Start")).toBeNull();
   expect(screen.getByTestId("spot-6-armed")).toBeTruthy(); // slot 2 → canonical 6
   expect(screen.getByText("Step 1")).toBeTruthy();
+
+  // Regression: the action block stretches while running too, so Stop fills the
+  // row instead of collapsing to a sliver next to the gear.
+  const runningBlock = StyleSheet.flatten(
+    screen.getByTestId("action-block").props.style,
+  );
+  expect(runningBlock.alignSelf).toBe("stretch");
 
   // Stop drives the rehydrated panel through to a summary.
   fireEvent.press(screen.getByText("Stop"));
@@ -777,16 +804,39 @@ test("the idle Start is an accent hero button, its row centred below the court",
     screen.getByTestId("primary-action").props.style,
   );
   expect(s.backgroundColor).toBe(colors.accent); // solid accent hero, not outline
-  // The balance margin that centres the pair under the court now rides the row.
-  const row = StyleSheet.flatten(screen.getByTestId("action-row").props.style);
-  expect(row.marginBottom).toBeGreaterThan(0);
+  // The balance margin that centres the pair under the court rides the block
+  // (gear + Start row plus the mode caption under it).
+  const block = StyleSheet.flatten(
+    screen.getByTestId("action-block").props.style,
+  );
+  expect(block.marginBottom).toBeGreaterThan(0);
 });
 
-// The gear is a compact outline square beside the full-width Start: a white
-// fill with a thick accent border and equal padding (sized to the icon, no
-// flex), and BOTH buttons keep the normal rounded corners — no segmented
+// A muted caption under Start names what will run — the current mode and its
+// key parameter — so the setup reads without opening the gear. It tracks the
+// live config: the default random/10-hits, and updates when the mode changes.
+test("idle: a mode caption under Start names the current setup", async () => {
+  const t = await connectedTransport();
+  panel(t);
+
+  const caption = screen.getByTestId("mode-summary");
+  expect(caption).toHaveTextContent("Random · 10 hits");
+  // The caption is a SECOND LINE inside the Start button now, not a separate
+  // row beneath it.
+  expect(
+    within(screen.getByTestId("primary-action")).getByTestId("mode-summary"),
+  ).toBeTruthy();
+
+  // Switch to Path on the setup page → the caption follows.
+  selectMode("Path");
+  expect(screen.getByTestId("mode-summary")).toHaveTextContent("Path");
+});
+
+// The gear is an outline square beside the full-width Start: a white fill with a
+// thick accent border, kept square via aspectRatio (no flex, so only Start's
+// width flexes), and BOTH buttons keep the normal rounded corners — no segmented
 // squaring. It opens the drill-setup page.
-test("the gear is a compact white outline square; both buttons keep rounded corners", async () => {
+test("the gear is a white outline square; both buttons keep rounded corners", async () => {
   const t = await connectedTransport();
   panel(t);
 
@@ -800,11 +850,49 @@ test("the gear is a compact white outline square; both buttons keep rounded corn
   expect(gear.backgroundColor).toBe(colors.background);
   expect(gear.borderColor).toBe(colors.accent);
   expect(gear.borderWidth).toBeGreaterThan(1);
-  // Equal padding round the icon, and content-sized (no flex, so it stays small).
-  expect(gear.paddingVertical).toBe(gear.paddingHorizontal);
+  // Square (width tracks height) and no flex, so only Start's width flexes.
+  expect(gear.aspectRatio).toBe(1);
   expect(gear.flex).toBeUndefined();
   // Neither button squares its corners — both keep the base rounded radius.
   expect(gear.borderTopRightRadius).toBeUndefined();
   expect(start.borderTopLeftRadius).toBeUndefined();
   expect(start.borderRadius).toBeGreaterThan(0);
+});
+
+// The drill setup is a real pushed route on the Drill tab's nested native-stack
+// now (not a Modal): the gear PUSHES it — so it isn't mounted until opened, and
+// slides in over the still-mounted drill surface — and Done POPS back to the
+// surface. This is what gives the horizontal overlay transition (the navigator's
+// own), replacing the hand-rolled slide.
+test("the drill setup is a pushed nav route — the gear opens it, Done pops back", async () => {
+  const t = await connectedTransport();
+  panel(t);
+
+  // Not mounted until pushed; the surface is what's up.
+  expect(screen.queryByTestId("drill-settings-page")).toBeNull();
+  expect(screen.getByTestId("drill-surface")).toBeTruthy();
+
+  openSetup();
+  expect(screen.getByTestId("drill-settings-page")).toBeTruthy();
+
+  closeSetup();
+  // Popped: the setup page is gone and the drill surface is back.
+  expect(screen.queryByTestId("drill-settings-page")).toBeNull();
+  expect(screen.getByTestId("drill-surface")).toBeTruthy();
+});
+
+// No divider under the primary action — the action row is followed straight by
+// the config band. The gear fills the row's FULL height (alignItems stretch) and
+// stays square (aspectRatio), so only Start's width flexes beside it.
+test("idle: the gear fills the row height as a square, with no divider below Start", async () => {
+  const t = await connectedTransport();
+  panel(t);
+  expect(screen.queryByTestId("action-divider")).toBeNull();
+
+  const row = StyleSheet.flatten(screen.getByTestId("action-row").props.style);
+  expect(row.alignItems).toBe("stretch");
+  const gear = StyleSheet.flatten(
+    screen.getByTestId("drill-settings-button").props.style,
+  );
+  expect(gear.aspectRatio).toBe(1); // square, tracking the row height
 });

@@ -322,3 +322,20 @@ test("hideOff drops the off spots entirely, keeping only the ones in play", () =
   expect(screen.getByTestId("spot-0-available")).toBeTruthy();
   expect(screen.getByTestId("spot-4-armed")).toBeTruthy();
 });
+
+// The statusControl slot draws its node in the court's top-left corner (mirror of
+// the rotate control top-right). CourtMap stays a pure renderer — it positions
+// whatever node it's handed, no store access.
+test("statusControl renders the passed node in the court corner", () => {
+  const { rerender } = render(
+    <CourtMap
+      spots={allOff}
+      statusControl={<Text testID="my-status">●</Text>}
+    />,
+  );
+  expect(screen.getByTestId("my-status")).toBeTruthy();
+
+  // Omitted → nothing rendered (pairing/idle/drill opt in explicitly).
+  rerender(<CourtMap spots={allOff} />);
+  expect(screen.queryByTestId("my-status")).toBeNull();
+});

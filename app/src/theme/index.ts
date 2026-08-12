@@ -13,6 +13,8 @@ export const colors = {
   textSecondary: "#52525b", // labels, headings
   textMuted: "#71717a", // hints, inactive chips, idle indicator
   accent: "#4f46e5", // selection (path steps, armed dots, open pill border)
+  accentPressed: "#6366f1", // pressed state of an accent-filled button — a
+  // lighter indigo, so the white label stays legible instead of washing out
   accentSurface: "#eef2ff", // active pill fill (pale indigo tint)
   accentText: "#3730a3", // text/label on accentSurface
   success: "#059669", // bound/hit dots, done text, connected indicator
@@ -28,7 +30,10 @@ export const colors = {
  *  alpha. Shorthand is expanded first — parsing "#fff" as one 6-digit number
  *  would silently produce a garbage color. */
 export const alpha = (hex: string, a: number): string => {
-  const h = hex.length === 4 ? [...hex.slice(1)].map((c) => c + c).join("") : hex.slice(1);
+  const h =
+    hex.length === 4
+      ? [...hex.slice(1)].map((c) => c + c).join("")
+      : hex.slice(1);
   const n = parseInt(h, 16);
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 };

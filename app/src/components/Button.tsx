@@ -1,5 +1,10 @@
 import { type ReactNode } from "react";
-import { StyleSheet, type StyleProp, type ViewStyle } from "react-native";
+import {
+  ActivityIndicator,
+  StyleSheet,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
 
 import { colors, glowShadow } from "../theme";
 import { AppText } from "./AppText";
@@ -14,6 +19,9 @@ export interface ButtonProps {
   children?: ReactNode;
   /** Greys the button out AND blocks the press — one prop, both effects. */
   disabled?: boolean;
+  /** In-flight: swaps the label for a spinner and blocks the press (without the
+   *  greyed-out look), so an async action (e.g. Connect) shows progress. */
+  loading?: boolean;
   /** Destructive: red outline and red label. */
   danger?: boolean;
   /** Dashed outline — a quiet/secondary affordance (e.g. the dev shortcut). */
@@ -51,6 +59,7 @@ export const Button = ({
   label,
   children,
   disabled = false,
+  loading = false,
   danger = false,
   dashed = false,
   selected = false,
@@ -65,10 +74,15 @@ export const Button = ({
 }: ButtonProps) => (
   <CustomPressable
     noFeedback={noFeedback}
+    // A filled accent hero presses to a LIGHTER accent, not the near-white
+    // surface flash — otherwise the pressed fill collides with the white label.
+    pressedColor={primary ? colors.accentPressed : undefined}
     testID={testID}
     accessibilityLabel={accessibilityLabel}
-    accessibilityState={{ disabled, selected }}
-    disabled={disabled}
+    accessibilityState={{ disabled, selected, busy: loading }}
+    // A press mid-flight is a no-op, but loading keeps full opacity (progress,
+    // not a disabled look) — only `disabled` greys the button out.
+    disabled={disabled || loading}
     onPress={onPress}
     style={[
       styles.base,
@@ -81,7 +95,16 @@ export const Button = ({
       style,
     ]}
   >
-    {label != null ? (
+    {loading ? (
+      <ActivityIndicator
+        testID={testID != null ? `${testID}-spinner` : undefined}
+        color={
+          primary
+            ? colors.background
+            : (textColor ?? (danger ? colors.danger : colors.text))
+        }
+      />
+    ) : label != null ? (
       <AppText
         center
         numberOfLines={1}
@@ -119,7 +142,10 @@ const styles = StyleSheet.create({
   icon: { width: 44, paddingVertical: 8 }, // height tracks the icon + regular pad
   danger: { borderColor: colors.danger },
   dashed: { borderStyle: "dashed" },
-  selected: { borderColor: colors.accent, backgroundColor: colors.accentSurface },
+  selected: {
+    borderColor: colors.accent,
+    backgroundColor: colors.accentSurface,
+  },
   // Hero fill: solid accent with a matching border and a soft shadow so the
   // primary action lifts off the white page. A taller footprint than a regular
   // button gives it more presence. The white label is set on the AppText above.

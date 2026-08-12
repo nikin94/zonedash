@@ -1,4 +1,4 @@
-import { useReducer, useRef } from "react";
+import { forwardRef, useImperativeHandle, useReducer, useRef } from "react";
 import {
   Animated,
   type LayoutChangeEvent,
@@ -17,6 +17,13 @@ export const CHIP_GAP = 8;
  *  to read as "this step slid out" rather than a snap. */
 const CHIP_COLLAPSE_MS = 180;
 
+/** Imperative handle: lets the parent trigger the SAME collapse animation the
+ *  chip runs on a tap — used by Undo, which drops the last step and should slide
+ *  it out identically instead of blinking it away. */
+export interface PathChipHandle {
+  collapse: () => void;
+}
+
 /**
  * One ordered Path step, as a removable chip. Tapping it doesn't drop the step
  * instantly — the chip animates its width and opacity to 0 (a sideways collapse
@@ -29,17 +36,15 @@ const CHIP_COLLAPSE_MS = 180;
  * → invisible). Guard it the way AnimatedDot does: detect the identity change in
  * render and reset synchronously, so the step it now represents paints fresh.
  */
-export const PathChip = ({
-  index,
-  code,
-  label,
-  onRemove,
-}: {
-  index: number;
-  code: string;
-  label: string;
-  onRemove: () => void;
-}) => {
+export const PathChip = forwardRef<
+  PathChipHandle,
+  {
+    index: number;
+    code: string;
+    label: string;
+    onRemove: () => void;
+  }
+>(({ index, code, label, onRemove }, ref) => {
   // 1 = fully present, 0 = fully collapsed. Width/margin/opacity ride on it.
   // Held in a reassignable ref (not `.current` pinned once) so an instance reused
   // for a different step can swap in a FRESH value in render — see the reset below.
@@ -67,7 +72,8 @@ export const PathChip = ({
   const progress = progressRef.current;
 
   const onLayout = (e: LayoutChangeEvent) => {
-    if (collapseW.current === null) naturalW.current = e.nativeEvent.layout.width;
+    if (collapseW.current === null)
+      naturalW.current = e.nativeEvent.layout.width;
   };
 
   const remove = () => {
@@ -83,6 +89,10 @@ export const PathChip = ({
       if (finished) onRemove();
     });
   };
+
+  // Undo (parent) triggers the same collapse as a tap, so the last step slides
+  // out identically instead of disappearing instantly.
+  useImperativeHandle(ref, () => ({ collapse: remove }));
 
   const collapsing = collapseW.current !== null;
   const wrapStyle = collapsing
@@ -110,7 +120,10 @@ export const PathChip = ({
         onLayout={onLayout}
         // Freeze the body at its natural width while the wrapper clips it, so
         // the content slides out of view instead of reflowing as it shrinks.
-        style={[styles.chip, collapsing && { width: collapseW.current ?? undefined }]}
+        style={[
+          styles.chip,
+          collapsing && { width: collapseW.current ?? undefined },
+        ]}
       >
         <View style={styles.num}>
           <AppText size={11} weight="700" color={colors.background}>
@@ -128,7 +141,8 @@ export const PathChip = ({
       </CustomPressable>
     </Animated.View>
   );
-};
+});
+PathChip.displayName = "PathChip";
 
 const styles = StyleSheet.create({
   chip: {

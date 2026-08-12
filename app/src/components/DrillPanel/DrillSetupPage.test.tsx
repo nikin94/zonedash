@@ -1,12 +1,14 @@
 import { fireEvent, render, screen } from "@testing-library/react-native";
 
 import { DEFAULT_SETTINGS } from "../../state/AppState";
-import { DrillSettingsModal } from "./DrillSettingsModal";
+import { DrillSetupPage } from "./DrillSetupPage";
 
+// The page is plain content now (the navigator drives its push), so it renders
+// standalone — no `visible`/Modal wrapper. These props mirror what DrillPanel
+// threads into the pushed route.
 const setup = (overrides: Record<string, unknown> = {}) => {
   const props = {
-    visible: true,
-    onClose: jest.fn(),
+    onDone: jest.fn(),
     onModeInfo: jest.fn(),
     uiMode: "random" as const,
     setUiMode: jest.fn(),
@@ -20,14 +22,9 @@ const setup = (overrides: Record<string, unknown> = {}) => {
     onSettingsChange: jest.fn(),
     ...overrides,
   };
-  render(<DrillSettingsModal {...props} />);
+  render(<DrillSetupPage {...props} />);
   return props;
 };
-
-test("shows nothing while closed", () => {
-  setup({ visible: false });
-  expect(screen.queryByText("Drill setup")).toBeNull();
-});
 
 test("random mode shows the mode selector, stop-by and the hits wheel", () => {
   setup();
@@ -42,20 +39,24 @@ test("stop-by time swaps the hits wheel for the duration wheel", () => {
   expect(screen.getByText("Duration")).toBeTruthy();
 });
 
-test("path/live modes hide the Random params — only a court-authoring hint", () => {
+// Path/Live drop the Random params AND the old inline how-to line — that copy
+// lives in the mode-info modal now, so the page shows neither.
+test("path/live modes hide the Random params and the inline how-to", () => {
   setup({ uiMode: "path" });
   expect(screen.queryByText("Session length")).toBeNull();
-  expect(screen.getByText(/Tap the paired spots/)).toBeTruthy();
+  expect(screen.queryByText(/Tap the paired spots/)).toBeNull();
 });
 
-test("picking a mode reports it; the info icon and close fire their callbacks", () => {
+test("picking a mode reports it; the info icon and Done fire their callbacks", () => {
   const p = setup();
   fireEvent.press(screen.getByText("Path"));
   expect(p.setUiMode).toHaveBeenCalledWith("path");
   fireEvent.press(screen.getByTestId("mode-info-button"));
   expect(p.onModeInfo).toHaveBeenCalled();
-  fireEvent.press(screen.getByTestId("drill-settings-close"));
-  expect(p.onClose).toHaveBeenCalled();
+  // The corner close icon is gone — a bottom Done button pops the screen instead.
+  expect(screen.queryByTestId("drill-settings-close")).toBeNull();
+  fireEvent.press(screen.getByTestId("drill-settings-done"));
+  expect(p.onDone).toHaveBeenCalled();
 });
 
 // The session-wide drill settings (delay + immediate repeat) moved onto this

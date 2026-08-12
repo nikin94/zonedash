@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
 import {
   type LayoutChangeEvent,
   type NativeScrollEvent,
@@ -12,7 +18,13 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { edgeFades } from "../../helpers/scrollFade";
 import { SPOT_CODES, SPOT_NAMES } from "../../domain/spot";
 import { colors } from "../../theme";
-import { PathChip } from "./PathChip";
+import { PathChip, type PathChipHandle } from "./PathChip";
+
+/** Imperative handle: Undo asks the strip to drop the LAST step with the same
+ *  collapse animation a chip tap runs, so the two removal paths look identical. */
+export interface PathChipStripHandle {
+  removeLast: () => void;
+}
 
 /** Width of the edge fade — wide enough to read as "the strip continues" but
  *  narrow enough to leave the chips under it legible. */
@@ -29,15 +41,22 @@ const FADE_W = 28;
  * widths); this component only wires the scroll/layout measurements to it and
  * paints the gradient (react-native-svg — already in the app, so no rebuild).
  */
-export const PathChipStrip = ({
-  path,
-  onRemove,
-}: {
-  path: number[]; // canonical spot indices, in step order
-  onRemove: (index: number) => void;
-}) => {
+export const PathChipStrip = forwardRef<
+  PathChipStripHandle,
+  {
+    path: number[]; // canonical spot indices, in step order
+    onRemove: (index: number) => void;
+  }
+>(({ path, onRemove }, handleRef) => {
   const ref = useRef<ScrollView>(null);
   const prevLen = useRef(path.length);
+  // Live handles to each chip, keyed by step index, so Undo can drive the last
+  // one's collapse animation instead of dropping the step instantly.
+  const chipRefs = useRef<(PathChipHandle | null)[]>([]);
+
+  useImperativeHandle(handleRef, () => ({
+    removeLast: () => chipRefs.current[path.length - 1]?.collapse(),
+  }));
 
   const [offsetX, setOffsetX] = useState(0);
   const [contentW, setContentW] = useState(0);
@@ -77,6 +96,9 @@ export const PathChipStrip = ({
         {path.map((s, idx) => (
           <PathChip
             key={idx}
+            ref={(h) => {
+              chipRefs.current[idx] = h;
+            }}
             index={idx}
             code={SPOT_CODES[s]}
             label={SPOT_NAMES[s]}
@@ -95,7 +117,8 @@ export const PathChipStrip = ({
       )}
     </View>
   );
-};
+});
+PathChipStrip.displayName = "PathChipStrip";
 
 /** A gradient from the app background at the given edge to transparent inward. */
 const EdgeFade = ({
@@ -124,7 +147,10 @@ const EdgeFade = ({
     <View
       pointerEvents="none"
       testID={testID}
-      style={[styles.fade, side === "left" ? styles.fadeLeft : styles.fadeRight]}
+      style={[
+        styles.fade,
+        side === "left" ? styles.fadeLeft : styles.fadeRight,
+      ]}
     >
       <Svg width={FADE_W} height={height}>
         <Defs>

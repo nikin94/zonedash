@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import type { HitRecord } from "../../ble/contract";
 import type {
@@ -11,12 +13,13 @@ import type {
 import { AppText } from "../AppText";
 import { Button } from "../Button";
 import { GearIcon } from "../Icons";
-import { PathChipStrip } from "./PathChipStrip";
+import { PathChipStrip, type PathChipStripHandle } from "./PathChipStrip";
 import { ModeInfoModal } from "./ModeInfoModal";
-import { DrillSettingsModal } from "./DrillSettingsModal";
+import { DrillSetupPage } from "./DrillSetupPage";
 import {
   MODES,
   MODE_DESC,
+  drillSummary,
   uiFromWire,
   type StopBy,
   type UiMode,
@@ -33,7 +36,7 @@ import {
   TAB_BAR_DISC_RISE,
   tabBarClearance,
 } from "../../navigation/GlassTabBar";
-import { colors } from "../../theme";
+import { alpha, colors } from "../../theme";
 
 /** How long a resolved step's green flash stays on the map. Shorter than the
  *  engine's default step cadence so the flash clears before the next arm. */
@@ -54,11 +57,27 @@ const SESSION_DONE_TOAST_MS = 3000;
 // Breathing room between the last scrolled item and the tab bar's centre
 // (Drill) disc, on top of the bar clearance (tabBarClearance + TAB_BAR_DISC_RISE).
 const ACTION_BAR_GAP = 12;
-// CourtMap reserves a fixed bottom strip (its net-line frame, CourtMap STRIP_H)
-// UNDER the court box, so the gap above Start already includes it while the gap
-// below is just the panel's own gap — Start ends up hugging the Mode row. Match
-// that strip below the button so Start sits centred between the court and Mode.
-const START_STRIP_BALANCE = 22;
+// The vertical rhythm around the primary action: one gap unit, applied on both
+// sides — from the court to Start, and from Start to the config band below.
+// Roughly half the old court→Start gap so the action hugs the court more tightly.
+const ACTION_GAP = 14;
+// The panel column separates its children by this gap; the action block's own
+// margins are computed against it (below) so the three ACTION_GAPs come out
+// equal in the flex tree.
+const PANEL_GAP = 8;
+// CourtMap reserves an empty bottom strip below its court box (its net-line
+// frame, CourtMap STRIP_H) when the net is on top — so the court→Start gap
+// already carries it. The idle block pulls up by it to land on ACTION_GAP.
+const COURT_BOTTOM_STRIP = 22;
+
+// The Drill tab's own nested stack: the drill surface (DrillHome) plus the setup
+// page pushed onto it. A real native-stack push slides the setup IN OVER the
+// still-visible surface (and back on Done) — the navigator's own horizontal
+// transition, no hand-rolled Modal + Animated.
+const DrillNav = createNativeStackNavigator<{
+  DrillHome: undefined;
+  DrillSetup: undefined;
+}>();
 
 /**
  * The drill screen — reached once a layout is paired. One court map does
@@ -83,6 +102,7 @@ export const DrillPanel = ({
   onSettingsChange,
   rotation,
   onRotate,
+  statusControl,
   onSessionComplete,
 }: {
   transport: CentralTransport;
@@ -95,6 +115,9 @@ export const DrillPanel = ({
   /** Court view orientation + its rotate control, threaded to the map (see CourtMap). */
   rotation?: number;
   onRotate?: () => void;
+  /** Central-unit status affordance, threaded into the court corner. Injected by
+   *  the screen (which owns the store) so this panel stays presentation-only. */
+  statusControl?: ReactNode;
   /** Called once when a run finishes with at least one attempt, so the app can
    *  log it to the session history. The panel builds the summary; persistence is
    *  the caller's. */
@@ -139,6 +162,9 @@ export const DrillPanel = ({
           .filter((s): s is number => s != null)
       : [],
   ); // canonical spots, in order
+  // Drives the step-chip strip so Undo can collapse the last chip with the same
+  // animation a chip tap runs, instead of dropping the step instantly.
+  const pathStripRef = useRef<PathChipStripHandle>(null);
   const [session, setSession] = useState<SessionState>(
     live ? "running" : "idle",
   );
@@ -163,7 +189,6 @@ export const DrillPanel = ({
   const [error, setError] = useState<string | null>(null);
   // The drill-modes explainer (opened from the info icon by the Mode selector).
   const [modeInfoOpen, setModeInfoOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     const unsub = transport.onStatus((e) => {
@@ -401,258 +426,313 @@ export const DrillPanel = ({
   const runStatusHit = !liveBusy && lastReactionMs !== null;
 
   return (
-    <ScrollView
-      testID="drill-surface"
-      contentContainerStyle={[styles.panel, { paddingBottom: scrollPadBottom }]}
-      showsVerticalScrollIndicator={false}
+    <DrillNav.Navigator
+      screenOptions={{ headerShown: false, animation: "slide_from_right" }}
     >
-      {/* A clean court — its schema, targets, route and preview read
+      <DrillNav.Screen name="DrillHome">
+        {({ navigation }) => (
+          <>
+            <ScrollView
+              testID="drill-surface"
+              contentContainerStyle={[
+                styles.panel,
+                { paddingBottom: scrollPadBottom },
+              ]}
+              showsVerticalScrollIndicator={false}
+            >
+              {/* A clean court — its schema, targets, route and preview read
             unobstructed. The status line, drill config and the primary action
             all live OUTSIDE the court now: below it in the scrolling column. */}
-      <CourtMap
-        spots={visuals}
-        badges={pathBadges}
-        route={showPathBadges ? path : undefined}
-        onPressSpot={
-          liveRunning || (!running && uiMode === "path")
-            ? onCourtTap
-            : undefined
-        }
-        rotation={rotation}
-        onRotate={onRotate}
-        hideOff
-      />
+              <CourtMap
+                spots={visuals}
+                badges={pathBadges}
+                route={showPathBadges ? path : undefined}
+                onPressSpot={
+                  liveRunning || (!running && uiMode === "path")
+                    ? onCourtTap
+                    : undefined
+                }
+                rotation={rotation}
+                onRotate={onRotate}
+                statusControl={statusControl}
+                hideOff
+              />
 
-      {/* Under the court: a compact settings gear beside the primary action
+              {/* Under the court: a settings gear beside the primary action
             (Start — constant label, even after a finished run — or Stop). The
-            gear is an outline square — white fill, thick accent border, icon +
-            equal padding — sitting just left of the full-width Start, a gap
-            between them, both with the normal rounded corners. It opens the
-            drill-setup page; disabled while a run is on, when the config is
-            locked. The idle row carries the strip-balance margin so it sits
-            centred under the court. */}
-      <View
-        testID="action-row"
-        style={[styles.actionRow, !running && styles.actionRowBalance]}
-      >
-        <Button
-          disabled={running}
-          onPress={() => setSettingsOpen(true)}
-          testID="drill-settings-button"
-          accessibilityLabel="Drill setup"
-          style={styles.settingsButton}
-        >
-          <GearIcon size={22} color={colors.accent} />
-        </Button>
-        {running ? (
-          <Button
-            label="Stop"
-            onPress={stop}
-            danger
-            textSize={17}
-            testID="primary-action"
-            style={styles.actionButton}
-          />
-        ) : (
-          <Button
-            label="Start"
-            primary
-            textSize={17}
-            disabled={!canStart}
-            onPress={start}
-            testID="primary-action"
-            style={styles.actionButton}
-          />
-        )}
-      </View>
+            gear is an outline square (white fill, thick accent border) that
+            fills the row's full height and stays square, so only the Start
+            button's width flexes beside it. It opens the drill-setup page;
+            disabled while a run is on, when the config is locked. The idle block
+            carries the vertical rhythm so the action hugs the court. */}
+              <View
+                testID="action-block"
+                style={[styles.actionBlock, !running && styles.actionBlockIdle]}
+              >
+                <View testID="action-row" style={styles.actionRow}>
+                  <Button
+                    disabled={running}
+                    onPress={() => navigation.navigate("DrillSetup")}
+                    testID="drill-settings-button"
+                    accessibilityLabel="Drill setup"
+                    style={styles.settingsButton}
+                  >
+                    <GearIcon size={22} color={colors.accent} />
+                  </Button>
+                  {running ? (
+                    <Button
+                      label="Stop"
+                      onPress={stop}
+                      danger
+                      textSize={17}
+                      testID="primary-action"
+                      style={styles.actionButton}
+                    />
+                  ) : (
+                    // Start carries a second line INSIDE the button — a muted caption
+                    // naming what will run (mode + its key param: "Random · 10 hits",
+                    // "Path"), so the setup reads at a glance without opening the gear.
+                    <Button
+                      primary
+                      disabled={!canStart}
+                      onPress={start}
+                      testID="primary-action"
+                      accessibilityLabel={`Start — ${drillSummary(uiMode, stopBy, count, durationMs)}`}
+                      style={styles.actionButton}
+                    >
+                      <View style={styles.startContent}>
+                        <AppText
+                          center
+                          size={17}
+                          weight="600"
+                          color={colors.background}
+                        >
+                          Start
+                        </AppText>
+                        <AppText
+                          center
+                          size={11}
+                          color={alpha(colors.background, 0.7)}
+                          testID="mode-summary"
+                          style={styles.startSummary}
+                        >
+                          {drillSummary(uiMode, stopBy, count, durationMs)}
+                        </AppText>
+                      </View>
+                    </Button>
+                  )}
+                </View>
+              </View>
 
-      {/* Status line — only WHILE a run is live (Step + reaction). Completion
+              {/* Status line — only WHILE a run is live (Step + reaction). Completion
             is announced by the header toast now, not a line here, and the
             numbers live in the results panel below — so a finished run shows
             nothing in this slot. Fixed height so the two-line running status
             never nudges the config below. */}
-      {running && (
-        <View testID="status-slot" style={styles.statusSlot}>
-          <AppText center size={16} weight="600" style={styles.slotText}>
-            Step {resolvedCount + 1}
-          </AppText>
-          <AppText
-            center
-            size={13}
-            color={runStatusHit ? colors.success : colors.textMuted}
-            style={styles.slotText}
-          >
-            {runStatus}
-          </AppText>
-        </View>
-      )}
+              {running && (
+                <View testID="status-slot" style={styles.statusSlot}>
+                  <AppText
+                    center
+                    size={16}
+                    weight="600"
+                    style={styles.slotText}
+                  >
+                    Step {resolvedCount + 1}
+                  </AppText>
+                  <AppText
+                    center
+                    size={13}
+                    color={runStatusHit ? colors.success : colors.textMuted}
+                    style={styles.slotText}
+                  >
+                    {runStatus}
+                  </AppText>
+                </View>
+              )}
 
-      {error !== null && (
-        <AppText
-          center
-          size={13}
-          numberOfLines={1}
-          color={colors.danger}
-          style={styles.errorLine}
-        >
-          {error}
-        </AppText>
-      )}
+              {error !== null && (
+                <AppText
+                  center
+                  size={13}
+                  numberOfLines={1}
+                  color={colors.danger}
+                  style={styles.errorLine}
+                >
+                  {error}
+                </AppText>
+              )}
 
-      {/* Under the court: only the Path sequence authoring stays here (the
+              {/* Under the court: only the Path sequence authoring stays here (the
           operator taps the court, so its chips belong beside it). Mode and the
           Random params moved to the drill-setup page behind the gear. Locked
           while a run is on so the loaded drill always matches what is on screen. */}
-      <View
-        pointerEvents={running ? "none" : "auto"}
-        style={[styles.config, running && styles.dimmed]}
-      >
-        {uiMode === "path" &&
-          (path.length > 0 ? (
-            <>
-              {/* Ordered step chips — the sequence, in order, each removable by
+              <View
+                pointerEvents={running ? "none" : "auto"}
+                style={[styles.config, running && styles.dimmed]}
+              >
+                {uiMode === "path" &&
+                  (path.length > 0 ? (
+                    <>
+                      {/* Ordered step chips — the sequence, in order, each removable by
                   a tap (a targeted delete the map badges point back to). A
                   repeat shows twice, so the sequence stays unambiguous. The
                   strip scrolls (the path can run to MAX_DRILL_PATH steps) and
                   fades its overflowing edges so it reads as scrollable, not a
                   row silently running off-screen; it auto-scrolls to the end on
                   each append so the newest steps stay in view. */}
-              <PathChipStrip
-                path={path}
-                onRemove={(idx) =>
-                  setPath((p) => p.filter((_, j) => j !== idx))
-                }
-              />
-              {path.length >= MAX_DRILL_PATH && (
-                <AppText
-                  center
-                  size={12}
-                  color={colors.textMuted}
-                  testID="path-full"
-                >
-                  Path is full — remove a step to change it
-                </AppText>
-              )}
-              <View style={styles.pathActions}>
-                <Button
-                  label="Undo"
-                  size="small"
-                  textSize={15}
-                  onPress={() => setPath(path.slice(0, -1))}
-                />
-                <Button
-                  label="Clear"
-                  size="small"
-                  textSize={15}
-                  onPress={() => setPath([])}
-                />
-              </View>
-            </>
-          ) : (
-            <AppText center size={13} color={colors.textMuted}>
-              Tap paired spots on the map in the order to run
-            </AppText>
-          ))}
-      </View>
-
-      {showDone && records !== null && (
-        <View style={styles.stats} testID="stats-panel">
-          <AppText
-            size={12}
-            color={colors.textSecondary}
-            style={styles.heading}
-          >
-            Results
-          </AppText>
-          {attempts.length > 0 ? (
-            // No inner scroll — the whole screen scrolls, so the list just
-            // grows and every attempt is one page-scroll away.
-            <View testID="attempt-list" style={styles.attemptList}>
-              {attempts.map((r, i) => {
-                // The canonical spot the record's slot maps back to. Guarded
-                // once here so the number, icon, code and SR-label all degrade
-                // the same way if it is ever out of range.
-                const spot = pairedSpots[r.position];
-                return (
-                  <View key={r.seq} style={styles.statRow}>
-                    <View style={styles.attemptLead}>
-                      <AppText
-                        size={13}
-                        color={colors.textMuted}
-                        style={styles.attemptNum}
-                        accessibilityLabel={`Attempt ${i + 1}`}
-                      >
-                        {i + 1}
-                      </AppText>
-                      <SpotIcon spot={spot} />
-                      <AppText
-                        size={13}
-                        weight="600"
-                        color={colors.accentText}
-                        accessibilityLabel={
-                          spot != null ? SPOT_NAMES[spot] : "unknown spot"
+                      <PathChipStrip
+                        ref={pathStripRef}
+                        path={path}
+                        onRemove={(idx) =>
+                          setPath((p) => p.filter((_, j) => j !== idx))
                         }
-                      >
-                        {spot != null ? SPOT_CODES[spot] : "—"}
-                      </AppText>
+                      />
+                      {path.length >= MAX_DRILL_PATH && (
+                        <AppText
+                          center
+                          size={12}
+                          color={colors.textMuted}
+                          testID="path-full"
+                        >
+                          Path is full — remove a step to change it
+                        </AppText>
+                      )}
+                      <View style={styles.pathActions}>
+                        <Button
+                          label="Undo"
+                          size="small"
+                          textSize={15}
+                          // Collapse the last chip (same animation as tapping it), which
+                          // fires onRemove for that index when the slide-out completes.
+                          onPress={() => pathStripRef.current?.removeLast()}
+                        />
+                        <Button
+                          label="Clear"
+                          size="small"
+                          textSize={15}
+                          onPress={() => setPath([])}
+                        />
+                      </View>
+                    </>
+                  ) : (
+                    <AppText center size={13} color={colors.textMuted}>
+                      Tap paired spots on the map in the order to run
+                    </AppText>
+                  ))}
+              </View>
+
+              {showDone && records !== null && (
+                <View style={styles.stats} testID="stats-panel">
+                  <AppText
+                    size={12}
+                    color={colors.textSecondary}
+                    style={styles.heading}
+                  >
+                    Results
+                  </AppText>
+                  {attempts.length > 0 ? (
+                    // No inner scroll — the whole screen scrolls, so the list just
+                    // grows and every attempt is one page-scroll away.
+                    <View testID="attempt-list" style={styles.attemptList}>
+                      {attempts.map((r, i) => {
+                        // The canonical spot the record's slot maps back to. Guarded
+                        // once here so the number, icon, code and SR-label all degrade
+                        // the same way if it is ever out of range.
+                        const spot = pairedSpots[r.position];
+                        return (
+                          <View key={r.seq} style={styles.statRow}>
+                            <View style={styles.attemptLead}>
+                              <AppText
+                                size={13}
+                                color={colors.textMuted}
+                                style={styles.attemptNum}
+                                accessibilityLabel={`Attempt ${i + 1}`}
+                              >
+                                {i + 1}
+                              </AppText>
+                              <SpotIcon spot={spot} />
+                              <AppText
+                                size={13}
+                                weight="600"
+                                color={colors.accentText}
+                                accessibilityLabel={
+                                  spot != null
+                                    ? SPOT_NAMES[spot]
+                                    : "unknown spot"
+                                }
+                              >
+                                {spot != null ? SPOT_CODES[spot] : "—"}
+                              </AppText>
+                            </View>
+                            <AppText size={13} weight="600">
+                              {fmtSec(r.reactionMs)}
+                            </AppText>
+                          </View>
+                        );
+                      })}
                     </View>
+                  ) : (
+                    <AppText center size={13} color={colors.textMuted}>
+                      No attempts recorded
+                    </AppText>
+                  )}
+                  <View style={styles.statDivider} />
+                  <View style={styles.statRow}>
+                    <AppText size={13} color={colors.textSecondary}>
+                      Total time
+                    </AppText>
                     <AppText size={13} weight="600">
-                      {fmtSec(r.reactionMs)}
+                      {fmtSec(totalMs)}
                     </AppText>
                   </View>
-                );
-              })}
-            </View>
-          ) : (
-            <AppText center size={13} color={colors.textMuted}>
-              No attempts recorded
-            </AppText>
-          )}
-          <View style={styles.statDivider} />
-          <View style={styles.statRow}>
-            <AppText size={13} color={colors.textSecondary}>
-              Total time
-            </AppText>
-            <AppText size={13} weight="600">
-              {fmtSec(totalMs)}
-            </AppText>
-          </View>
-          <View style={styles.statRow}>
-            <AppText size={13} color={colors.textSecondary}>
-              Average
-            </AppText>
-            <AppText size={13} weight="600">
-              {avgMs !== null ? fmtSec(avgMs) : "—"}
-            </AppText>
-          </View>
-        </View>
-      )}
+                  <View style={styles.statRow}>
+                    <AppText size={13} color={colors.textSecondary}>
+                      Average
+                    </AppText>
+                    <AppText size={13} weight="600">
+                      {avgMs !== null ? fmtSec(avgMs) : "—"}
+                    </AppText>
+                  </View>
+                </View>
+              )}
+            </ScrollView>
+          </>
+        )}
+      </DrillNav.Screen>
 
-      <DrillSettingsModal
-        visible={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        onModeInfo={() => setModeInfoOpen(true)}
-        uiMode={uiMode}
-        setUiMode={setUiMode}
-        stopBy={stopBy}
-        setStopBy={setStopBy}
-        count={count}
-        setCount={setCount}
-        durationMs={durationMs}
-        setDurationMs={setDurationMs}
-        settings={settings}
-        onSettingsChange={onSettingsChange}
-      />
-
-      <ModeInfoModal
-        visible={modeInfoOpen}
-        onDismiss={() => setModeInfoOpen(false)}
-        modes={MODES.map((m) => ({
-          label: m.label,
-          description: MODE_DESC[m.key],
-        }))}
-      />
-    </ScrollView>
+      <DrillNav.Screen name="DrillSetup">
+        {({ navigation }) => (
+          <>
+            <DrillSetupPage
+              onDone={() => navigation.goBack()}
+              onModeInfo={() => setModeInfoOpen(true)}
+              uiMode={uiMode}
+              setUiMode={setUiMode}
+              stopBy={stopBy}
+              setStopBy={setStopBy}
+              count={count}
+              setCount={setCount}
+              durationMs={durationMs}
+              setDurationMs={setDurationMs}
+              settings={settings}
+              onSettingsChange={onSettingsChange}
+            />
+            {/* The per-mode explainer opens from the info icon on THIS page, so
+                it lives here — the active pushed screen. The drill surface
+                behind is detached while the setup is up, so a Modal rendered
+                there wouldn't paint. */}
+            <ModeInfoModal
+              visible={modeInfoOpen}
+              onDismiss={() => setModeInfoOpen(false)}
+              modes={MODES.map((m) => ({
+                label: m.label,
+                description: MODE_DESC[m.key],
+              }))}
+            />
+          </>
+        )}
+      </DrillNav.Screen>
+    </DrillNav.Navigator>
   );
 };
 
@@ -663,7 +743,7 @@ const styles = StyleSheet.create({
     // court. paddingBottom is applied inline (tab-bar clearance) so the scrolled
     // column clears the floating bar.
     alignItems: "center",
-    gap: 8,
+    gap: PANEL_GAP,
     alignSelf: "stretch",
     paddingHorizontal: 24,
   },
@@ -681,29 +761,49 @@ const styles = StyleSheet.create({
   },
   // The gear + Start/Stop row: a compact outline gear beside the full-width
   // primary action, a gap between them, both with the normal rounded corners.
+  // The block ALWAYS stretches (running included) so Stop fills the row instead
+  // of collapsing to a sliver next to the gear.
+  actionBlock: {
+    alignSelf: "stretch",
+  },
+  // Idle adds the vertical rhythm: pull up so the court→Start gap lands on
+  // ACTION_GAP (cancelling the court's empty bottom strip + the panel gap), and
+  // leave ACTION_GAP below Start to the config band (panel gap + this margin).
+  actionBlockIdle: {
+    marginTop: ACTION_GAP - COURT_BOTTOM_STRIP - PANEL_GAP,
+    marginBottom: ACTION_GAP - PANEL_GAP,
+  },
+  // alignItems stretch so the gear matches the FULL row height set by Start;
+  // only Start's width flexes. The gear is a square (aspectRatio 1), so as Start
+  // grows/shrinks the gear tracks its height and stays square.
   actionRow: {
     alignSelf: "stretch",
     flexDirection: "row",
+    alignItems: "stretch",
     gap: 8,
   },
-  // Idle: balance the row so it sits centred between the court and the config
-  // below (the court's bottom strip pads the gap above — see START_STRIP_BALANCE).
-  // Running/done drop it (a status line follows, nothing to centre against).
-  actionRowBalance: {
-    marginBottom: START_STRIP_BALANCE,
+  // Start's two-line content: the label with its muted mode caption beneath,
+  // a tight line gap so the two read as one stacked label.
+  startContent: {
+    alignItems: "center",
   },
-  // The gear: a compact outline square — white fill, thick accent border, sized
-  // to the icon with equal padding all round (no flex, so it stays small).
+  startSummary: {
+    marginTop: 1,
+  },
+  // The gear: an outline square — white fill, thick accent border — that fills
+  // the row's height (alignItems stretch) and stays square via aspectRatio, so
+  // only the Start button's width adjusts beside it.
   settingsButton: {
     backgroundColor: colors.background,
     borderColor: colors.accent,
     borderWidth: 2,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    aspectRatio: 1,
   },
-  // Start / Stop fills the rest of the row.
+  // Start / Stop fills the rest of the row's width; a trimmed vertical pad keeps
+  // the two-line Start compact.
   actionButton: {
     flex: 1,
+    paddingVertical: 7,
   },
   dimmed: {
     opacity: 0.4,
