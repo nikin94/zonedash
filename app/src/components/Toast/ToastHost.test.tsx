@@ -1,4 +1,5 @@
 import { act, render, screen } from "@testing-library/react-native";
+import { StyleSheet } from "react-native";
 
 import {
   dismissToast,
@@ -64,6 +65,21 @@ test("a newer toast replaces the one on screen", () => {
   });
   expect(screen.getByText("second")).toBeTruthy();
   expect(screen.queryByText("first")).toBeNull();
+  settle();
+});
+
+// Regression: the toast anchors to a caller-supplied numeric offset (the header
+// hands it insets.top + header height), NOT a percent `top` — which resolved to
+// ~0 against the auto-height header under the New Architecture and drew the
+// card over the iOS notch. The offset must land on the wrap verbatim so the
+// card always clears the brow.
+test("the toast sits at the safe-area-aware offset the caller passes, not the screen top", () => {
+  render(<ToastHost topOffset={123} />);
+  act(() => {
+    showToast("Session complete");
+  });
+  const wrap = StyleSheet.flatten(screen.getByTestId("toast-wrap").props.style);
+  expect(wrap.top).toBe(123);
   settle();
 });
 

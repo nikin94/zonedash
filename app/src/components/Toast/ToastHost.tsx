@@ -44,15 +44,15 @@ const TONE_BAR: Record<ToastTone, string> = {
  * id, so a new one fully remounts the card: fresh animated values and timer, no
  * manual reset. Presentation only — `showToast` (anywhere) drives it.
  */
-export const ToastHost = memo(() => {
+export const ToastHost = memo(({ topOffset = 0 }: { topOffset?: number }) => {
   const toast = useToast();
   if (toast === null) return null;
   // key by id: a new toast remounts the card fresh (own animation + timer).
-  return <ToastCard key={toast.id} toast={toast} />;
+  return <ToastCard key={toast.id} toast={toast} topOffset={topOffset} />;
 });
 ToastHost.displayName = "ToastHost";
 
-const ToastCard = ({ toast }: { toast: Toast }) => {
+const ToastCard = ({ toast, topOffset }: { toast: Toast; topOffset: number }) => {
   // translateY carries BOTH the enter/exit slide and the finger during a drag;
   // opacity fades with it. Native driver — transform + opacity only, off the JS
   // thread (the animation idiom the rest of the app uses).
@@ -125,7 +125,11 @@ const ToastCard = ({ toast }: { toast: Toast }) => {
   ).current;
 
   return (
-    <View pointerEvents="box-none" style={styles.wrap}>
+    <View
+      pointerEvents="box-none"
+      testID="toast-wrap"
+      style={[styles.wrap, { top: topOffset }]}
+    >
       <Animated.View
         testID="toast"
         accessibilityRole="alert"
@@ -143,11 +147,13 @@ const ToastCard = ({ toast }: { toast: Toast }) => {
 };
 
 const styles = StyleSheet.create({
-  // Anchored to the bottom edge of the header (top: 100%), spanning its width;
-  // box-none so only the card itself catches touches, never the empty span.
+  // Anchored to the header's bottom edge via an explicit `topOffset` (below the
+  // safe-area top inset), spanning its width; box-none so only the card itself
+  // catches touches, never the empty span. A percent `top` here resolved to ~0
+  // against the auto-height header under the New Architecture and drew over the
+  // notch, so the offset is passed in as a real pixel value instead.
   wrap: {
     position: "absolute",
-    top: "100%",
     left: 0,
     right: 0,
     alignItems: "center",
