@@ -6,6 +6,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { AccountSection } from "../components/AccountSection";
 import { AppText } from "../components/AppText";
 import { HistoryPanel } from "../components/HistoryPanel";
+import { ScreenWrapper } from "../components/ScreenWrapper";
 import { useAppState } from "../state/AppState";
 import { colors } from "../theme";
 
@@ -36,42 +37,38 @@ export const AccountScreen = () => {
   const refreshKey = focusKey + historyVersion;
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-    >
-      <AccountSection
-        status={authStatus}
-        user={authUser}
-        onSignIn={signIn}
-        onSignOut={signOut}
-      />
-      {authError !== null && (
-        <AppText
-          size={12}
-          color={colors.danger}
-          style={styles.error}
-          testID="auth-error"
-        >
-          {authError}
-        </AppText>
-      )}
+    <ScreenWrapper>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        <AccountSection
+          status={authStatus}
+          user={authUser}
+          onSignIn={signIn}
+          onSignOut={signOut}
+        />
+        {authError !== null && (
+          <AppText
+            size={12}
+            color={colors.danger}
+            style={styles.error}
+            testID="auth-error"
+          >
+            {authError}
+          </AppText>
+        )}
 
-      <View style={styles.divider} />
+        <View style={styles.divider} />
 
-      <HistoryPanel refreshKey={refreshKey} />
-    </ScrollView>
+        <HistoryPanel refreshKey={refreshKey} />
+      </ScrollView>
+    </ScreenWrapper>
   );
 };
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
   content: {
-    paddingTop: 8,
     paddingBottom: 120, // clear the floating glass tab bar
     gap: 16,
   },

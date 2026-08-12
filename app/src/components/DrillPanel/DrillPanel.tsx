@@ -10,13 +10,16 @@ import type {
 } from "../../ble/transport";
 import { AppText } from "../AppText";
 import { Button } from "../Button";
+import { CustomPressable } from "../CustomPressable";
+import { InfoIcon } from "../Icons";
 import { PathChipStrip } from "./PathChipStrip";
+import { ModeInfoModal } from "./ModeInfoModal";
 import { MAX_DRILL_PATH } from "../../ble/codec";
 import { CourtMap, SpotIcon } from "../CourtMap";
 import { msOptions, WheelField } from "../WheelField";
 import { SPOT_CODES, SPOT_NAMES } from "../../domain/spot";
 import { summarize, type SessionSummary } from "../../domain/session";
-import { SURFACE_MARGIN_TOP, type SpotVisual } from "../../helpers/court";
+import { type SpotVisual } from "../../helpers/court";
 import { formatStepBadge } from "../../helpers/pathBadge";
 import { type DrillSettings } from "../../state/AppState";
 import {
@@ -43,7 +46,6 @@ const fmtSec = (ms: number) => `${(ms / 1000).toFixed(2)} ${UNIT}`;
 // Fixed footprints for the court-centre block, so idle → running → done never
 // shifts the layout.
 const TEXT_SLOT_H = 40; // fixed status area: room for the 2-line running status
-const ERROR_SLOT_H = 18;
 // Breathing room between the last scrolled item and the tab bar's centre
 // (Drill) disc, on top of the bar clearance (tabBarClearance + TAB_BAR_DISC_RISE).
 const ACTION_BAR_GAP = 12;
@@ -174,6 +176,8 @@ export const DrillPanel = ({
   const [liveBusy, setLiveBusy] = useState(live && snap.armedPosition != null);
   const [records, setRecords] = useState<HitRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The drill-modes explainer (opened from the info icon by the Mode selector).
+  const [modeInfoOpen, setModeInfoOpen] = useState(false);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     const unsub = transport.onStatus((e) => {
@@ -435,58 +439,56 @@ export const DrillPanel = ({
           />
         )}
 
-        {/* Status line, below the primary action. Fixed height so switching between
-            a one-line (idle) and two-line (running) status never nudges the
-            config below it. */}
-        <View testID="status-slot" style={styles.statusSlot}>
-          {running ? (
-            <>
+        {/* Status line — only while a run is live or has just finished. Idle
+            shows nothing here, so the Mode selector sits directly under Start.
+            Fixed height so a one-line (done) and two-line (running) status never
+            nudge the config below. */}
+        {(running || showDone) && (
+          <View testID="status-slot" style={styles.statusSlot}>
+            {running ? (
+              <>
+                <AppText center size={16} weight="600" style={styles.slotText}>
+                  Step {resolvedCount + 1}
+                </AppText>
+                <AppText
+                  center
+                  size={13}
+                  color={runStatusHit ? colors.success : colors.textMuted}
+                  style={styles.slotText}
+                >
+                  {runStatus}
+                </AppText>
+              </>
+            ) : showDone && records !== null ? (
+              // Numbers live in the results panel below — the court just marks
+              // the session done, so the map stays uncluttered.
               <AppText center size={16} weight="600" style={styles.slotText}>
-                Step {resolvedCount + 1}
+                Session complete
               </AppText>
+            ) : (
               <AppText
                 center
                 size={13}
-                color={runStatusHit ? colors.success : colors.textMuted}
+                color={colors.textMuted}
                 style={styles.slotText}
               >
-                {runStatus}
+                Fetching results…
               </AppText>
-            </>
-          ) : showDone && records !== null ? (
-            // Numbers live in the results panel below — the court just marks
-            // the session done, so the map stays uncluttered.
-            <AppText center size={16} weight="600" style={styles.slotText}>
-              Session complete
-            </AppText>
-          ) : showDone ? (
-            <AppText
-              center
-              size={13}
-              color={colors.textMuted}
-              style={styles.slotText}
-            >
-              Fetching results…
-            </AppText>
-          ) : (
-            <AppText
-              center
-              size={13}
-              color={colors.textMuted}
-              style={styles.slotText}
-            >
-              Pick a drill below to run
-            </AppText>
-          )}
-        </View>
+            )}
+          </View>
+        )}
 
-        <View style={styles.errorSlot}>
-          {error !== null && (
-            <AppText center size={13} numberOfLines={1} color={colors.danger}>
-              {error}
-            </AppText>
-          )}
-        </View>
+        {error !== null && (
+          <AppText
+            center
+            size={13}
+            numberOfLines={1}
+            color={colors.danger}
+            style={styles.errorLine}
+          >
+            {error}
+          </AppText>
+        )}
 
       {/* The drill config lives under the court; locked while a run is on so
           the loaded drill always matches what is on screen. */}
@@ -495,9 +497,23 @@ export const DrillPanel = ({
         style={[styles.config, running && styles.dimmed]}
       >
         <View style={styles.stopRow}>
-          <AppText color={colors.textSecondary} style={styles.paramLabel}>
-            Mode
-          </AppText>
+          <View style={styles.modeLabel}>
+            <AppText color={colors.textSecondary} style={styles.paramLabel}>
+              Mode
+            </AppText>
+            {/* The per-mode descriptions moved off the always-on line into this
+                on-demand modal, so the setup stays compact. */}
+            <CustomPressable
+              noFeedback
+              hitSlop={10}
+              testID="mode-info-button"
+              accessibilityLabel="About drill modes"
+              onPress={() => setModeInfoOpen(true)}
+              style={styles.infoButton}
+            >
+              <InfoIcon size={16} color={colors.textMuted} />
+            </CustomPressable>
+          </View>
           <View style={styles.stopChips}>
             {MODES.map((m) => (
               <Button
@@ -513,9 +529,6 @@ export const DrillPanel = ({
             ))}
           </View>
         </View>
-        <AppText center size={12} color={colors.textMuted} testID="mode-desc">
-          {MODE_DESC[uiMode]}
-        </AppText>
 
         {uiMode === "random" && (
           <>
@@ -681,24 +694,32 @@ export const DrillPanel = ({
           </View>
         </View>
       )}
+
+      <ModeInfoModal
+        visible={modeInfoOpen}
+        onDismiss={() => setModeInfoOpen(false)}
+        modes={MODES.map((m) => ({
+          label: m.label,
+          description: MODE_DESC[m.key],
+        }))}
+      />
       </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
   panel: {
-    // Shared with the idle + pairing surfaces so the court doesn't jump when one
-    // replaces another (notably the pairing → drill handoff). See court.ts.
-    // paddingBottom is applied inline (tab-bar clearance) so the scrolled column
-    // clears the floating bar.
-    marginTop: SURFACE_MARGIN_TOP,
+    // The shared top offset now lives on ScreenWrapper (one place, uniform
+    // across tabs), so all three Drill surfaces share it and none jumps the
+    // court. paddingBottom is applied inline (tab-bar clearance) so the scrolled
+    // column clears the floating bar.
     alignItems: "center",
     gap: 8,
     alignSelf: "stretch",
     paddingHorizontal: 24,
   },
-  // The status line under the clean court. Fixed height so a one-line (idle) and
-  // a two-line (running) status keep the config below them from jumping.
+  // The status line, shown only while running/done. Fixed height so a one-line
+  // (done) and a two-line (running) status don't nudge the config below them.
   statusSlot: {
     height: TEXT_SLOT_H,
     justifyContent: "center",
@@ -706,9 +727,8 @@ const styles = StyleSheet.create({
   slotText: {
     lineHeight: 20,
   },
-  errorSlot: {
-    height: ERROR_SLOT_H,
-    justifyContent: "center",
+  errorLine: {
+    alignSelf: "stretch",
   },
   // Full-width Start/Stop/Run again — the hero action in the scrolling column,
   // stretched across the surface right under the court.
@@ -768,6 +788,16 @@ const styles = StyleSheet.create({
   },
   paramLabel: {
     flexShrink: 1,
+  },
+  // "Mode" label + its info icon, kept together on the left of the row.
+  modeLabel: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  infoButton: {
+    alignItems: "center",
+    justifyContent: "center",
   },
   pathActions: {
     flexDirection: "row",

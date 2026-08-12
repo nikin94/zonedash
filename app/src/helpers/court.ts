@@ -37,9 +37,3 @@ export const INSET = 10;
 const CENTRE_CONTENT = Math.round((MAP_W - 2 * 76) / 1.15);
 export const CENTRE_PAD = Math.round((MAP_W - CENTRE_CONTENT) / 2);
 
-// Top offset shared by every Drill-tab surface (idle / pairing / drill). They
-// swap in place as connection + pairing state changes, so they MUST start at the
-// same y — otherwise the court visibly jumps as one surface replaces another
-// (the pairing → drill handoff used to snap the whole court up by the 32→16
-// difference). One constant keeps the three aligned.
-export const SURFACE_MARGIN_TOP = 32;

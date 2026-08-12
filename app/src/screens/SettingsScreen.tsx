@@ -1,8 +1,8 @@
 import { ScrollView, StyleSheet } from "react-native";
 
+import { ScreenWrapper } from "../components/ScreenWrapper";
 import { SettingsPanel } from "../components/SettingsPanel";
 import { useAppState } from "../state/AppState";
-import { colors } from "../theme";
 
 /**
  * The Settings tab — drill settings only (account moved to its own tab). No
@@ -11,23 +11,19 @@ import { colors } from "../theme";
 export const SettingsScreen = () => {
   const { settings, setSettings } = useAppState();
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-    >
-      <SettingsPanel settings={settings} onChange={setSettings} />
-    </ScrollView>
+    <ScreenWrapper>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        <SettingsPanel settings={settings} onChange={setSettings} />
+      </ScrollView>
+    </ScreenWrapper>
   );
 };
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
   content: {
-    paddingTop: 8,
     paddingBottom: 120, // clear the floating glass tab bar
   },
 });

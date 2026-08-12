@@ -3,7 +3,6 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react-n
 import { StyleSheet } from "react-native";
 
 import { MAX_DRILL_PATH } from "../../ble/codec";
-import { SURFACE_MARGIN_TOP } from "../../helpers/court";
 import {
   TAB_BAR_DISC_RISE,
   TAB_BAR_ROW_H,
@@ -592,35 +591,40 @@ test("a rehydrated random run shows its real count, not the default", async () =
 
 // The drill surface must start at the SAME shared top offset as the idle and
 // pairing surfaces (court.ts) — otherwise the court jumps when the pairing
-// handoff swaps this panel in. The offset rides the ScrollView's content
-// container. Regression: this surface was at 16 while the others were at 32.
-test("the drill surface sits at the shared surface top offset", async () => {
+// handoff swaps this panel in. The shared top offset now lives on ScreenWrapper
+// (one uniform value across the three surfaces), so this surface must carry NO
+// top margin of its own — otherwise it could drift back out of sync and jump
+// the court. Regression: this surface was once at 16 while the others were 32.
+test("the drill surface carries no top margin — the offset is on ScreenWrapper", async () => {
   const t = await connectedTransport();
   panel(t);
   const cc = StyleSheet.flatten(
     screen.getByTestId("drill-surface").props.contentContainerStyle,
   );
-  expect(cc.marginTop).toBe(SURFACE_MARGIN_TOP);
+  expect(cc.marginTop).toBeUndefined();
 });
 
-// Layout (option A): the court is clean — the status, config and the primary
-// action all live OUTSIDE the court, in the scrolling column below it. Start
-// sits IMMEDIATELY under the court — before the status line and the config — so
-// it's the first control in reach. The court draws no centre card (no children),
-// so its schema/targets/route read unobstructed.
-test("the primary action sits right under the court, above the status and config", async () => {
+// Layout (option A): the court is clean — the config and the primary action all
+// live OUTSIDE the court, in the scrolling column below it. Start sits
+// IMMEDIATELY under the court, and the Mode selector directly under Start.
+// Idle shows NO status line ("Pick a drill" is gone) and NO inline mode
+// description, so nothing pads the gap between Start and Mode.
+test("idle: Start sits right under the court, Mode directly under it — no status or description filler", async () => {
   const t = await connectedTransport();
   panel(t);
 
   const surface = screen.getByTestId("drill-surface");
-  // Start is a full-width button in the scrolling column, not a pinned bar.
   expect(within(surface).getByText("Start")).toBeTruthy();
-  // In tree (render) order: the primary action comes before the status slot and
-  // the mode description — i.e. right below the court.
+  // The idle status filler and the inline mode description are gone.
+  expect(screen.queryByTestId("status-slot")).toBeNull();
+  expect(screen.queryByTestId("mode-desc")).toBeNull();
+  expect(screen.queryByText("Pick a drill below to run")).toBeNull();
+  // In tree order: the primary action comes before the Mode selector's info
+  // affordance — i.e. Start right under the court, then Mode right under Start.
   const order = within(surface)
-    .getAllByTestId(/^(primary-action|status-slot|mode-desc)$/)
+    .getAllByTestId(/^(primary-action|mode-info-button)$/)
     .map((n) => n.props.testID);
-  expect(order).toEqual(["primary-action", "status-slot", "mode-desc"]);
+  expect(order).toEqual(["primary-action", "mode-info-button"]);
 });
 
 test("the drill court is clean — no centre card over the schema", async () => {
@@ -646,4 +650,29 @@ test("the scrolling column clears the floating tab bar and its centre disc", asy
   expect(cc.paddingBottom).toBe(tabBarClearance(0) + TAB_BAR_DISC_RISE + 12);
   // And it genuinely clears both the bar row and the poking disc.
   expect(cc.paddingBottom).toBeGreaterThanOrEqual(TAB_BAR_ROW_H + TAB_BAR_DISC_RISE);
+});
+
+// The per-mode descriptions moved off an always-on line into a modal opened
+// from the info icon by the Mode selector — so the setup stays compact but the
+// explanations are still one tap away. Tapping the icon shows every mode's copy;
+// the backdrop dismisses.
+test("the mode info icon opens a modal describing each drill mode", async () => {
+  const t = await connectedTransport();
+  panel(t);
+
+  // No modal, and no inline description, until asked for.
+  expect(screen.queryByTestId("mode-info")).toBeNull();
+  expect(screen.queryByText(/Targets light in a random order/)).toBeNull();
+
+  fireEvent.press(screen.getByTestId("mode-info-button"));
+
+  // Every mode's name + description is listed in the modal.
+  expect(screen.getByTestId("mode-info")).toBeTruthy();
+  expect(screen.getByText(/Targets light in a random order/)).toBeTruthy();
+  expect(screen.getByText(/Run a fixed sequence/)).toBeTruthy();
+  expect(screen.getByText(/Light targets by hand/)).toBeTruthy();
+
+  // The backdrop dismisses.
+  fireEvent.press(screen.getByTestId("mode-info-backdrop"));
+  expect(screen.queryByTestId("mode-info")).toBeNull();
 });
