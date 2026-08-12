@@ -39,10 +39,12 @@ test("stop-by time swaps the hits wheel for the duration wheel", () => {
   expect(screen.getByText("Duration")).toBeTruthy();
 });
 
-test("path/live modes hide the Random params — only a court-authoring hint", () => {
+// Path/Live drop the Random params AND the old inline how-to line — that copy
+// lives in the mode-info modal now, so the page shows neither.
+test("path/live modes hide the Random params and the inline how-to", () => {
   setup({ uiMode: "path" });
   expect(screen.queryByText("Session length")).toBeNull();
-  expect(screen.getByText(/Tap the paired spots/)).toBeTruthy();
+  expect(screen.queryByText(/Tap the paired spots/)).toBeNull();
 });
 
 test("picking a mode reports it; the info icon and Done fire their callbacks", () => {

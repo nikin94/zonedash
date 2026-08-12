@@ -156,13 +156,8 @@ export const DrillSetupPage = ({
           </>
         )}
 
-        {uiMode !== "random" && (
-          <AppText size={13} color={colors.textMuted} style={styles.hint}>
-            {uiMode === "path"
-              ? "Tap the paired spots on the court, in order, to build the sequence."
-              : "Light targets by hand during the run — one tap each."}
-          </AppText>
-        )}
+        {/* Path/Live need no inline how-to here — the per-mode explainer behind
+            the info icon already covers it, so the setup stays uncluttered. */}
 
         {/* The session-wide drill settings (delay + immediate repeat) live here
             under a divider now — the Settings tab became History. The embedded
@@ -235,9 +230,6 @@ const styles = StyleSheet.create({
   chips: {
     flexDirection: "row",
     gap: 8,
-  },
-  hint: {
-    lineHeight: 18,
   },
   // Separates the mode/params from the session-wide settings below.
   divider: {
