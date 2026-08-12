@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
 
 import type { PairingProgress } from "../../ble/contract";
@@ -30,11 +30,15 @@ export const PairingPanel = ({
   transport,
   rotation,
   onRotate,
+  statusControl,
 }: {
   transport: CentralTransport;
   /** Court view orientation + its rotate control, threaded to the map (see CourtMap). */
   rotation?: number;
   onRotate?: () => void;
+  /** Central-unit status affordance, threaded into the court corner. Injected by
+   *  the screen (which owns the store) so this panel stays presentation-only. */
+  statusControl?: ReactNode;
 }) => {
   const [progress, setProgress] = useState<PairingProgress | null>(null);
   const [running, setRunning] = useState(false);
@@ -154,6 +158,7 @@ export const PairingPanel = ({
         onPressSpot={choosing ? pickSpot : undefined}
         rotation={rotation}
         onRotate={onRotate}
+        statusControl={statusControl}
       />
 
       {/* The primary action, directly under the court. Idle → the "Start

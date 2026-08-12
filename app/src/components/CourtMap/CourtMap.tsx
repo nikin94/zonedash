@@ -74,6 +74,7 @@ export const CourtMap = ({
   children,
   rotation = 0,
   onRotate,
+  statusControl,
   hideOff = false,
 }: {
   spots: SpotVisual[]; // length 8, canonical order
@@ -95,6 +96,10 @@ export const CourtMap = ({
   children?: ReactNode;
   rotation?: number;
   onRotate?: () => void;
+  /** Optional status affordance, drawn in the court's TOP-LEFT corner mirroring
+   *  the rotate control's top-right (same inset). The court surfaces pass the
+   *  central-unit CourtStatusControl; a control, so it never moves with the view. */
+  statusControl?: ReactNode;
 }) => {
   const r = ((rotation % 4) + 4) % 4;
   const edge = NET_EDGE[r];
@@ -262,6 +267,12 @@ export const CourtMap = ({
           <RotateIcon size={14} color={colors.border} />
         </CustomPressable>
       )}
+
+      {/* Status affordance in the OPPOSITE (top-left) corner from rotate, at the
+          same diagonal inset, so the two controls frame the court symmetrically. */}
+      {statusControl != null && (
+        <View style={styles.status}>{statusControl}</View>
+      )}
     </View>
   );
 };
@@ -383,6 +394,17 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: STRIP_H - ICON_OUT - ICON_BOX / 2,
     right: -(ICON_OUT + ICON_BOX / 2),
+    height: ICON_BOX,
+    width: ICON_BOX,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  // Mirror of `rotate` on the LEFT corner — same top inset, `left` matching
+  // rotate's `right`, so the status control and rotate sit symmetrically.
+  status: {
+    position: "absolute",
+    top: STRIP_H - ICON_OUT - ICON_BOX / 2,
+    left: -(ICON_OUT + ICON_BOX / 2),
     height: ICON_BOX,
     width: ICON_BOX,
     alignItems: "center",

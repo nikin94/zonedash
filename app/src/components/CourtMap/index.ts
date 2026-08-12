@@ -6,4 +6,5 @@
  * SpotVisual in helpers/court.ts.
  */
 export { CourtMap } from "./CourtMap";
+export { CourtStatusControl } from "./CourtStatusControl";
 export { SpotIcon } from "./SpotIcon";

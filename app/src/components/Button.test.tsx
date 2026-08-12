@@ -22,6 +22,17 @@ test("disabled greys out and blocks the press — visually and functionally", ()
   expect(onPress).not.toHaveBeenCalled();
 });
 
+test("loading swaps the label for a spinner and blocks the press", () => {
+  const onPress = jest.fn();
+  render(<Button testID="b" label="Connect" loading onPress={onPress} />);
+
+  // The label is gone, replaced by the spinner; the press is a no-op in-flight.
+  expect(screen.queryByText("Connect")).toBeNull();
+  expect(screen.getByTestId("b-spinner")).toBeTruthy();
+  fireEvent.press(screen.getByTestId("b"));
+  expect(onPress).not.toHaveBeenCalled();
+});
+
 test("renders children instead of a label for an icon button", () => {
   render(
     <Button testID="b" accessibilityLabel="icon" onPress={() => {}}>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -83,6 +83,7 @@ export const DrillPanel = ({
   onSettingsChange,
   rotation,
   onRotate,
+  statusControl,
   onSessionComplete,
 }: {
   transport: CentralTransport;
@@ -95,6 +96,9 @@ export const DrillPanel = ({
   /** Court view orientation + its rotate control, threaded to the map (see CourtMap). */
   rotation?: number;
   onRotate?: () => void;
+  /** Central-unit status affordance, threaded into the court corner. Injected by
+   *  the screen (which owns the store) so this panel stays presentation-only. */
+  statusControl?: ReactNode;
   /** Called once when a run finishes with at least one attempt, so the app can
    *  log it to the session history. The panel builds the summary; persistence is
    *  the caller's. */
@@ -420,6 +424,7 @@ export const DrillPanel = ({
         }
         rotation={rotation}
         onRotate={onRotate}
+        statusControl={statusControl}
         hideOff
       />
 
