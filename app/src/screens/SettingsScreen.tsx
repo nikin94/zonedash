@@ -2,14 +2,18 @@ import { ScrollView, StyleSheet } from "react-native";
 
 import { ScreenWrapper } from "../components/ScreenWrapper";
 import { SettingsPanel } from "../components/SettingsPanel";
-import { useAppState } from "../state/AppState";
+import { useShallow } from "zustand/react/shallow";
+
+import { useAppStore } from "../state/AppState";
 
 /**
  * The Settings tab — drill settings only (account moved to its own tab). No
  * timeout setting on purpose: the app never arms auto-miss, so a run counts hits.
  */
 export const SettingsScreen = () => {
-  const { settings, setSettings } = useAppState();
+  const { settings, setSettings } = useAppStore(
+    useShallow((s) => ({ settings: s.settings, setSettings: s.setSettings })),
+  );
   return (
     <ScreenWrapper>
       <ScrollView

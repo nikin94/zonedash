@@ -4,7 +4,9 @@ import { Text } from "react-native";
 
 import { MockCentralTransport } from "../ble/mock";
 import type { SessionSummary } from "../domain/session";
-import { AppStateProvider, useAppState } from "./AppState";
+import { useShallow } from "zustand/react/shallow";
+
+import { AppStateProvider, useAppStore } from "./AppState";
 import { MockAuthProvider } from "./auth.mock";
 import { appendSession, loadHistory } from "./history";
 import type { RemoteHistoryStore } from "./sync";
@@ -38,7 +40,15 @@ class FakeRemote implements RemoteHistoryStore {
 
 // A consumer that surfaces auth status/error and drives sign-in/out.
 const Probe = () => {
-  const { authStatus, authUser, authError, signIn, signOut } = useAppState();
+  const { authStatus, authUser, authError, signIn, signOut } = useAppStore(
+    useShallow((s) => ({
+      authStatus: s.authStatus,
+      authUser: s.authUser,
+      authError: s.authError,
+      signIn: s.signIn,
+      signOut: s.signOut,
+    })),
+  );
   return (
     <>
       <Text testID="status">{authStatus}</Text>
@@ -112,7 +122,12 @@ test("a sign-in sync surfaces the synced session with no tab round-trip", async 
   // list's refreshKey, with NO focus/navigation event driving a re-read.
   const remote = new FakeRemote().seed([sess(2)]);
   const SyncedHistory = () => {
-    const { signIn, historyVersion } = useAppState();
+    const { signIn, historyVersion } = useAppStore(
+      useShallow((s) => ({
+        signIn: s.signIn,
+        historyVersion: s.historyVersion,
+      })),
+    );
     return (
       <>
         <Button testID="in" label="in" onPress={signIn} />

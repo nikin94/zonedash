@@ -21,7 +21,8 @@
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
     "react-native-svg": "15.15.4",
-    "react-native-url-polyfill": "^4.0.0"
+    "react-native-url-polyfill": "^4.0.0",
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@testing-library/react-native": "^13.3.3",
