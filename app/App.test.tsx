@@ -51,8 +51,8 @@ const pairTwo = async () => {
 
 test("renders the disconnected surface — an idle court and a Connect button", async () => {
   await renderApp();
-  expect(screen.getByText("ZoneDash")).toBeTruthy();
-  // The status moved onto the court; the header is just the title now.
+  // The title header is gone — status lives on the court, so there is no header.
+  expect(screen.queryByText("ZoneDash")).toBeNull();
   expect(screen.queryByTestId("status-chip")).toBeNull();
   expect(screen.getByTestId("court-status-dot-disconnected")).toBeTruthy();
   // The footer tab bar is the app's chrome now — three tabs, Drill the default.

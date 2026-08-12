@@ -832,11 +832,11 @@ test("idle: a mode caption under Start names the current setup", async () => {
   expect(screen.getByTestId("mode-summary")).toHaveTextContent("Path");
 });
 
-// The gear is a compact outline square beside the full-width Start: a white
-// fill with a thick accent border and equal padding (sized to the icon, no
-// flex), and BOTH buttons keep the normal rounded corners — no segmented
+// The gear is an outline square beside the full-width Start: a white fill with a
+// thick accent border, kept square via aspectRatio (no flex, so only Start's
+// width flexes), and BOTH buttons keep the normal rounded corners — no segmented
 // squaring. It opens the drill-setup page.
-test("the gear is a compact white outline square; both buttons keep rounded corners", async () => {
+test("the gear is a white outline square; both buttons keep rounded corners", async () => {
   const t = await connectedTransport();
   panel(t);
 
@@ -850,8 +850,8 @@ test("the gear is a compact white outline square; both buttons keep rounded corn
   expect(gear.backgroundColor).toBe(colors.background);
   expect(gear.borderColor).toBe(colors.accent);
   expect(gear.borderWidth).toBeGreaterThan(1);
-  // Equal padding round the icon, and content-sized (no flex, so it stays small).
-  expect(gear.paddingVertical).toBe(gear.paddingHorizontal);
+  // Square (width tracks height) and no flex, so only Start's width flexes.
+  expect(gear.aspectRatio).toBe(1);
   expect(gear.flex).toBeUndefined();
   // Neither button squares its corners — both keep the base rounded radius.
   expect(gear.borderTopRightRadius).toBeUndefined();
@@ -881,20 +881,18 @@ test("the drill setup is a pushed nav route — the gear opens it, Done pops bac
   expect(screen.getByTestId("drill-surface")).toBeTruthy();
 });
 
-// A hairline divider sits under the primary action while idle, setting it off
-// from the config band below; it's dropped once a run is on (the status line
-// takes over that space).
-test("idle: a divider sets the Start action off from the config below", async () => {
+// No divider under the primary action — the action row is followed straight by
+// the config band. The gear fills the row's FULL height (alignItems stretch) and
+// stays square (aspectRatio), so only Start's width flexes beside it.
+test("idle: the gear fills the row height as a square, with no divider below Start", async () => {
   const t = await connectedTransport();
   panel(t);
-  expect(screen.getByTestId("action-divider")).toBeTruthy();
+  expect(screen.queryByTestId("action-divider")).toBeNull();
 
-  // The gear stays square: the row centres it rather than stretching it to the
-  // taller two-line Start.
   const row = StyleSheet.flatten(screen.getByTestId("action-row").props.style);
-  expect(row.alignItems).toBe("center");
+  expect(row.alignItems).toBe("stretch");
   const gear = StyleSheet.flatten(
     screen.getByTestId("drill-settings-button").props.style,
   );
-  expect(gear.paddingVertical).toBe(gear.paddingHorizontal); // square icon box
+  expect(gear.aspectRatio).toBe(1); // square, tracking the row height
 });

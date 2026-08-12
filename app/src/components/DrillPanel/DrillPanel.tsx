@@ -57,10 +57,9 @@ const SESSION_DONE_TOAST_MS = 3000;
 // Breathing room between the last scrolled item and the tab bar's centre
 // (Drill) disc, on top of the bar clearance (tabBarClearance + TAB_BAR_DISC_RISE).
 const ACTION_BAR_GAP = 12;
-// The vertical rhythm around the primary action: one gap unit, applied three
-// times — from the court to Start, from Start to the divider, and from the
-// divider to the config band. Roughly half the old court→Start gap so the
-// action hugs the court more tightly.
+// The vertical rhythm around the primary action: one gap unit, applied on both
+// sides — from the court to Start, and from Start to the config band below.
+// Roughly half the old court→Start gap so the action hugs the court more tightly.
 const ACTION_GAP = 14;
 // The panel column separates its children by this gap; the action block's own
 // margins are computed against it (below) so the three ACTION_GAPs come out
@@ -459,14 +458,13 @@ export const DrillPanel = ({
                 hideOff
               />
 
-              {/* Under the court: a compact settings gear beside the primary action
+              {/* Under the court: a settings gear beside the primary action
             (Start — constant label, even after a finished run — or Stop). The
-            gear is an outline square — white fill, thick accent border, icon +
-            equal padding — sitting just left of the full-width Start, a gap
-            between them, both with the normal rounded corners. It opens the
-            drill-setup page; disabled while a run is on, when the config is
-            locked. The idle row carries the strip-balance margin so it sits
-            centred under the court. */}
+            gear is an outline square (white fill, thick accent border) that
+            fills the row's full height and stays square, so only the Start
+            button's width flexes beside it. It opens the drill-setup page;
+            disabled while a run is on, when the config is locked. The idle block
+            carries the vertical rhythm so the action hugs the court. */}
               <View
                 testID="action-block"
                 style={[styles.actionBlock, !running && styles.actionBlockIdle]}
@@ -524,12 +522,6 @@ export const DrillPanel = ({
                     </Button>
                   )}
                 </View>
-                {/* A hairline under the primary action, setting it off from the
-                    path/config band below — same gap above it (from Start) and
-                    below it (to the config) as the gap from the court to Start. */}
-                {!running && (
-                  <View testID="action-divider" style={styles.actionDivider} />
-                )}
               </View>
 
               {/* Status line — only WHILE a run is live (Step + reaction). Completion
@@ -776,24 +768,19 @@ const styles = StyleSheet.create({
   },
   // Idle adds the vertical rhythm: pull up so the court→Start gap lands on
   // ACTION_GAP (cancelling the court's empty bottom strip + the panel gap), and
-  // leave ACTION_GAP below the divider to the config (panel gap + this margin).
+  // leave ACTION_GAP below Start to the config band (panel gap + this margin).
   actionBlockIdle: {
     marginTop: ACTION_GAP - COURT_BOTTOM_STRIP - PANEL_GAP,
     marginBottom: ACTION_GAP - PANEL_GAP,
   },
-  // alignItems center so the small square gear stays its own size (centred
-  // beside the taller two-line Start) instead of stretching into a rectangle.
+  // alignItems stretch so the gear matches the FULL row height set by Start;
+  // only Start's width flexes. The gear is a square (aspectRatio 1), so as Start
+  // grows/shrinks the gear tracks its height and stays square.
   actionRow: {
     alignSelf: "stretch",
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "stretch",
     gap: 8,
-  },
-  // A hairline under the action row, ACTION_GAP below Start.
-  actionDivider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginTop: ACTION_GAP,
   },
   // Start's two-line content: the label with its muted mode caption beneath,
   // a tight line gap so the two read as one stacked label.
@@ -803,21 +790,20 @@ const styles = StyleSheet.create({
   startSummary: {
     marginTop: 1,
   },
-  // The gear: a compact outline square — white fill, thick accent border, equal
-  // padding round a square icon so it stays square (the row centres it, so a
-  // taller Start never stretches it), no flex so it stays small.
+  // The gear: an outline square — white fill, thick accent border — that fills
+  // the row's height (alignItems stretch) and stays square via aspectRatio, so
+  // only the Start button's width adjusts beside it.
   settingsButton: {
     backgroundColor: colors.background,
     borderColor: colors.accent,
     borderWidth: 2,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    aspectRatio: 1,
   },
-  // Start / Stop fills the rest of the row; a trimmed vertical pad keeps the
-  // two-line Start compact.
+  // Start / Stop fills the rest of the row's width; a trimmed vertical pad keeps
+  // the two-line Start compact.
   actionButton: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 7,
   },
   dimmed: {
     opacity: 0.4,
