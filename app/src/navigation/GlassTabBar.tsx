@@ -47,8 +47,24 @@ const pressStyle = ({ pressed }: { pressed: boolean }) => [
   pressed && styles.tapPressed,
 ];
 
+/** The Drill tab nests a stack (DrillHome + DrillSetup); the setup page is a
+ *  full-screen route that wants the footer gone (only its own Done at the
+ *  bottom). Hide the whole bar whenever the focused tab's nested stack sits on
+ *  DrillSetup. */
+const hidesTabBar = (state: BottomTabBarProps["state"]): boolean => {
+  const focused = state.routes[state.index];
+  const nested = focused.state as
+    { index?: number; routes?: { name: string }[] } | undefined;
+  if (!nested?.routes || nested.index == null) return false;
+  return nested.routes[nested.index]?.name === "DrillSetup";
+};
+
 export const GlassTabBar = ({ state, navigation }: BottomTabBarProps) => {
   const insets = useSafeAreaInsets();
+
+  // On the drill-setup page the bar steps aside entirely — the page pins its own
+  // Done at the bottom, so a floating tab bar over it would be redundant chrome.
+  if (hidesTabBar(state)) return null;
 
   const go = (routeName: string, routeKey: string, focused: boolean) => () => {
     const event = navigation.emit({

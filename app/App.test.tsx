@@ -134,6 +134,34 @@ test("a completed round reveals the drill controls under the court", async () =>
   expect(screen.queryByTestId("start-pairing")).toBeNull();
 });
 
+// The drill-setup page is a full-screen route: the footer tab bar steps aside
+// while it's up (its own Done pins the bottom), and returns once Done pops back.
+test("the drill-setup page hides the tab bar; Done brings it back", async () => {
+  await renderApp();
+  await connect();
+  await pairTwo();
+
+  // The tab bar is present on the drill surface.
+  expect(screen.getByTestId("tab-account")).toBeTruthy();
+
+  // Push the setup page — the tab bar hides.
+  fireEvent.press(screen.getByTestId("drill-settings-button"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+  expect(screen.getByTestId("drill-settings-page")).toBeTruthy();
+  expect(screen.queryByTestId("tab-account")).toBeNull();
+  expect(screen.queryByTestId("tab-history")).toBeNull();
+
+  // Done pops back — the tab bar returns.
+  fireEvent.press(screen.getByTestId("drill-settings-done"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+  expect(screen.queryByTestId("drill-settings-page")).toBeNull();
+  expect(screen.getByTestId("tab-account")).toBeTruthy();
+});
+
 // The dev shortcut binds every target at once, then runs through the same
 // completed-round handoff to the drill controls.
 test("the dev complete-pairing shortcut reveals the drill controls", async () => {

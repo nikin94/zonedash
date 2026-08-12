@@ -1,12 +1,14 @@
 import { fireEvent, render, screen } from "@testing-library/react-native";
 
 import { DEFAULT_SETTINGS } from "../../state/AppState";
-import { DrillSettingsModal } from "./DrillSettingsModal";
+import { DrillSetupPage } from "./DrillSetupPage";
 
+// The page is plain content now (the navigator drives its push), so it renders
+// standalone — no `visible`/Modal wrapper. These props mirror what DrillPanel
+// threads into the pushed route.
 const setup = (overrides: Record<string, unknown> = {}) => {
   const props = {
-    visible: true,
-    onClose: jest.fn(),
+    onDone: jest.fn(),
     onModeInfo: jest.fn(),
     uiMode: "random" as const,
     setUiMode: jest.fn(),
@@ -20,14 +22,9 @@ const setup = (overrides: Record<string, unknown> = {}) => {
     onSettingsChange: jest.fn(),
     ...overrides,
   };
-  render(<DrillSettingsModal {...props} />);
+  render(<DrillSetupPage {...props} />);
   return props;
 };
-
-test("shows nothing while closed", () => {
-  setup({ visible: false });
-  expect(screen.queryByText("Drill setup")).toBeNull();
-});
 
 test("random mode shows the mode selector, stop-by and the hits wheel", () => {
   setup();
@@ -54,10 +51,10 @@ test("picking a mode reports it; the info icon and Done fire their callbacks", (
   expect(p.setUiMode).toHaveBeenCalledWith("path");
   fireEvent.press(screen.getByTestId("mode-info-button"));
   expect(p.onModeInfo).toHaveBeenCalled();
-  // The corner close icon is gone — a bottom Done button confirms instead.
+  // The corner close icon is gone — a bottom Done button pops the screen instead.
   expect(screen.queryByTestId("drill-settings-close")).toBeNull();
   fireEvent.press(screen.getByTestId("drill-settings-done"));
-  expect(p.onClose).toHaveBeenCalled();
+  expect(p.onDone).toHaveBeenCalled();
 });
 
 // The session-wide drill settings (delay + immediate repeat) moved onto this

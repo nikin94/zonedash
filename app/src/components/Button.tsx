@@ -74,6 +74,9 @@ export const Button = ({
 }: ButtonProps) => (
   <CustomPressable
     noFeedback={noFeedback}
+    // A filled accent hero presses to a LIGHTER accent, not the near-white
+    // surface flash — otherwise the pressed fill collides with the white label.
+    pressedColor={primary ? colors.accentPressed : undefined}
     testID={testID}
     accessibilityLabel={accessibilityLabel}
     accessibilityState={{ disabled, selected, busy: loading }}
