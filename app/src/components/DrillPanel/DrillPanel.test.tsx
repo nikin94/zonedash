@@ -192,9 +192,10 @@ test("path is authored on the same court map — slot-index wire format", async 
   panel(t);
 
   selectMode("Path");
-  // Only paired spots are offered; unpaired stay off. Empty path can't start.
+  // Only paired spots are offered; unpaired ones aren't drawn at all (hideOff),
+  // so the schematic shows just the 3 targets in play. Empty path can't start.
   expect(screen.queryAllByTestId(/spot-\d-available/)).toHaveLength(3);
-  expect(screen.getByTestId("spot-2-off")).toBeTruthy();
+  expect(screen.queryByTestId("spot-2-off")).toBeNull(); // unpaired → hidden
   fireEvent.press(screen.getByText("Start"));
   expect(load).not.toHaveBeenCalled();
 

@@ -420,6 +420,7 @@ export const DrillPanel = ({
         }
         rotation={rotation}
         onRotate={onRotate}
+        hideOff
       />
 
       {/* Under the court: a compact settings gear beside the primary action

@@ -182,7 +182,9 @@ test("rotate control: hidden without a handler, reflects and fires it when given
 
   // Any non-zero quarter turn reads as rotated.
   rerender(<CourtMap spots={allOff} rotation={1} onRotate={onRotate} />);
-  expect(screen.getByTestId("court-rotate").props.accessibilityState.selected).toBe(true);
+  expect(
+    screen.getByTestId("court-rotate").props.accessibilityState.selected,
+  ).toBe(true);
 });
 
 // Rotation moves WHERE each dot is drawn but never WHICH spot it is. One
@@ -191,7 +193,9 @@ test("rotate control: hidden without a handler, reflects and fires it when given
 // back-right (spot 4) sat. The reported spot index never changes.
 test("rotation moves a dot's position, not its identity", () => {
   const pos = (i: number) => {
-    const s = StyleSheet.flatten(screen.getByTestId(`spot-${i}-off`).props.style);
+    const s = StyleSheet.flatten(
+      screen.getByTestId(`spot-${i}-off`).props.style,
+    );
     return { left: s.left, top: s.top };
   };
 
@@ -240,7 +244,9 @@ test("the court lines rotate with the view, matching the dots' transform", () =>
 test("every dot has an app-background disc behind it, masking the court lines", () => {
   render(<CourtMap spots={allOff} />);
   for (let i = 0; i < 8; i++) {
-    const bg = StyleSheet.flatten(screen.getByTestId(`spot-bg-${i}`).props.style);
+    const bg = StyleSheet.flatten(
+      screen.getByTestId(`spot-bg-${i}`).props.style,
+    );
     expect(bg.backgroundColor).toBe(colors.background);
   }
 });
@@ -255,7 +261,9 @@ test("centre content sits on a frosted-glass card that blurs the lines behind it
       <Text>Ready</Text>
     </CourtMap>,
   );
-  const card = StyleSheet.flatten(screen.getByTestId("centre-card").props.style);
+  const card = StyleSheet.flatten(
+    screen.getByTestId("centre-card").props.style,
+  );
   // A translucent tint (not the opaque app fill), clipped to the corners.
   expect(card.backgroundColor).toBe(alpha(colors.background, 0.6));
   expect(card.overflow).toBe("hidden");
@@ -293,4 +301,24 @@ test("a route of two or more spots shows the looping preview marker", () => {
   expect(screen.queryByTestId("route-preview")).toBeNull();
   rerender(<CourtMap spots={allOff} />);
   expect(screen.queryByTestId("route-preview")).toBeNull();
+});
+
+// hideOff: the drill surface passes this so an unassigned ("off") spot draws
+// nothing — no dot, no hit target — leaving only the paired targets in play.
+// The pairing round and idle court leave it off, so all 8 spots stay pickable.
+test("hideOff drops the off spots entirely, keeping only the ones in play", () => {
+  const spots = [...allOff];
+  spots[0] = "available"; // paired
+  spots[4] = "armed"; // in play
+
+  // Without hideOff (pairing / idle): every spot is drawn, off ones included.
+  const { rerender } = render(<CourtMap spots={spots} />);
+  expect(screen.getByTestId("spot-1-off")).toBeTruthy();
+  expect(screen.queryAllByTestId(/^spot-\d-off$/)).toHaveLength(6);
+
+  // With hideOff (drill surface): the 6 off spots are gone; the 2 in play stay.
+  rerender(<CourtMap spots={spots} hideOff />);
+  expect(screen.queryAllByTestId(/^spot-\d-off$/)).toHaveLength(0);
+  expect(screen.getByTestId("spot-0-available")).toBeTruthy();
+  expect(screen.getByTestId("spot-4-armed")).toBeTruthy();
 });
