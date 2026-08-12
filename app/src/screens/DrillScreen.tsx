@@ -61,24 +61,25 @@ export const DrillScreen = () => {
         />
       ) : (
         <View style={styles.idle}>
+          {/* A clean court — the connect hint lives OUTSIDE it, below, like the
+              pairing and drill surfaces. */}
           <CourtMap
             spots={OFF_SPOTS}
             rotation={courtRotation}
             onRotate={rotateCourt}
+          />
+          <AppText
+            center
+            size={13}
+            color={colors.textMuted}
+            style={styles.hint}
           >
-            <AppText
-              center
-              size={13}
-              color={colors.textMuted}
-              style={styles.hint}
-            >
-              {connection === "connecting"
-                ? "Connecting to the central unit…"
-                : connection === "error"
-                  ? `${connectionError ?? "Connection failed"} — tap the status to retry`
-                  : "Tap the status in the header to connect"}
-            </AppText>
-          </CourtMap>
+            {connection === "connecting"
+              ? "Connecting to the central unit…"
+              : connection === "error"
+                ? `${connectionError ?? "Connection failed"} — tap the status to retry`
+                : "Tap the status in the header to connect"}
+          </AppText>
         </View>
       )}
     </ScreenWrapper>
@@ -88,6 +89,7 @@ export const DrillScreen = () => {
 const styles = StyleSheet.create({
   idle: {
     alignItems: "center",
+    gap: 12,
   },
   hint: {
     paddingHorizontal: 24,

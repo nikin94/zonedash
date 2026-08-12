@@ -16,12 +16,6 @@ import { UndoIcon } from "../Icons";
  *  Finish trims it to however many the operator actually placed. */
 const MAX_TARGETS = 8;
 
-// Fixed footprints for the court-centre info block, so phase changes never
-// shift the layout: the tallest status text is 3 lines, the error is 1 line,
-// and the action rows keep their size across every round phase.
-const TEXT_SLOT_H = 60; // 3 lines at lineHeight 20
-const ERROR_SLOT_H = 18;
-
 /**
  * Pairing round UI (display-ui.md screen 2, phone side). There is no count to
  * pick: a round opens at the max and the operator places targets one at a time
@@ -153,118 +147,120 @@ export const PairingPanel = ({
 
   return (
     <View testID="pairing-surface" style={styles.panel}>
+      {/* A clean court — the schema and targets read unobstructed; the action
+          and status live OUTSIDE it, below, mirroring the drill surface. */}
       <CourtMap
         spots={visuals}
         onPressSpot={choosing ? pickSpot : undefined}
         rotation={rotation}
         onRotate={onRotate}
-      >
-        <>
-          {/* Every slot has a FIXED footprint — the text area, the error line,
-              and the action rows keep their size across all round phases, so
-              nothing shifts as states change. */}
-          <View testID="status-slot" style={styles.textSlot}>
-            {choosing ? (
-              <AppText center size={16} weight="600" style={styles.slotText}>
-                Tap the map to place target {boundCount + 1}
-              </AppText>
-            ) : prompting ? (
-              <AppText center size={16} weight="600" style={styles.slotText}>
-                {progress.awaitingConfirm
-                  ? "Press again to confirm"
-                  : `Press the ${SPOT_NAMES[progress.currentSpot!]} target`}
-              </AppText>
-            ) : running ? (
-              <AppText center size={16} weight="600" style={styles.slotText}>
-                Starting pairing…
-              </AppText>
-            ) : done ? (
-              <AppText
-                center
-                size={15}
-                weight="600"
-                color={colors.success}
-                style={styles.slotText}
-              >
-                Paired {progress.total}{" "}
-                {progress.total === 1 ? "target" : "targets"}
-              </AppText>
-            ) : (
-              <AppText
-                center
-                size={13}
-                color={colors.textMuted}
-                style={styles.slotText}
-              >
-                Tap Start, then place each target on the court
-              </AppText>
-            )}
-          </View>
+      />
 
-          <View testID="error-slot" style={styles.errorSlot}>
-            {error !== null && (
-              <AppText center size={13} numberOfLines={1} color={colors.danger}>
-                {error}
-              </AppText>
-            )}
+      {/* The primary action, directly under the court. Idle → the "Start
+          pairing" hero; mid-round → the Cancel / Undo / Finish controls; done →
+          nothing (the status marks the round complete before the drill hands
+          off). */}
+      {running ? (
+        <View style={styles.actionCol}>
+          {/* Cancel (destructive, red) sits left; Undo is a compact icon to its
+              right. Both Undo and Finish enable only once there is a bind to act
+              on (and never mid-prompt). */}
+          <View style={styles.controlRow}>
+            <Button
+              testID="cancel-pairing"
+              label="Cancel"
+              danger
+              onPress={() => setCancelAsk(true)}
+              style={styles.cancelButton}
+            />
+            <Button
+              testID="undo-pairing"
+              accessibilityLabel="Undo last bind"
+              size="icon"
+              disabled={!canCorrect}
+              onPress={undo}
+            >
+              <UndoIcon />
+            </Button>
           </View>
+          <Button
+            testID="finish-pairing"
+            label="Finish"
+            disabled={!canCorrect}
+            onPress={() => setFinishAsk(true)}
+          />
+        </View>
+      ) : done ? null : (
+        <View style={styles.actionCol}>
+          <Button
+            testID="start-pairing"
+            label="Start pairing"
+            primary
+            textSize={17}
+            onPress={start}
+          />
+          {/* DEV-only: bind everything at once so testing needn't tap each spot.
+              Present only with the mock transport. */}
+          {transport.completePairingNow && (
+            <Button
+              testID="dev-complete-pairing"
+              label="Complete (dev)"
+              dashed
+              textColor={colors.textMuted}
+              textSize={13}
+              onPress={devComplete}
+            />
+          )}
+        </View>
+      )}
 
-          <View style={styles.actionCol}>
-            {running ? (
-              <>
-                {/* Cancel (destructive, red outline) sits left; Undo is a
-                    compact icon to its right, on the same row. Both Undo and
-                    Finish are shown from the start of the round and only enable
-                    once there is a bind to act on (and never mid-prompt). */}
-                <View style={styles.controlRow}>
-                  <Button
-                    testID="cancel-pairing"
-                    label="Cancel"
-                    danger
-                    onPress={() => setCancelAsk(true)}
-                    style={styles.cancelButton}
-                  />
-                  <Button
-                    testID="undo-pairing"
-                    accessibilityLabel="Undo last bind"
-                    size="icon"
-                    disabled={!canCorrect}
-                    onPress={undo}
-                  >
-                    <UndoIcon />
-                  </Button>
-                </View>
-                <Button
-                  testID="finish-pairing"
-                  label="Finish"
-                  disabled={!canCorrect}
-                  onPress={() => setFinishAsk(true)}
-                />
-              </>
-            ) : done ? null : (
-              <>
-                <Button
-                  testID="start-pairing"
-                  label="Start"
-                  onPress={start}
-                />
-                {/* DEV-only: bind everything at once so testing needn't tap each
-                    spot. Present only with the mock transport. */}
-                {transport.completePairingNow && (
-                  <Button
-                    testID="dev-complete-pairing"
-                    label="Complete (dev)"
-                    dashed
-                    textColor={colors.textMuted}
-                    textSize={13}
-                    onPress={devComplete}
-                  />
-                )}
-              </>
-            )}
-          </View>
-        </>
-      </CourtMap>
+      {/* Status + error, below the action (texts under the button). Both stay
+          mounted every phase so they always have a home; empty slots collapse. */}
+      <View testID="status-slot" style={styles.statusSlot}>
+        {choosing ? (
+          <AppText center size={16} weight="600" style={styles.slotText}>
+            Tap the map to place target {boundCount + 1}
+          </AppText>
+        ) : prompting ? (
+          <AppText center size={16} weight="600" style={styles.slotText}>
+            {progress.awaitingConfirm
+              ? "Press again to confirm"
+              : `Press the ${SPOT_NAMES[progress.currentSpot!]} target`}
+          </AppText>
+        ) : running ? (
+          <AppText center size={16} weight="600" style={styles.slotText}>
+            Starting pairing…
+          </AppText>
+        ) : done ? (
+          <AppText
+            center
+            size={15}
+            weight="600"
+            color={colors.success}
+            style={styles.slotText}
+          >
+            Paired {progress.total}{" "}
+            {progress.total === 1 ? "target" : "targets"}
+          </AppText>
+        ) : (
+          <AppText
+            center
+            size={13}
+            color={colors.textMuted}
+            style={styles.slotText}
+          >
+            Tap Start pairing, then place each target on the court
+          </AppText>
+        )}
+      </View>
+
+      <View testID="error-slot" style={styles.errorSlot}>
+        {error !== null && (
+          <AppText center size={13} numberOfLines={1} color={colors.danger}>
+            {error}
+          </AppText>
+        )}
+      </View>
 
       {/* Confirms — shown centered on screen like every confirm. */}
       <ConfirmModal
@@ -297,9 +293,12 @@ const styles = StyleSheet.create({
   panel: {
     // The shared top offset lives on ScreenWrapper now (uniform across tabs),
     // so all three Drill surfaces sit at the same height with no per-surface
-    // margin — the pairing → drill handoff can't jump the court.
+    // margin — the pairing → drill handoff can't jump the court. Horizontal
+    // padding gives the stretched action buttons a margin off the screen edges.
     alignItems: "center",
     gap: 12,
+    alignSelf: "stretch",
+    paddingHorizontal: 24,
   },
   actionCol: {
     alignItems: "stretch",
@@ -311,24 +310,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
-  // Fixed-height slots: their size never depends on which child (if any) is
-  // rendered, so the info block can't jump between phases.
-  textSlot: {
+  // Status + error sit below the action now (outside the court), so they need
+  // no fixed footprint — an empty slot just collapses. Both stay mounted so the
+  // status/error always have a home whatever the phase.
+  statusSlot: {
     alignSelf: "stretch",
-    height: TEXT_SLOT_H,
     alignItems: "center",
-    // Seat the status at the BOTTOM of its fixed slot so a short line sits close
-    // to the action row below instead of floating centred with a wide gap. The
-    // height stays fixed, so the info block still can't jump between phases.
-    justifyContent: "flex-end",
   },
   errorSlot: {
-    height: ERROR_SLOT_H,
-    marginBottom: 8,
-    justifyContent: "center",
+    alignItems: "center",
   },
-  // Shared by every status-slot text: the fixed slot height assumes this
-  // lineHeight regardless of which text (and size) is showing.
   slotText: {
     lineHeight: 20,
   },
