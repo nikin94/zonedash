@@ -8,6 +8,7 @@ import { colors, glowShadow } from "../theme";
 import { AppText } from "./AppText";
 import { ConfirmModal } from "./ConfirmModal";
 import { CustomPressable } from "./CustomPressable";
+import { ToastHost } from "./Toast";
 
 /** Brief status-chip label per connection state. */
 const CHIP_LABEL: Record<ConnectionState, string> = {
@@ -152,6 +153,11 @@ export const AppHeader = ({
           { label: "Re-pair", danger: true, onPress: repair },
         ]}
       />
+
+      {/* App-wide toast, anchored to the header's bottom edge. Its own store
+          subscription (memoised) means a fired toast re-renders ONLY the toast,
+          never this header. */}
+      <ToastHost />
     </View>
   );
 };

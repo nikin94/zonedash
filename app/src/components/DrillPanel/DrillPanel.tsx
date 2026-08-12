@@ -22,6 +22,7 @@ import { summarize, type SessionSummary } from "../../domain/session";
 import { type SpotVisual } from "../../helpers/court";
 import { formatStepBadge } from "../../helpers/pathBadge";
 import { type DrillSettings } from "../../state/AppState";
+import { showToast } from "../../state/toast";
 import {
   TAB_BAR_DISC_RISE,
   tabBarClearance,
@@ -46,6 +47,10 @@ const fmtSec = (ms: number) => `${(ms / 1000).toFixed(2)} ${UNIT}`;
 // Fixed footprints for the court-centre block, so idle → running → done never
 // shifts the layout.
 const TEXT_SLOT_H = 40; // fixed status area: room for the 2-line running status
+// How long the "session complete" toast stays up (ms). Its own named knob —
+// bump it here to change just this popup, independent of the TOAST_DEFAULT_MS
+// every other toast inherits.
+const SESSION_DONE_TOAST_MS = 3000;
 // Breathing room between the last scrolled item and the tab bar's centre
 // (Drill) disc, on top of the bar clearance (tabBarClearance + TAB_BAR_DISC_RISE).
 const ACTION_BAR_GAP = 12;
@@ -145,8 +150,9 @@ export const DrillPanel = ({
   const [uiMode, setUiMode] = useState<UiMode>(live ? ui.uiMode : "random");
   const [stopBy, setStopBy] = useState<StopBy>(live ? ui.stopBy : "count");
   // Seed the config params from the snapshot too, so a rehydrated run keeps the
-  // numbers it actually ran with — otherwise `Run again` breaks for path (empty
-  // sequence) and random/time show the defaults, not what's on the wire. The
+  // numbers it actually ran with — otherwise re-running (Start after a finished
+  // run) breaks for path (empty sequence) and random/time show the defaults,
+  // not what's on the wire. The
   // snapshot path is slot indices; the panel holds canonical spots, so map back.
   const [count, setCount] = useState(live ? (snap.count ?? 10) : 10);
   const [durationMs, setDurationMs] = useState(
@@ -232,7 +238,7 @@ export const DrillPanel = ({
   }, [pairedSpots]);
 
   // A finished run's summary describes ONE authored path over ONE pairing map.
-  // But the court stays tappable after "Session complete" (the operator authors
+  // But the court stays tappable after a run finishes (the operator authors
   // the next run) and the layout can change under it (a re-pair), so once the
   // path or the layout no longer matches the run the records came from, that
   // summary is stale — and worse, HitRecord.position is a slot index meaningless
@@ -389,6 +395,23 @@ export const DrillPanel = ({
     );
   }, [done, records, runMode, pairedSpots, onSessionComplete]);
 
+  // Announce a finished session through the header toast — the completion signal
+  // no longer lives as a line under the court, so it surfaces even if the
+  // operator has navigated to another tab. Fired exactly once per done
+  // transition (a prevDone ref), so a re-render or a mode toggle while already
+  // done can't re-fire it. `showToast` writes the toast store only, so this
+  // never re-renders the panel.
+  const prevDone = useRef(done);
+  useEffect(() => {
+    if (done && !prevDone.current) {
+      showToast("Session complete", {
+        tone: "success",
+        durationMs: SESSION_DONE_TOAST_MS,
+      });
+    }
+    prevDone.current = done;
+  }, [done]);
+
   // Secondary status line during a run. Auto modes narrate the athlete's
   // reaction; live mode narrates the operator's turn: tap → armed → time.
   const runStatus = liveRunning
@@ -425,8 +448,9 @@ export const DrillPanel = ({
         />
 
         {/* The primary action, immediately under the court — a full-width
-            Start/Stop/Run again. It scrolls with the content (no pinned bar) but
-            sits right below the map so it's always the first control in reach. */}
+            Start (constant label, even after a finished run) / Stop. It scrolls
+            with the content (no pinned bar) but sits right below the map so it's
+            always the first control in reach. */}
         {running ? (
           <Button
             label="Stop"
@@ -438,7 +462,7 @@ export const DrillPanel = ({
           />
         ) : (
           <Button
-            label={showDone ? "Run again" : "Start"}
+            label="Start"
             primary
             textSize={17}
             disabled={!canStart}
@@ -448,42 +472,24 @@ export const DrillPanel = ({
           />
         )}
 
-        {/* Status line — only while a run is live or has just finished. Idle
-            shows nothing here, so the Mode selector sits directly under Start.
-            Fixed height so a one-line (done) and two-line (running) status never
-            nudge the config below. */}
-        {(running || showDone) && (
+        {/* Status line — only WHILE a run is live (Step + reaction). Completion
+            is announced by the header toast now, not a line here, and the
+            numbers live in the results panel below — so a finished run shows
+            nothing in this slot. Fixed height so the two-line running status
+            never nudges the config below. */}
+        {running && (
           <View testID="status-slot" style={styles.statusSlot}>
-            {running ? (
-              <>
-                <AppText center size={16} weight="600" style={styles.slotText}>
-                  Step {resolvedCount + 1}
-                </AppText>
-                <AppText
-                  center
-                  size={13}
-                  color={runStatusHit ? colors.success : colors.textMuted}
-                  style={styles.slotText}
-                >
-                  {runStatus}
-                </AppText>
-              </>
-            ) : showDone && records !== null ? (
-              // Numbers live in the results panel below — the court just marks
-              // the session done, so the map stays uncluttered.
-              <AppText center size={16} weight="600" style={styles.slotText}>
-                Session complete
-              </AppText>
-            ) : (
-              <AppText
-                center
-                size={13}
-                color={colors.textMuted}
-                style={styles.slotText}
-              >
-                Fetching results…
-              </AppText>
-            )}
+            <AppText center size={16} weight="600" style={styles.slotText}>
+              Step {resolvedCount + 1}
+            </AppText>
+            <AppText
+              center
+              size={13}
+              color={runStatusHit ? colors.success : colors.textMuted}
+              style={styles.slotText}
+            >
+              {runStatus}
+            </AppText>
           </View>
         )}
 
@@ -739,7 +745,7 @@ const styles = StyleSheet.create({
   errorLine: {
     alignSelf: "stretch",
   },
-  // Full-width Start/Stop/Run again — the hero action in the scrolling column,
+  // Full-width Start / Stop — the hero action in the scrolling column,
   // stretched across the surface right under the court.
   runButton: {
     alignSelf: "stretch",

@@ -11,6 +11,7 @@ import {
 import { MockCentralTransport } from "../../ble/mock";
 import type { DrillConfig } from "../../ble/transport";
 import { DEFAULT_SETTINGS, type DrillSettings } from "../../state/AppState";
+import { dismissToast, getToast } from "../../state/toast";
 import { colors } from "../../theme";
 import { DrillPanel } from "./DrillPanel";
 
@@ -46,7 +47,10 @@ const panel = (t: MockCentralTransport, paired = PAIRED, settings = SETTINGS) =>
   render(<DrillPanel transport={t} pairedSpots={paired} settings={settings} />);
 
 beforeEach(() => jest.useFakeTimers());
-afterEach(() => jest.useRealTimers());
+afterEach(() => {
+  jest.useRealTimers();
+  dismissToast(); // the toast store is a module singleton — clear between tests
+});
 
 test("Start composes random config from the screen + settings — no timeout on the wire", async () => {
   const t = await connectedTransport();
@@ -311,8 +315,9 @@ test("a run arms spots, flashes hits, and ends in a hits-only summary", async ()
   // Run out: second step resolves, session flips done, results panel fetched —
   // the numbers live below the court, not on it.
   await act(() => jest.runAllTimersAsync());
-  expect(screen.getByText("Run again")).toBeTruthy();
-  expect(screen.getByText("Session complete")).toBeTruthy();
+  expect(screen.getByText("Start")).toBeTruthy(); // constant label, even when done
+  // Completion is announced by the header toast now, not a line under the court.
+  expect(getToast()?.message).toBe("Session complete");
   expect(screen.getByTestId("stats-panel")).toBeTruthy();
   expect(screen.getAllByText("0.02 s")).toHaveLength(3); // 2 attempts + average
   expect(screen.getByText("0.04 s")).toBeTruthy(); // total time
@@ -337,19 +342,18 @@ test("a finished run's results are tied to its mode — hidden on another mode",
   fireEvent.press(screen.getByText("Start"));
   await act(() => jest.runAllTimersAsync());
   expect(screen.getByTestId("stats-panel")).toBeTruthy();
-  expect(screen.getByText("Run again")).toBeTruthy();
+  expect(screen.getByText("Start")).toBeTruthy(); // constant label
 
   // Switch to another mode: the path run's stats belong to Path, so they go
-  // away and the screen reads fresh (Start, no "Session complete").
+  // away and the screen reads fresh (Start).
   fireEvent.press(screen.getByText("Live"));
   expect(screen.queryByTestId("stats-panel")).toBeNull();
-  expect(screen.queryByText("Session complete")).toBeNull();
   expect(screen.getByText("Start")).toBeTruthy();
 
   // Back on Path, the same run's results return.
   fireEvent.press(screen.getByText("Path"));
   expect(screen.getByTestId("stats-panel")).toBeTruthy();
-  expect(screen.getByText("Run again")).toBeTruthy();
+  expect(screen.getByText("Start")).toBeTruthy();
 });
 
 test("the hit flash clears back to available after its window", async () => {
@@ -383,7 +387,7 @@ test("Stop aborts the run and still summarizes the partial records", async () =>
 
   // The partial run still summarizes: one attempt in the results panel, keyed
   // by a plain number (no "Attempt" prefix) and a court-position icon.
-  expect(screen.getByText("Run again")).toBeTruthy();
+  expect(screen.getByText("Start")).toBeTruthy();
   expect(screen.getByTestId("stats-panel")).toBeTruthy();
   const rows = screen.getByTestId("attempt-list");
   expect(within(rows).getByText("1")).toBeTruthy();
@@ -394,7 +398,7 @@ test("Stop aborts the run and still summarizes the partial records", async () =>
 });
 
 // A finished run's results describe the path + layout it ran over. The court
-// stays tappable after "Session complete", so authoring the NEXT path must not
+// stays tappable after a run finishes, so authoring the NEXT path must not
 // leave the previous run's summary on screen next to a path it no longer
 // matches (the reported bug: authored path ≠ the results shown).
 test("authoring a new path after a run clears the stale results summary", async () => {
@@ -455,7 +459,7 @@ test("a finished run reports a summary to onSessionComplete exactly once", async
   fireEvent.press(screen.getByText("Start"));
   await act(() => jest.runAllTimersAsync());
 
-  expect(screen.getByText("Session complete")).toBeTruthy();
+  expect(getToast()?.message).toBe("Session complete"); // completion → header toast
   expect(onSessionComplete).toHaveBeenCalledTimes(1);
   expect(onSessionComplete.mock.calls[0][0]).toMatchObject({
     mode: "path",
@@ -521,13 +525,12 @@ test("a remount over a running session rehydrates it — Stop and the armed targ
   // Stop drives the rehydrated panel through to a summary.
   fireEvent.press(screen.getByText("Stop"));
   await act(() => jest.runAllTimersAsync());
-  expect(screen.getByText("Run again")).toBeTruthy();
+  expect(screen.getByText("Start")).toBeTruthy(); // constant label after done
 });
 
 // Rehydration is scoped to a RUNNING session on purpose: a mount over a
-// finished one lands on a fresh idle Start (not trapped on "Fetching…", not a
-// disabled Run again over a path it no longer holds) — the operator left, and
-// re-authoring is the likely next step.
+// finished one lands on a fresh idle Start (not trapped over a path it no
+// longer holds) — the operator left, and re-authoring is the likely next step.
 test("a remount over a finished session lands on a fresh idle Start", async () => {
   const t = await connectedTransport();
   await t.loadDrill({ mode: "path", numPositions: 3, path: [2, 0], delayMs: 0 });
@@ -539,13 +542,12 @@ test("a remount over a finished session lands on a fresh idle Start", async () =
   await act(() => jest.runAllTimersAsync());
   expect(screen.getByText("Start")).toBeTruthy();
   expect(screen.queryByText("Stop")).toBeNull();
-  expect(screen.queryByText("Run again")).toBeNull();
 });
 
 // The snapshot carries the loaded config, not just the run's progress: a
-// rehydrated path run keeps its sequence, so `Run again` stays enabled and
-// re-runs the same drill instead of dead-ending on an empty (disabled) path.
-test("a rehydrated run restores the config — path Run again works", async () => {
+// rehydrated path run keeps its sequence, so Start stays enabled and re-runs
+// the same drill instead of dead-ending on an empty (disabled) path.
+test("a rehydrated run restores the config — Start re-runs the same path", async () => {
   const t = await connectedTransport();
   await t.loadDrill({ mode: "path", numPositions: 3, path: [2, 0], delayMs: 0 });
   await t.startSession();
@@ -559,9 +561,9 @@ test("a rehydrated run restores the config — path Run again works", async () =
   // Slots 2, 0 → canonical spots 6, 0 (back left → net left) — restored, not lost.
   expect(pathCodes()).toEqual(["BL", "FL"]);
 
-  // Run again re-runs the SAME path — not a dead disabled button over an empty one.
+  // Start re-runs the SAME path — not a dead disabled button over an empty one.
   const load = jest.spyOn(t, "loadDrill");
-  fireEvent.press(screen.getByText("Run again"));
+  fireEvent.press(screen.getByText("Start"));
   await act(() => jest.advanceTimersByTimeAsync(0));
   expect(load).toHaveBeenLastCalledWith(
     expect.objectContaining({ mode: "path", path: [2, 0] }),
@@ -583,7 +585,7 @@ test("a rehydrated random run shows its real count, not the default", async () =
 
   // Re-running must send count=20 (the drill that actually ran), not the 10 default.
   const load = jest.spyOn(t, "loadDrill");
-  fireEvent.press(screen.getByText("Run again"));
+  fireEvent.press(screen.getByText("Start"));
   await act(() => jest.advanceTimersByTimeAsync(0));
   expect(load).toHaveBeenLastCalledWith(
     expect.objectContaining({ mode: "random", count: 20 }),
