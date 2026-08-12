@@ -74,9 +74,15 @@ export const CourtMap = ({
   children,
   rotation = 0,
   onRotate,
+  hideOff = false,
 }: {
   spots: SpotVisual[]; // length 8, canonical order
   onPressSpot?: (index: number) => void;
+  /** Drop spots whose visual is "off" entirely — no dot, no hit target. The
+   *  drill surface passes this so only the paired targets in play are drawn,
+   *  keeping the schematic clean; the pairing round and the idle court leave it
+   *  off so all 8 perimeter spots stay visible to pick from. */
+  hideOff?: boolean;
   /** Optional Path drill route — the tapped spots in step order. Drawn as
    *  curved, directed, order-coloured segments between the dots (CourtRoute),
    *  under the dots so a target stays tappable. Omit outside Path authoring. */
@@ -90,7 +96,7 @@ export const CourtMap = ({
   rotation?: number;
   onRotate?: () => void;
 }) => {
-  const r = (((rotation % 4) + 4) % 4);
+  const r = ((rotation % 4) + 4) % 4;
   const edge = NET_EDGE[r];
 
   // Horizontal net (line ─ NET ─ line) for the top/bottom edges — a full line
@@ -140,7 +146,12 @@ export const CourtMap = ({
               line and keeps its tap. */}
           {route != null && route.length >= 2 && (
             <>
-              <CourtRoute path={route} rotation={r} width={MAP_W} height={MAP_H} />
+              <CourtRoute
+                path={route}
+                rotation={r}
+                width={MAP_W}
+                height={MAP_H}
+              />
               {/* A marker looping the route curve, tracing the sequence so its
                   shape reads at a glance; rebuilds once the edits settle (not on
                   every tap). Over the route line, under the dots. */}
@@ -176,6 +187,12 @@ export const CourtMap = ({
             </View>
           )}
           {SPOT_XY.map((p, i) => {
+            // With hideOff, an unassigned ("off") spot draws nothing — no dot
+            // and no hit target — so the drill schematic shows only the paired
+            // targets in play. An off spot never carries a badge or route
+            // endpoint (both are Path-authoring on paired spots), so nothing
+            // dangles by dropping it.
+            if (hideOff && spots[i] === "off") return null;
             // Rotation moves the drawn position only — dot `i` still reports spot
             // `i`, so the wire/identity is untouched.
             const { x, y } = rotateNorm(p.x, p.y, r);
@@ -191,7 +208,10 @@ export const CourtMap = ({
                   `${SPOT_NAMES[i]} spot, ${A11Y_STATE[spots[i]]}` +
                   (badge ? `, path step ${badge}` : "")
                 }
-                accessibilityState={{ disabled: !onPressSpot, selected: spots[i] !== "off" }}
+                accessibilityState={{
+                  disabled: !onPressSpot,
+                  selected: spots[i] !== "off",
+                }}
                 onPress={() => onPressSpot?.(i)}
                 style={[
                   styles.hit,
