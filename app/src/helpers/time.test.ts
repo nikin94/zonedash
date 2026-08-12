@@ -1,36 +1,49 @@
-import { formatRelativeTime } from "./time";
+import { formatSessionTime } from "./time";
 
-const NOW = 1_700_000_000_000;
-const ago = (ms: number) => formatRelativeTime(NOW - ms, NOW);
+// A fixed LOCAL reference so the calendar-day tiers are deterministic regardless
+// of the runner's timezone (all dates below are built in local time too).
+const NOW = new Date(2024, 2, 15, 14, 30).getTime(); // 2024-03-15 14:30 local
 
-const SEC = 1000;
-const MIN = 60 * SEC;
-const HOUR = 60 * MIN;
-const DAY = 24 * HOUR;
-
-test("sub-minute reads 'just now'", () => {
-  expect(ago(0)).toBe("just now");
-  expect(ago(44 * SEC)).toBe("just now");
+test("today shows the 24h time only — no date, no relative wording", () => {
+  expect(formatSessionTime(new Date(2024, 2, 15, 9, 5).getTime(), NOW)).toBe(
+    "09:05",
+  );
+  expect(formatSessionTime(new Date(2024, 2, 15, 0, 0).getTime(), NOW)).toBe(
+    "00:00",
+  );
+  expect(formatSessionTime(NOW, NOW)).toBe("14:30");
 });
 
-test("minutes and hours floor to whole units", () => {
-  expect(ago(60 * SEC)).toBe("1m ago");
-  expect(ago(59 * MIN + 59 * SEC)).toBe("59m ago");
-  expect(ago(HOUR)).toBe("1h ago");
-  expect(ago(23 * HOUR)).toBe("23h ago");
+test("the previous calendar day reads 'yesterday'", () => {
+  expect(formatSessionTime(new Date(2024, 2, 14, 23, 59).getTime(), NOW)).toBe(
+    "yesterday",
+  );
+  expect(formatSessionTime(new Date(2024, 2, 14, 0, 0).getTime(), NOW)).toBe(
+    "yesterday",
+  );
 });
 
-test("days up to a week", () => {
-  expect(ago(DAY)).toBe("1d ago");
-  expect(ago(6 * DAY)).toBe("6d ago");
+test("older than yesterday falls back to dd.mm.yyyy (zero-padded)", () => {
+  expect(formatSessionTime(new Date(2024, 2, 13, 12, 0).getTime(), NOW)).toBe(
+    "13.03.2024",
+  );
+  expect(formatSessionTime(new Date(2023, 0, 5, 8, 0).getTime(), NOW)).toBe(
+    "05.01.2023",
+  );
 });
 
-test("a week or older falls back to an absolute stamp, not a relative one", () => {
-  const label = ago(7 * DAY);
-  expect(label).not.toMatch(/ago|just now/);
-  expect(label.length).toBeGreaterThan(0);
+test("a future timestamp (clock skew) counts as today, reading as a time", () => {
+  expect(formatSessionTime(new Date(2024, 2, 15, 16, 0).getTime(), NOW)).toBe(
+    "16:00",
+  );
 });
 
-test("a future timestamp (clock skew) reads 'just now', never a negative age", () => {
-  expect(formatRelativeTime(NOW + 10 * MIN, NOW)).toBe("just now");
+test("it never emits a relative 'ago'/'just now' label", () => {
+  for (const t of [
+    new Date(2024, 2, 15, 9, 0).getTime(),
+    new Date(2024, 2, 14, 9, 0).getTime(),
+    new Date(2024, 2, 1, 9, 0).getTime(),
+  ]) {
+    expect(formatSessionTime(t, NOW)).not.toMatch(/ago|just now/);
+  }
 });
