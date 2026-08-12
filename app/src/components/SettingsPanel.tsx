@@ -40,7 +40,16 @@ export const SettingsPanel = ({
       </AppText>
       <Switch
         value={settings.allowImmediateRepeat}
+        testID="repeat-switch"
         accessibilityLabel="Allow immediate repeat"
+        // The default off-state track is a near-white grey that vanishes on the
+        // white page. Drive every track/thumb colour from the theme so OFF reads
+        // as a visible mid-grey track and ON as the accent — the state is clear
+        // at a glance on both platforms (ios_backgroundColor is the iOS OFF
+        // track; trackColor.false covers Android + the ON→OFF transition).
+        trackColor={{ false: colors.border, true: colors.accent }}
+        thumbColor={colors.background}
+        ios_backgroundColor={colors.border}
         onValueChange={(allowImmediateRepeat) =>
           onChange({ ...settings, allowImmediateRepeat })
         }
