@@ -1,4 +1,10 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand/react";
@@ -83,25 +89,34 @@ export interface AppState {
   signIn: () => void;
   /** Sign out — back to local-only. */
   signOut: () => void;
+  /** Whether the login gate has been passed — by signing in OR by choosing
+   *  "continue offline". Durable (prefs), so the gate stays down across
+   *  relaunches; an explicit sign-out reopens it (back to the login screen). */
+  authGatePassed: boolean;
+  /** Dismiss the login gate without signing in (continue local-only). Sets the
+   *  durable flag so the gate stays gone. */
+  skipAuthGate: () => void;
   /** Monotonic counter bumped whenever the device-local history changes behind
    *  the UI's back — right now, after a sign-in sync merges the cloud archive
    *  into the local store. The history list keys a re-read off it, so synced
    *  sessions appear at once instead of only after a tab round-trip. */
   historyVersion: number;
+  /** True once device-local prefs have loaded. Gates the save effect (so the
+   *  initial load isn't echoed back as a redundant write) AND the login gate
+   *  (so a returning user's stored "gate passed" is known before the first
+   *  paint — no gate flash before the app). */
+  hydrated: boolean;
 }
 
 /**
- * The internal slice — reactive `hydrated` flag plus the wiring the provider's
- * effects call into. Kept off the public `AppState` type so screens can't reach
- * it; the store instance still carries these methods.
+ * The internal slice — the wiring the provider's effects call into. Kept off the
+ * public `AppState` type so screens can't reach it; the store instance still
+ * carries these methods.
  */
 interface AppStoreInternal extends AppState {
   /** The seams the actions/effects close over (auth, cloud store). */
   auth: AuthProvider;
   remoteHistory: RemoteHistoryStore | null;
-  /** True once device-local prefs have loaded — gates the save effect so the
-   *  initial load isn't echoed straight back as a redundant write. */
-  hydrated: boolean;
   /** Adopt the loaded prefs (settings + court orientation), then mark hydrated. */
   _adoptPrefs: (p: Awaited<ReturnType<typeof loadPrefs>>) => void;
   /** Fold a transport Status event into connection / paired layout / handoff. */
@@ -155,11 +170,15 @@ export const createAppStore = ({
     authStatus: auth.status,
     authUser: auth.user,
     authError: null,
+    // The login gate shows until this flips true (via sign-in or "continue").
+    // Defaults false; hydrated from prefs, so a returning user skips the gate.
+    authGatePassed: auth.status === "signed-in",
     historyVersion: 0,
     hydrated: false,
 
     setSettings: (next) => set({ settings: next }),
-    rotateCourt: () => set((s) => ({ courtRotation: (s.courtRotation + 1) % 4 })),
+    rotateCourt: () =>
+      set((s) => ({ courtRotation: (s.courtRotation + 1) % 4 })),
     resetToPairing: () => {
       cancelHandoff();
       set({ drillView: "pairing" });
@@ -173,6 +192,7 @@ export const createAppStore = ({
     signOut: () => {
       void auth.signOut().catch(() => {});
     },
+    skipAuthGate: () => set({ authGatePassed: true }),
 
     _adoptPrefs: (p) =>
       set((s) => ({
@@ -181,6 +201,9 @@ export const createAppStore = ({
           typeof p.courtRotation === "number"
             ? ((p.courtRotation % 4) + 4) % 4 // clamp a corrupt value to 0–3
             : s.courtRotation,
+        // A stored "gate passed" only ever latches it ON — never un-passes a
+        // gate already cleared in this session (e.g. an auto sign-in on boot).
+        authGatePassed: s.authGatePassed || p.authGatePassed === true,
         hydrated: true,
       })),
 
@@ -217,13 +240,24 @@ export const createAppStore = ({
     },
 
     _handleAuth: (e) =>
-      set({
+      set((s) => ({
         authStatus: e.status,
         authUser: e.user,
         // Surface a failed/cancelled sign-in (signed-out WITH a reason); clear it
         // on any other transition so a stale error never lingers.
         authError: e.status === "signed-out" ? (e.reason ?? null) : null,
-      }),
+        // The gate tracks the account choice: signing in passes it, and an
+        // explicit sign-out (signed-in → signed-out) REOPENS it, dropping the
+        // user back on the login screen. A cancelled/failed sign-in
+        // (signing-in → signed-out) leaves it untouched, so the gate stays as it
+        // was. The skip path (never signed-in) is unaffected.
+        authGatePassed:
+          e.status === "signed-in"
+            ? true
+            : e.status === "signed-out" && s.authStatus === "signed-in"
+              ? false
+              : s.authGatePassed,
+      })),
 
     _bumpHistory: () => set((s) => ({ historyVersion: s.historyVersion + 1 })),
 
@@ -293,11 +327,12 @@ export const AppStateProvider = ({
   // so the load above isn't clobbered by a first-render defaults write.
   const settings = useStore(store, (s) => s.settings);
   const courtRotation = useStore(store, (s) => s.courtRotation);
+  const authGatePassed = useStore(store, (s) => s.authGatePassed);
   const hydrated = useStore(store, (s) => s.hydrated);
   useEffect(() => {
     if (!hydrated) return;
-    savePrefs({ settings, courtRotation });
-  }, [hydrated, settings, courtRotation]);
+    savePrefs({ settings, courtRotation, authGatePassed });
+  }, [hydrated, settings, courtRotation, authGatePassed]);
 
   // The transport Status stream drives connection / paired layout / handoff.
   useEffect(() => {
@@ -344,7 +379,9 @@ export const AppStateProvider = ({
   }, [authStatus, userId, store]);
 
   return (
-    <AppStoreContext.Provider value={store}>{children}</AppStoreContext.Provider>
+    <AppStoreContext.Provider value={store}>
+      {children}
+    </AppStoreContext.Provider>
   );
 };
 

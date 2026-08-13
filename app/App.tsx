@@ -5,6 +5,7 @@ import { StyleSheet } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import { AuthGate } from "./src/navigation/AuthGate";
 import { RootNavigator } from "./src/navigation/RootNavigator";
 import { AppStateProvider } from "./src/state/AppState";
 import { colors } from "./src/theme";
@@ -32,7 +33,11 @@ const App = () => {
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
         <AppStateProvider>
-          <RootNavigator />
+          {/* The first-run login gate sits above the navigator: until it is
+              passed (sign in / continue), the app shell isn't mounted. */}
+          <AuthGate>
+            <RootNavigator />
+          </AuthGate>
           <StatusBar style="dark" />
         </AppStateProvider>
       </SafeAreaProvider>

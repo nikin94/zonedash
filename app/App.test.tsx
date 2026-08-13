@@ -12,6 +12,7 @@ import App from "./App";
 import type { SessionSummary } from "./src/domain/session";
 import { COURT_ACTION_GAP, COURT_STRIP_H } from "./src/helpers/court";
 import { appendSession } from "./src/state/history";
+import { loadPrefs, savePrefs } from "./src/state/prefs";
 
 // Persisted prefs live in one process-wide store, so a test that saves an
 // orientation would otherwise leak into the next test's hydration. Clear it
@@ -22,7 +23,22 @@ beforeEach(async () => {
 });
 afterEach(() => jest.useRealTimers());
 
+// Almost every test wants the app itself, not the first-run login gate. Seed
+// the durable "gate passed" flag (merged, so a test's saved court orientation
+// survives) so <App/> boots straight into the tab shell. The gate's own tests
+// use renderFresh (no seed) below.
 const renderApp = async () => {
+  const prev = await loadPrefs();
+  await savePrefs({ ...prev, authGatePassed: true });
+  const utils = render(<App />);
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+  return utils;
+};
+
+// A cold first launch — no stored choice, so the login gate is up.
+const renderFresh = async () => {
   const utils = render(<App />);
   await act(async () => {
     await jest.runAllTimersAsync();
@@ -332,7 +348,7 @@ test("the History overflow menu clears the log behind a confirm", async () => {
 // The Account tab is the sign-in surface (history moved to its own tab).
 // Signed-out by default (no backend configured in tests), sign-in walks the mock
 // provider to signed-in, and Sign out returns to the logged-out state.
-test("the Account tab signs in and out over the mock provider", async () => {
+test("the Account tab signs in, and a sign-out returns to the login gate", async () => {
   await renderApp();
 
   fireEvent.press(screen.getByTestId("tab-account"));
@@ -349,11 +365,14 @@ test("the Account tab signs in and out over the mock provider", async () => {
   expect(screen.getByTestId("account-name")).toBeTruthy(); // signed in
   expect(screen.getByTestId("sign-out")).toBeTruthy();
 
-  fireEvent.press(screen.getByTestId("sign-out")); // back to the login state
+  // Signing out of the account drops back to the login gate (not just the
+  // Account tab's signed-out view) — the gate reopens on an explicit logout.
+  fireEvent.press(screen.getByTestId("sign-out"));
   await act(async () => {
     await jest.runAllTimersAsync();
   });
-  expect(screen.getByTestId("sign-in-google")).toBeTruthy();
+  expect(screen.getByTestId("login-screen")).toBeTruthy();
+  expect(screen.queryByTestId("tab-account")).toBeNull(); // the app shell is gone
 });
 
 // Navigation must never touch the BLE link: the transport lives above the
@@ -428,4 +447,58 @@ test("a disconnect clears the paired layout — reconnect returns to pairing", a
   expect(screen.getByTestId("start-pairing")).toBeTruthy();
   expect(screen.queryByTestId("drill-settings-button")).toBeNull();
   expect(screen.queryAllByTestId(/spot-\d-bound/)).toHaveLength(0);
+});
+
+// ── First-run login gate ─────────────────────────────────────────────────────
+
+// A cold launch (no stored choice) shows the login gate over the app: a Google
+// sign-in and a "continue offline" skip — and the app shell (its tabs) is not
+// mounted until the gate is passed.
+test("a cold launch shows the login gate, not the app", async () => {
+  await renderFresh();
+  expect(screen.getByTestId("login-screen")).toBeTruthy();
+  expect(screen.getByTestId("login-google")).toBeTruthy();
+  expect(screen.getByTestId("login-skip")).toBeTruthy();
+  // The app shell (tab bar / court) is behind the gate — not mounted yet.
+  expect(screen.queryByTestId("tab-drill")).toBeNull();
+  expect(screen.queryByTestId("connect-button")).toBeNull();
+});
+
+// "Continue offline" dismisses the gate into the local-only app, and the choice
+// is durable — a relaunch boots straight past the gate.
+test("continue-without-auth enters the app and is remembered across a relaunch", async () => {
+  const first = await renderFresh();
+  fireEvent.press(screen.getByTestId("login-skip"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+  // Gate gone, app up (the disconnected Drill surface).
+  expect(screen.queryByTestId("login-screen")).toBeNull();
+  expect(screen.getByTestId("connect-button")).toBeTruthy();
+  expect(screen.getByTestId("tab-drill")).toBeTruthy();
+
+  // Relaunch (fresh mount, prefs persisted) — no gate this time.
+  first.unmount();
+  await renderFresh();
+  expect(screen.queryByTestId("login-screen")).toBeNull();
+  expect(screen.getByTestId("connect-button")).toBeTruthy();
+});
+
+// Signing in from the gate enters the app too, and latches the durable flag, so
+// a relaunch (with no sign-out) skips the gate. Only an explicit sign-out
+// reopens it — covered separately by the Account sign-out test.
+test("sign-in from the gate enters the app and is remembered across a relaunch", async () => {
+  const first = await renderFresh();
+  fireEvent.press(screen.getByTestId("login-google"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+  expect(screen.queryByTestId("login-screen")).toBeNull();
+  expect(screen.getByTestId("connect-button")).toBeTruthy();
+
+  // Relaunch — the gate stays gone.
+  first.unmount();
+  await renderFresh();
+  expect(screen.queryByTestId("login-screen")).toBeNull();
+  expect(screen.getByTestId("connect-button")).toBeTruthy();
 });

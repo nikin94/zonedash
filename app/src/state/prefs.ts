@@ -19,6 +19,10 @@ const KEY = "zonedash:prefs:v1";
 export interface StoredPrefs {
   settings?: DrillSettings;
   courtRotation?: number;
+  /** Whether the login gate has been passed (signed in or "continue offline") —
+   *  so the gate stays down across relaunches, until an explicit sign-out
+   *  reopens it. */
+  authGatePassed?: boolean;
 }
 
 /** Read the persisted prefs, or `{}` if none / unreadable / corrupt. */
