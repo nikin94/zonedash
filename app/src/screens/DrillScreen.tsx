@@ -8,7 +8,11 @@ import { CourtMap, CourtStatusControl } from "../components/CourtMap";
 import { DrillPanel } from "../components/DrillPanel";
 import { PairingPanel } from "../components/PairingPanel";
 import { ScreenWrapper } from "../components/ScreenWrapper";
-import { type SpotVisual } from "../helpers/court";
+import {
+  COURT_ACTION_GAP,
+  COURT_STRIP_H,
+  type SpotVisual,
+} from "../helpers/court";
 import { appendSession } from "../state/history";
 import { useAppStore } from "../state/AppState";
 import { colors } from "../theme";
@@ -79,7 +83,7 @@ export const DrillScreen = () => {
           statusControl={<CourtStatusControl />}
         />
       ) : (
-        <View style={styles.idle}>
+        <View testID="idle-surface" style={styles.idle}>
           {/* A clean court with the status indicator in its corner. The connect
               action lives OUTSIDE it, below, mirroring the pairing surface's
               Start pairing hero — here it reads "Connect" until the link is up. */}
@@ -109,15 +113,23 @@ export const DrillScreen = () => {
   );
 };
 
+// The idle column's inter-child gap (court → Connect → error hint).
+const IDLE_GAP = 12;
+
 const styles = StyleSheet.create({
   idle: {
     alignSelf: "stretch",
     alignItems: "center",
-    gap: 12,
+    gap: IDLE_GAP,
     paddingHorizontal: 24,
   },
+  // Land Connect the shared COURT_ACTION_GAP below the court's visual bottom —
+  // same technique as the drill/pairing surfaces: pull up to cancel the court's
+  // reserved bottom strip and the column gap, so the court→button distance is
+  // the one shared value rather than a raw (strip + gap) that reads too large.
   connect: {
     alignSelf: "stretch",
+    marginTop: COURT_ACTION_GAP - COURT_STRIP_H - IDLE_GAP,
   },
   hint: {
     paddingHorizontal: 24,

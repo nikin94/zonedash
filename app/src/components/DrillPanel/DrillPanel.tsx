@@ -38,7 +38,6 @@ import { type DrillSettings } from "../../state/AppState";
 import { showToast } from "../../state/toast";
 import {
   TAB_BAR_DISC_RISE,
-  TabBarSuppressor,
   tabBarClearance,
 } from "../../navigation/GlassTabBar";
 import { alpha, colors } from "../../theme";
@@ -706,14 +705,18 @@ export const DrillPanel = ({
         )}
       </DrillNav.Screen>
 
-      <DrillNav.Screen name="DrillSetup">
+      {/* Present the setup as a native modal (`transparentModal`), NOT a card:
+          react-native-screens presents it at the window level, so it sits ABOVE
+          the floating tab bar (which lives in the parent tab navigator) with no
+          hand-rolled hiding — the tab bar simply can't cover it. Transparent +
+          the inherited `slide_from_right` keeps the horizontal slide with the
+          drill surface visible behind it (an opaque page covers all at rest). */}
+      <DrillNav.Screen
+        name="DrillSetup"
+        options={{ presentation: "transparentModal" }}
+      >
         {({ navigation }) => (
           <>
-            {/* Keep the floating tab bar hidden for this route's whole lifetime,
-                the close animation included — its release fires on unmount, which
-                screens defers until the slide-out finishes, so the bar can't snap
-                back and cover the page as it leaves. */}
-            <TabBarSuppressor />
             <DrillSetupPage
               onDone={() => navigation.goBack()}
               onModeInfo={() => setModeInfoOpen(true)}

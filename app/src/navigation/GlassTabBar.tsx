@@ -1,16 +1,10 @@
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { BlurView } from "expo-blur";
-import { useEffect } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppText } from "../components/AppText";
 import { AccountIcon, DrillIcon, HistoryIcon } from "../components/Icons";
-import {
-  releaseTabBar,
-  suppressTabBar,
-  useTabBarSuppressed,
-} from "../state/tabBar";
 import { alpha, colors, glowShadow } from "../theme";
 
 /**
@@ -53,46 +47,12 @@ const pressStyle = ({ pressed }: { pressed: boolean }) => [
   pressed && styles.tapPressed,
 ];
 
-/** The Drill tab nests a stack (DrillHome + DrillSetup); the setup page is a
- *  full-screen route that wants the footer gone (only its own Done at the
- *  bottom). Hide the whole bar whenever the focused tab's nested stack sits on
- *  DrillSetup — this fires the instant the route is pushed, so the bar never
- *  flashes on OPEN. The close side is handled by TabBarSuppressor (below). */
-const hidesTabBar = (state: BottomTabBarProps["state"]): boolean => {
-  const focused = state.routes[state.index];
-  const nested = focused.state as
-    { index?: number; routes?: { name: string }[] } | undefined;
-  if (!nested?.routes || nested.index == null) return false;
-  return nested.routes[nested.index]?.name === "DrillSetup";
-};
-
-/**
- * Mount this for as long as the tab bar should stay hidden. It suppresses the
- * bar on mount and — crucially — releases on UNMOUNT, which react-native-screens
- * defers until a screen's exit animation completes. So the drill-setup page
- * keeps the bar gone through its whole slide-out, instead of the bar snapping
- * back the moment `goBack()` flips the focus state (`hidesTabBar` → false) and
- * covering the still-sliding page.
- */
-export const TabBarSuppressor = () => {
-  useEffect(() => {
-    suppressTabBar();
-    return () => releaseTabBar();
-  }, []);
-  return null;
-};
-
 export const GlassTabBar = ({ state, navigation }: BottomTabBarProps) => {
   const insets = useSafeAreaInsets();
-  const suppressed = useTabBarSuppressed();
 
-  // On the drill-setup page the bar steps aside entirely — the page pins its own
-  // Done at the bottom, so a floating tab bar over it would be redundant chrome.
-  // `hidesTabBar(state)` hides it immediately on OPEN (no first-frame flash);
-  // `suppressed` (the setup page's TabBarSuppressor) keeps it hidden through the
-  // CLOSE animation, when the focus state has already flipped back to the drill
-  // surface but the setup screen is still sliding out over the top of the bar.
-  if (suppressed || hidesTabBar(state)) return null;
+  // The drill-setup page no longer needs the bar hidden: it's presented as a
+  // window-level modal (react-native-screens), so it covers this bar on its own
+  // — no visibility toggling here, which is what used to jump the layout.
 
   const go = (routeName: string, routeKey: string, focused: boolean) => () => {
     const event = navigation.emit({

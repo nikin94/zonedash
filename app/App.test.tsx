@@ -1,8 +1,16 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { act, fireEvent, render, screen } from "@testing-library/react-native";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react-native";
+import { StyleSheet } from "react-native";
 
 import App from "./App";
 import type { SessionSummary } from "./src/domain/session";
+import { COURT_ACTION_GAP, COURT_STRIP_H } from "./src/helpers/court";
 import { appendSession } from "./src/state/history";
 
 // Persisted prefs live in one process-wide store, so a test that saves an
@@ -63,6 +71,23 @@ test("renders the disconnected surface — an idle court and a Connect button", 
   expect(screen.getByTestId("connect-button")).toBeTruthy();
   expect(screen.getByText("Connect")).toBeTruthy();
   expect(screen.queryAllByTestId(/spot-\d-off/)).toHaveLength(8); // court is present, idle
+});
+
+// The idle Connect button sits the shared COURT_ACTION_GAP below the court —
+// the same value the drill/pairing surfaces use — instead of a raw (column gap
+// + court bottom strip) that reads too large. The column gap plus the court's
+// reserved bottom strip plus the button's pull-up margin must net to that one
+// shared value.
+test("the court→Connect gap resolves to the shared court-action gap", async () => {
+  await renderApp();
+  const idle = StyleSheet.flatten(
+    screen.getByTestId("idle-surface").props.style,
+  );
+  const connect = StyleSheet.flatten(
+    within(screen.getByTestId("idle-surface")).getByTestId("connect-button")
+      .props.style,
+  );
+  expect(idle.gap + COURT_STRIP_H + connect.marginTop).toBe(COURT_ACTION_GAP);
 });
 
 // The rotate control lives in the court corner on every surface; it turns the
@@ -134,26 +159,29 @@ test("a completed round reveals the drill controls under the court", async () =>
   expect(screen.queryByTestId("start-pairing")).toBeNull();
 });
 
-// The drill-setup page is a full-screen route: the footer tab bar steps aside
-// while it's up (its own Done pins the bottom), and returns once Done pops back.
-test("the drill-setup page hides the tab bar; Done brings it back", async () => {
+// The drill-setup page opens as a window-level modal (react-native-screens),
+// so it covers the floating tab bar NATIVELY instead of the app unmounting the
+// bar. The bar therefore stays mounted the whole time — nothing resizes on open
+// or close, which is what removes the Done-button jump. (The visual "covers the
+// bar" is a native modal concern jest can't observe; what it CAN lock is that
+// the bar is never torn out of the tree.)
+test("the drill-setup page opens over the app without unmounting the tab bar", async () => {
   await renderApp();
   await connect();
   await pairTwo();
 
-  // The tab bar is present on the drill surface.
   expect(screen.getByTestId("tab-account")).toBeTruthy();
 
-  // Push the setup page — the tab bar hides.
+  // Open the setup page — it mounts, and the bar stays put (no hide/resize).
   fireEvent.press(screen.getByTestId("drill-settings-button"));
   await act(async () => {
     await jest.runAllTimersAsync();
   });
   expect(screen.getByTestId("drill-settings-page")).toBeTruthy();
-  expect(screen.queryByTestId("tab-account")).toBeNull();
-  expect(screen.queryByTestId("tab-history")).toBeNull();
+  expect(screen.getByTestId("tab-account")).toBeTruthy();
+  expect(screen.getByTestId("tab-history")).toBeTruthy();
 
-  // Done pops back — the tab bar returns.
+  // Done pops it — the page unmounts, the bar was never touched.
   fireEvent.press(screen.getByTestId("drill-settings-done"));
   await act(async () => {
     await jest.runAllTimersAsync();
