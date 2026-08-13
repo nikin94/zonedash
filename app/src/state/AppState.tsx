@@ -200,16 +200,21 @@ export const createAppStore = ({
       set({ drillView: "pairing" });
     },
     recordSession: (summary) => {
-      // Device-local log first — the history view reads this, signed in or not,
-      // and it's the durable copy an offline / signed-out user relies on.
-      void appendSession(summary);
+      // Scope the write to the CURRENT identity's bucket: a signed-in run lands
+      // in that account's log, a signed-out run in the anonymous log — the two
+      // histories stay separate, so signing in never inherits the device's
+      // anonymous runs (and vice-versa). Device-local first: it's the durable
+      // copy the history view reads, signed in or not.
+      const { authStatus, authUser } = get();
+      const userId =
+        authStatus === "signed-in" && authUser !== null ? authUser.id : null;
+      void appendSession(summary, userId);
       // Signed in with a cloud backend → archive THIS session to the account
       // straight away, best-effort. insert-or-ignore on (user_id, id) makes it
       // idempotent with the sign-in reconcile, so a duplicate push is harmless
       // and a network failure is swallowed (the next reconcile still catches it).
-      const { authStatus, authUser } = get();
-      if (authStatus === "signed-in" && authUser !== null && remoteHistory) {
-        void remoteHistory.upsert(authUser.id, [summary]).catch(() => {});
+      if (userId !== null && remoteHistory) {
+        void remoteHistory.upsert(userId, [summary]).catch(() => {});
       }
     },
     signIn: () => {

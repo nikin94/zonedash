@@ -36,9 +36,14 @@ const fmtMeta = (s: SessionSummary, now: number) => {
  */
 export const HistoryPanel = ({
   refreshKey = 0,
+  userId = null,
   onLoaded,
 }: {
   refreshKey?: number;
+  /** Whose history to show: the signed-in account's bucket, or the anonymous
+   *  device log (null). Re-reads when it changes, so a sign-in/out swaps the
+   *  list to the matching identity's history. */
+  userId?: string | null;
   /** Reports the loaded session count on every (re)read — the screen gates its
    *  Clear affordance on it. */
   onLoaded?: (count: number) => void;
@@ -50,7 +55,7 @@ export const HistoryPanel = ({
   useEffect(() => {
     let live = true;
     setNow(Date.now());
-    loadHistory().then((s) => {
+    loadHistory(userId).then((s) => {
       if (live) {
         setSessions(s);
         onLoaded?.(s.length);
@@ -59,8 +64,8 @@ export const HistoryPanel = ({
     return () => {
       live = false;
     };
-    // Re-read only on refreshKey; onLoaded is a plain reporter, not a trigger.
-  }, [refreshKey]);
+    // Re-read on refreshKey or an identity swap; onLoaded is a plain reporter.
+  }, [refreshKey, userId]);
 
   // The fastest-average session gets a "best" badge — progression at a glance;
   // null (no badge) until there are two comparable sessions.

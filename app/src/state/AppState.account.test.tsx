@@ -30,6 +30,10 @@ const sess = (endedAt: number): SessionSummary => ({
   bestMs: 300,
 });
 
+// The id MockAuthProvider signs in as (auth.mock DEFAULT_USER) — the key the
+// account's history bucket is scoped by, kept separate from the anonymous log.
+const MOCK_USER_ID = "mock-user";
+
 class FakeRemote implements RemoteHistoryStore {
   rows = new Map<string, SessionSummary>();
   seed(s: SessionSummary[]): this {
@@ -116,21 +120,26 @@ test("sign-in flips status to signed-in and back out on sign-out", async () => {
   expect(screen.getByTestId("status")).toHaveTextContent("signed-out");
 });
 
-test("on sign-in the local history is reconciled with the cloud archive", async () => {
-  // This device has session 3; the account already has 2 from another device.
-  await appendSession(sess(3));
-  const remote = new FakeRemote().seed([sess(2)]);
+// Separate histories: signing in shows the ACCOUNT's own history (its cloud
+// archive), never the device's anonymous runs — and the anonymous log is left
+// untouched, NOT migrated up into the account.
+test("sign-in loads the account's cloud history and keeps the anonymous log separate", async () => {
+  await appendSession(sess(3)); // an anonymous run recorded on this device
+  const remote = new FakeRemote().seed([sess(2)]); // the account's cloud archive
 
   await renderApp(new MockAuthProvider(), remote);
   await act(async () => {
     fireEvent.press(screen.getByTestId("in"));
   });
 
-  // The device's 3 was pushed up, and the cloud's 2 merged into local history.
   await waitFor(async () => {
-    expect([...remote.rows.keys()].sort()).toEqual(["2", "3"]);
-    expect((await loadHistory()).map((s) => s.id)).toEqual(["3", "2"]);
+    // The account's local bucket now mirrors its cloud (2) — NOT the anon run (3).
+    expect((await loadHistory(MOCK_USER_ID)).map((s) => s.id)).toEqual(["2"]);
   });
+  // The anonymous run stayed in the anonymous bucket, untouched…
+  expect((await loadHistory()).map((s) => s.id)).toEqual(["3"]);
+  // …and was never pushed up into the account's cloud.
+  expect([...remote.rows.keys()].sort()).toEqual(["2"]);
 });
 
 test("a sign-in sync surfaces the synced session with no tab round-trip", async () => {
@@ -139,16 +148,17 @@ test("a sign-in sync surfaces the synced session with no tab round-trip", async 
   // list's refreshKey, with NO focus/navigation event driving a re-read.
   const remote = new FakeRemote().seed([sess(2)]);
   const SyncedHistory = () => {
-    const { signIn, historyVersion } = useAppStore(
+    const { signIn, historyVersion, userId } = useAppStore(
       useShallow((s) => ({
         signIn: s.signIn,
         historyVersion: s.historyVersion,
+        userId: s.authUser?.id ?? null,
       })),
     );
     return (
       <>
         <Button testID="in" label="in" onPress={signIn} />
-        <HistoryPanel refreshKey={historyVersion} />
+        <HistoryPanel refreshKey={historyVersion} userId={userId} />
       </>
     );
   };
@@ -221,10 +231,14 @@ test("recording a session while signed in pushes it to the cloud at once", async
 
   // The session is in the cloud archive without any sign-out/in round trip…
   await waitFor(() => expect(remote.rows.has("9")).toBe(true));
-  // …and in the device-local log too (recordSession always writes local first).
+  // …and in the ACCOUNT's device-local bucket (recordSession writes local first,
+  // scoped to the signed-in identity)…
   await waitFor(async () =>
-    expect((await loadHistory()).map((s) => s.id)).toEqual(["9"]),
+    expect((await loadHistory(MOCK_USER_ID)).map((s) => s.id)).toEqual(["9"]),
   );
+  // …never in the anonymous log — a signed-in run is the account's, not the
+  // device's anonymous history.
+  expect(await loadHistory()).toEqual([]);
 });
 
 // Signed-out stays purely local — recordSession writes the device log and never
