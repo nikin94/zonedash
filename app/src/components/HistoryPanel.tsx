@@ -33,10 +33,16 @@ const fmtMeta = (s: SessionSummary, now: number) => {
  * after a clear. It reports its loaded count up via `onLoaded`, so the screen's
  * overflow menu (which owns the Clear flow) can hide when there is nothing to
  * clear. Pure list: the screen title and the Clear action live on the screen.
+ *
+ * An optional `mode` filters the rendered rows to one drill mode (the mode tab
+ * bar drives it). The loaded count reported via `onLoaded` is ALWAYS the total
+ * across every mode, so the screen's Clear affordance (which wipes the whole
+ * identity bucket) still shows while the active mode tab happens to be empty.
  */
 export const HistoryPanel = ({
   refreshKey = 0,
   userId = null,
+  mode,
   onLoaded,
 }: {
   refreshKey?: number;
@@ -44,8 +50,11 @@ export const HistoryPanel = ({
    *  device log (null). Re-reads when it changes, so a sign-in/out swaps the
    *  list to the matching identity's history. */
   userId?: string | null;
-  /** Reports the loaded session count on every (re)read — the screen gates its
-   *  Clear affordance on it. */
+  /** Show only sessions of this drill mode (the history mode tab). Undefined =
+   *  show every mode (the panel used without a tab bar). */
+  mode?: string;
+  /** Reports the TOTAL loaded session count (all modes) on every (re)read — the
+   *  screen gates its Clear affordance on it. */
   onLoaded?: (count: number) => void;
 }) => {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
@@ -67,13 +76,18 @@ export const HistoryPanel = ({
     // Re-read on refreshKey or an identity swap; onLoaded is a plain reporter.
   }, [refreshKey, userId]);
 
+  // Filter to the active mode when one is given; otherwise show every session.
+  const shown =
+    mode === undefined ? sessions : sessions.filter((s) => s.mode === mode);
+
   // The fastest-average session gets a "best" badge — progression at a glance;
-  // null (no badge) until there are two comparable sessions.
-  const bestId = bestAverageSessionId(sessions);
+  // null (no badge) until there are two comparable sessions. Scoped to the shown
+  // set, so a mode tab badges the best OF THAT MODE, comparing like with like.
+  const bestId = bestAverageSessionId(shown);
 
   return (
     <View style={styles.panel}>
-      {sessions.length === 0 ? (
+      {shown.length === 0 ? (
         <AppText
           center
           size={13}
@@ -85,7 +99,7 @@ export const HistoryPanel = ({
         </AppText>
       ) : (
         <View style={styles.list} testID="history-list">
-          {sessions.map((s) => (
+          {shown.map((s) => (
             <View key={s.id} style={styles.row} testID={`history-row-${s.id}`}>
               <View style={styles.rowLead}>
                 <View style={styles.modeLine}>

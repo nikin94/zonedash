@@ -77,6 +77,50 @@ test("shows the runner name on a session that has one, and nothing for an unname
   expect(screen.queryByTestId("history-player-1")).toBeNull();
 });
 
+// The `mode` prop is the history mode tab: only that mode's rows render, but the
+// loaded count reported up is the TOTAL (every mode), so the screen's Clear
+// affordance stays available while the active tab happens to be empty.
+test("mode filters the rows to one drill mode; onLoaded still reports the total", async () => {
+  const onLoaded = jest.fn();
+  await appendSession(summary(1, { mode: "random" }));
+  await appendSession(summary(2, { mode: "path" }));
+  await appendSession(summary(3, { mode: "path" }));
+
+  render(<HistoryPanel mode="path" onLoaded={onLoaded} />);
+  await screen.findByTestId("history-row-3");
+
+  // Only the two Path sessions show; the Random one is filtered out.
+  expect(screen.getByTestId("history-row-2")).toBeTruthy();
+  expect(screen.queryByTestId("history-row-1")).toBeNull();
+  // The count is the total across every mode (3), not the filtered 2.
+  expect(onLoaded).toHaveBeenLastCalledWith(3);
+});
+
+test("a mode tab with no sessions of its own shows the empty hint (others still logged)", async () => {
+  const onLoaded = jest.fn();
+  await appendSession(summary(1, { mode: "random" }));
+
+  render(<HistoryPanel mode="live" onLoaded={onLoaded} />);
+  await screen.findByTestId("history-empty");
+
+  expect(screen.queryByTestId("history-list")).toBeNull();
+  // Total still 1 — the screen keeps its Clear affordance even on an empty tab.
+  expect(onLoaded).toHaveBeenLastCalledWith(1);
+});
+
+test("the best badge is scoped to the shown mode — comparing like with like", async () => {
+  // A faster Random average must NOT steal the badge from the Path tab.
+  await appendSession(summary(1, { mode: "random", avgMs: 100 }));
+  await appendSession(summary(2, { mode: "path", avgMs: 500 }));
+  await appendSession(summary(3, { mode: "path", avgMs: 400 })); // best Path
+
+  render(<HistoryPanel mode="path" />);
+  await screen.findByTestId("history-row-3");
+
+  expect(screen.getByTestId("history-best-3")).toBeTruthy();
+  expect(screen.queryByTestId("history-best-2")).toBeNull();
+});
+
 test("the target count shows only for a reduced layout, not the full 8", async () => {
   await appendSession(summary(1, { numPositions: 6 }));
   await appendSession(summary(2, { numPositions: 8 }));

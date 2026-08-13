@@ -7,9 +7,11 @@ import { useShallow } from "zustand/react/shallow";
 import { AppText } from "../components/AppText";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { CustomPressable } from "../components/CustomPressable";
+import { MODES } from "../components/DrillPanel/drillMode";
 import { HistoryPanel } from "../components/HistoryPanel";
 import { MoreIcon } from "../components/Icons";
 import { ScreenWrapper } from "../components/ScreenWrapper";
+import { SegmentedTabs } from "../components/SegmentedTabs";
 import { clearHistory } from "../state/history";
 import { useAppStore } from "../state/AppState";
 import { colors, glowShadow } from "../theme";
@@ -23,6 +25,13 @@ import { colors, glowShadow } from "../theme";
  * synced from another device while this tab is already open, shows up without a
  * tab round-trip. Clearing the log lives in an overflow (⋮) menu beside the
  * title now (not a button under the list); it re-reads via a local key bump.
+ *
+ * A mode tab bar (Random · Path · Live) sits under the title, its tabs derived
+ * straight from the drill MODES list — add a mode there and a history tab for it
+ * appears automatically. Each tab filters the list to its own mode; an empty tab
+ * shows the panel's "no sessions" hint. The Clear affordance still wipes the
+ * WHOLE identity bucket (every mode), so it gates on the total count, not the
+ * active tab's.
  */
 export const HistoryScreen = () => {
   // Which identity's history to show: the signed-in account, or the anonymous
@@ -47,6 +56,10 @@ export const HistoryScreen = () => {
   const [clearKey, setClearKey] = useState(0);
   const refreshKey = focusKey + historyVersion + clearKey;
 
+  // The active mode tab — its rows are filtered to this mode. Defaults to the
+  // first drill mode, so the tab bar opens on a real tab whatever MODES holds.
+  const [activeMode, setActiveMode] = useState<string>(MODES[0].key);
+
   const [hasSessions, setHasSessions] = useState(false);
   const [clearAsk, setClearAsk] = useState(false);
 
@@ -65,6 +78,16 @@ export const HistoryScreen = () => {
         ) : undefined
       }
     >
+      {/* Mode tabs, auto-derived from MODES — a new drill mode adds a tab here
+          with no extra wiring. Fixed above the scroll so switching modes never
+          scrolls the list. */}
+      <SegmentedTabs
+        testID="history-mode-tabs"
+        tabs={MODES}
+        activeKey={activeMode}
+        onChange={setActiveMode}
+      />
+
       <ScrollView
         style={styles.scroll}
         // The list stretches to fill the screen (`flexGrow`) with no reserved
@@ -77,6 +100,7 @@ export const HistoryScreen = () => {
         <HistoryPanel
           refreshKey={refreshKey}
           userId={userId}
+          mode={activeMode}
           onLoaded={(n) => setHasSessions(n > 0)}
         />
       </ScrollView>

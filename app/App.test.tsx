@@ -345,6 +345,51 @@ test("the History overflow menu clears the log behind a confirm", async () => {
   expect(screen.queryByTestId("history-menu-button")).toBeNull();
 });
 
+// The History mode tabs filter the log by drill mode: the default (first) tab
+// shows its own mode's runs, and switching tabs swaps the list. An empty tab
+// shows the "no sessions" hint while the log (other modes) is untouched.
+test("the History mode tabs filter the log by drill mode", async () => {
+  const sess = (id: string, mode: string): SessionSummary => ({
+    id,
+    endedAt: Number(id),
+    mode,
+    numPositions: 6,
+    attempts: 3,
+    totalMs: 1200,
+    avgMs: 400,
+    bestMs: 300,
+  });
+  await appendSession(sess("10", "random"));
+  await appendSession(sess("20", "path"));
+
+  await renderApp();
+  fireEvent.press(screen.getByTestId("tab-history"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+
+  // Default tab is Random — the random run shows, the path run does not.
+  expect(screen.getByTestId("history-row-10")).toBeTruthy();
+  expect(screen.queryByTestId("history-row-20")).toBeNull();
+
+  // Switch to the Path tab → the path run shows, the random one drops.
+  fireEvent.press(screen.getByTestId("segment-path"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+  expect(screen.getByTestId("history-row-20")).toBeTruthy();
+  expect(screen.queryByTestId("history-row-10")).toBeNull();
+
+  // The Live tab has no runs → the empty hint, but the log still has sessions so
+  // the Clear affordance (kebab) stays available.
+  fireEvent.press(screen.getByTestId("segment-live"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+  expect(screen.getByTestId("history-empty")).toBeTruthy();
+  expect(screen.getByTestId("history-menu-button")).toBeTruthy();
+});
+
 // The Account tab is the sign-in surface (history moved to its own tab).
 // Signed-out by default (no backend configured in tests), sign-in walks the mock
 // provider to signed-in, and Sign out returns to the logged-out state.
