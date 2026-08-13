@@ -92,6 +92,12 @@ export interface AppState {
    *  it finishes, not only at the next sign-in reconcile. Signed-out / offline
    *  stays purely local, exactly as before. */
   recordSession: (summary: SessionSummary) => void;
+  /** The drill mode of the most recently recorded session ("random" | "path" |
+   *  "live"), or null before any run this launch. The History screen opens its
+   *  mode tab on this, so a just-finished run is on the visible tab instead of
+   *  hidden behind the default (Random) — the reason a Path/Live run looked
+   *  "missing" until you switched tabs. */
+  lastSessionMode: string | null;
   /** Account status off the AuthProvider seam — "signed-out" is the default and
    *  first-class (local-only). */
   authStatus: AuthStatus;
@@ -188,6 +194,7 @@ export const createAppStore = ({
     // The login gate shows until this flips true (via sign-in or "continue").
     // Defaults false; hydrated from prefs, so a returning user skips the gate.
     authGatePassed: auth.status === "signed-in",
+    lastSessionMode: null,
     historyVersion: 0,
     hydrated: false,
 
@@ -209,6 +216,9 @@ export const createAppStore = ({
       const userId =
         authStatus === "signed-in" && authUser !== null ? authUser.id : null;
       void appendSession(summary, userId);
+      // Remember the run's mode so the History screen opens on its tab — a
+      // finished Path/Live run is otherwise hidden behind the default Random tab.
+      set({ lastSessionMode: summary.mode });
       // Signed in with a cloud backend → archive THIS session to the account
       // straight away, best-effort. insert-or-ignore on (user_id, id) makes it
       // idempotent with the sign-in reconcile, so a duplicate push is harmless

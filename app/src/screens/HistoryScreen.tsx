@@ -42,29 +42,34 @@ import { colors, glowShadow } from "../theme";
 export const HistoryScreen = () => {
   // Which identity's history to show: the signed-in account, or the anonymous
   // device log. A sign-in/out re-keys the list to the matching bucket.
-  const { historyVersion, userId } = useAppStore(
+  // lastSessionMode is the mode of the most recent run — the tab to open on.
+  const { historyVersion, userId, lastSessionMode } = useAppStore(
     useShallow((s) => ({
       historyVersion: s.historyVersion,
       userId: s.authUser?.id ?? null,
+      lastSessionMode: s.lastSessionMode,
     })),
   );
 
-  // Bump on focus so HistoryPanel re-reads the log each time the tab is shown.
+  // The active mode tab — its rows are filtered to this mode. Defaults to the
+  // first drill mode, so the tab bar opens on a real tab whatever MODES holds.
+  const [activeMode, setActiveMode] = useState<string>(MODES[0].key);
+
+  // Bump on focus so HistoryPanel re-reads the log each time the tab is shown,
+  // and open the tab on the mode of the last recorded run — so a just-finished
+  // Path/Live run is on the visible tab, not hidden behind the default Random.
   const [focusKey, setFocusKey] = useState(0);
   useFocusEffect(
     useCallback(() => {
       setFocusKey((k) => k + 1);
-    }, []),
+      if (lastSessionMode !== null) setActiveMode(lastSessionMode);
+    }, [lastSessionMode]),
   );
   // A clear bumps this to force a re-read (→ empty list). Combined with focus +
   // historyVersion (bumped when a sign-in sync writes the merged history); all
   // monotonic, so the sum changes on any of them.
   const [clearKey, setClearKey] = useState(0);
   const refreshKey = focusKey + historyVersion + clearKey;
-
-  // The active mode tab — its rows are filtered to this mode. Defaults to the
-  // first drill mode, so the tab bar opens on a real tab whatever MODES holds.
-  const [activeMode, setActiveMode] = useState<string>(MODES[0].key);
 
   // Slide the filtered list in from the side of travel on a mode change — a
   // directional page-slide + fade (RN Animated, native-driven), matching the

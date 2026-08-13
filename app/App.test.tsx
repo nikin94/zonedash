@@ -390,6 +390,50 @@ test("the History mode tabs filter the log by drill mode", async () => {
   expect(screen.getByTestId("history-menu-button")).toBeTruthy();
 });
 
+// Regression: a finished run must be visible on the History tab without manually
+// switching modes. The mode tabs default to Random, so a Path/Live run used to
+// land behind a hidden tab and look "missing" — recordSession now remembers the
+// run's mode and the History tab opens on it.
+test("a finished Path run is visible on the History tab, not hidden behind Random", async () => {
+  await renderApp();
+  await connect();
+  await pairTwo(); // drill controls over a real 2-spot layout
+
+  // Author a one-step Path drill: pick Path in the setup, tap a paired spot.
+  fireEvent.press(screen.getByTestId("drill-settings-button"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+  fireEvent.press(screen.getByText("Path"));
+  fireEvent.press(screen.getByTestId("drill-settings-done"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+  fireEvent.press(screen.getAllByTestId(/spot-\d-available/)[0]);
+
+  // Run it to completion, then dismiss the results popup.
+  fireEvent.press(screen.getByText("Start"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+  fireEvent.press(screen.getByTestId("session-result-done"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+
+  // Open History → it opens on the Path tab (the run's mode), so the run shows
+  // straight away instead of the empty Random tab.
+  fireEvent.press(screen.getByTestId("tab-history"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+  expect(
+    screen.getByTestId("segment-path").props.accessibilityState.selected,
+  ).toBe(true);
+  expect(screen.getByTestId("history-list")).toBeTruthy();
+  expect(screen.queryByTestId("history-empty")).toBeNull();
+});
+
 // The Account tab is the sign-in surface (history moved to its own tab).
 // Signed-out by default (no backend configured in tests), sign-in walks the mock
 // provider to signed-in, and Sign out returns to the logged-out state.
