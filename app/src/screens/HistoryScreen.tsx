@@ -1,6 +1,5 @@
 import { useCallback, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useFocusEffect } from "@react-navigation/native";
 
@@ -10,7 +9,6 @@ import { CustomPressable } from "../components/CustomPressable";
 import { HistoryPanel } from "../components/HistoryPanel";
 import { MoreIcon } from "../components/Icons";
 import { ScreenWrapper } from "../components/ScreenWrapper";
-import { tabBarClearance } from "../navigation/GlassTabBar";
 import { clearHistory } from "../state/history";
 import { useAppStore } from "../state/AppState";
 import { colors, glowShadow } from "../theme";
@@ -27,7 +25,6 @@ import { colors, glowShadow } from "../theme";
  */
 export const HistoryScreen = () => {
   const historyVersion = useAppStore((s) => s.historyVersion);
-  const insets = useSafeAreaInsets();
 
   // Bump on focus so HistoryPanel re-reads the log each time the tab is shown.
   const [focusKey, setFocusKey] = useState(0);
@@ -62,16 +59,11 @@ export const HistoryScreen = () => {
     >
       <ScrollView
         style={styles.scroll}
-        // Fill-or-scroll: `flexGrow` lets a short log grow to fill the screen and
-        // `flex-end` drops it to the bottom, so the newest→oldest list ends right
-        // above the tab bar with no dead space beneath it. A log long enough to
-        // scroll already exceeds the height, so flexGrow is a no-op there and it
-        // scrolls normally, clearing the floating bar via the bottom pad.
-        contentContainerStyle={{
-          flexGrow: 1,
-          justifyContent: "flex-end",
-          paddingBottom: tabBarClearance(insets.bottom),
-        }}
+        // The list stretches to fill the screen (`flexGrow`) with no reserved
+        // bottom padding, so it runs flush to the bottom edge under the floating
+        // (translucent) tab bar — no dead space beneath the last row. A log long
+        // enough to scroll simply scrolls; a short one fills the height.
+        contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
         <HistoryPanel
@@ -149,6 +141,9 @@ const HistoryMenu = ({ onClear }: { onClear: () => void }) => {
 const styles = StyleSheet.create({
   scroll: {
     flex: 1,
+  },
+  content: {
+    flexGrow: 1,
   },
   menuButton: {
     alignItems: "center",
