@@ -30,6 +30,9 @@ export interface SessionSummary {
   avgMs: number | null;
   /** Fastest reaction, or null when there were no attempts. */
   bestMs: number | null;
+  /** The runner this session is attributed to, when the coach set a name.
+   *  Optional — older sessions and unnamed runs simply omit it. */
+  playerName?: string;
 }
 
 /** Metadata the records don't carry — supplied by the panel at completion. */
@@ -37,6 +40,8 @@ export interface SummaryMeta {
   endedAt: number;
   mode: string;
   numPositions: number;
+  /** The runner name to tag the session with, when set (empty/unset → omitted). */
+  playerName?: string;
 }
 
 /**
@@ -65,6 +70,8 @@ export const summarize = (
     totalMs,
     avgMs,
     bestMs,
+    // Only carry a name when one was set, so an unnamed run stores no key.
+    ...(meta.playerName ? { playerName: meta.playerName } : {}),
   };
 };
 
@@ -79,7 +86,9 @@ export const summarize = (
 export const bestAverageSessionId = (
   sessions: SessionSummary[],
 ): string | null => {
-  const scored = sessions.filter((s): s is SessionSummary & { avgMs: number } => s.avgMs !== null);
+  const scored = sessions.filter(
+    (s): s is SessionSummary & { avgMs: number } => s.avgMs !== null,
+  );
   if (scored.length < 2) return null;
   return scored.reduce((best, s) => (s.avgMs < best.avgMs ? s : best)).id;
 };

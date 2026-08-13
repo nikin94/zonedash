@@ -18,6 +18,8 @@ const setup = (overrides: Record<string, unknown> = {}) => {
     setCount: jest.fn(),
     durationMs: 30000,
     setDurationMs: jest.fn(),
+    playerName: "",
+    onPlayerNameChange: jest.fn(),
     settings: DEFAULT_SETTINGS,
     onSettingsChange: jest.fn(),
     ...overrides,
@@ -25,6 +27,15 @@ const setup = (overrides: Record<string, unknown> = {}) => {
   render(<DrillSetupPage {...props} />);
   return props;
 };
+
+test("the Player field shows the current name and edits through onPlayerNameChange", () => {
+  const p = setup({ playerName: "Alice" });
+  const input = screen.getByTestId("player-name-input");
+  expect(input.props.value).toBe("Alice");
+
+  fireEvent.changeText(input, "Bob");
+  expect(p.onPlayerNameChange).toHaveBeenCalledWith("Bob");
+});
 
 test("random mode shows the mode selector, stop-by and the hits wheel", () => {
   setup();

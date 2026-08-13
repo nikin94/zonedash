@@ -65,6 +65,12 @@ export interface AppState {
   connectionError: string | null;
   settings: DrillSettings;
   setSettings: (next: DrillSettings) => void;
+  /** The sticky runner/player name a coach sets on the drill-setup page —
+   *  attributed to every finished session so results can be told apart per
+   *  athlete. Empty string = unset (sessions carry no name). Durable (prefs),
+   *  so it survives a restart and stays until the coach changes it. */
+  playerName: string;
+  setPlayerName: (next: string) => void;
   /** Canonical spots bound by the last completed round, in bind (slot) order. */
   pairedSpots: number[];
   /** Court view rotation in clockwise quarter turns (0–3) — the operator moved
@@ -164,6 +170,7 @@ export const createAppStore = ({
     connection: "disconnected",
     connectionError: null,
     settings: DEFAULT_SETTINGS,
+    playerName: "",
     pairedSpots: [],
     courtRotation: 0,
     drillView: "pairing",
@@ -177,6 +184,7 @@ export const createAppStore = ({
     hydrated: false,
 
     setSettings: (next) => set({ settings: next }),
+    setPlayerName: (next) => set({ playerName: next }),
     rotateCourt: () =>
       set((s) => ({ courtRotation: (s.courtRotation + 1) % 4 })),
     resetToPairing: () => {
@@ -197,6 +205,8 @@ export const createAppStore = ({
     _adoptPrefs: (p) =>
       set((s) => ({
         settings: p.settings ?? s.settings,
+        playerName:
+          typeof p.playerName === "string" ? p.playerName : s.playerName,
         courtRotation:
           typeof p.courtRotation === "number"
             ? ((p.courtRotation % 4) + 4) % 4 // clamp a corrupt value to 0–3
@@ -326,13 +336,14 @@ export const AppStateProvider = ({
   // Persist the durable prefs whenever they change — but only after hydration,
   // so the load above isn't clobbered by a first-render defaults write.
   const settings = useStore(store, (s) => s.settings);
+  const playerName = useStore(store, (s) => s.playerName);
   const courtRotation = useStore(store, (s) => s.courtRotation);
   const authGatePassed = useStore(store, (s) => s.authGatePassed);
   const hydrated = useStore(store, (s) => s.hydrated);
   useEffect(() => {
     if (!hydrated) return;
-    savePrefs({ settings, courtRotation, authGatePassed });
-  }, [hydrated, settings, courtRotation, authGatePassed]);
+    savePrefs({ settings, playerName, courtRotation, authGatePassed });
+  }, [hydrated, settings, playerName, courtRotation, authGatePassed]);
 
   // The transport Status stream drives connection / paired layout / handoff.
   useEffect(() => {

@@ -1,5 +1,9 @@
 import type { HitRecord } from "../ble/contract";
-import { bestAverageSessionId, summarize, type SessionSummary } from "./session";
+import {
+  bestAverageSessionId,
+  summarize,
+  type SessionSummary,
+} from "./session";
 
 // A hit record with only the field the summary reads (reactionMs) that varies;
 // the rest are filled with inert defaults.
@@ -42,6 +46,16 @@ test("id is the completion timestamp so entries sort and de-dupe by it", () => {
   expect(summarize([hit(100)], { ...META, endedAt: 42 }).id).toBe("42");
 });
 
+test("tags the session with the runner name when meta supplies one", () => {
+  const s = summarize([hit(100)], { ...META, playerName: "Alice" });
+  expect(s.playerName).toBe("Alice");
+});
+
+test("omits playerName entirely when meta has none (unnamed run stores no key)", () => {
+  const s = summarize([hit(100)], META);
+  expect("playerName" in s).toBe(false);
+});
+
 // bestAverageSessionId — the fastest-average session a history list badges.
 const sess = (id: string, avgMs: number | null): SessionSummary => ({
   id,
@@ -55,7 +69,9 @@ const sess = (id: string, avgMs: number | null): SessionSummary => ({
 });
 
 test("picks the lowest-average session's id", () => {
-  expect(bestAverageSessionId([sess("3", 500), sess("2", 350), sess("1", 420)])).toBe("2");
+  expect(
+    bestAverageSessionId([sess("3", 500), sess("2", 350), sess("1", 420)]),
+  ).toBe("2");
 });
 
 test("needs at least two comparable sessions — a lone one isn't a 'best'", () => {
@@ -66,7 +82,9 @@ test("needs at least two comparable sessions — a lone one isn't a 'best'", () 
 test("ignores sessions with no attempts (null average)", () => {
   // Only one scored session remains → nothing to compare against.
   expect(bestAverageSessionId([sess("2", 400), sess("1", null)])).toBeNull();
-  expect(bestAverageSessionId([sess("3", 400), sess("2", null), sess("1", 380)])).toBe("1");
+  expect(
+    bestAverageSessionId([sess("3", 400), sess("2", null), sess("1", 380)]),
+  ).toBe("1");
 });
 
 test("a tie keeps the first (newest, since history is newest-first)", () => {

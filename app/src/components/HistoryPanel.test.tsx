@@ -55,6 +55,17 @@ test("lists stored sessions newest-first with mode, average and best", async () 
   expect(screen.getByText("best 0.25s")).toBeTruthy();
 });
 
+test("shows the runner name on a session that has one, and nothing for an unnamed run", async () => {
+  await appendSession(summary(1)); // unnamed
+  await appendSession(summary(2, { playerName: "Alice" }));
+
+  render(<HistoryPanel />);
+  await screen.findByTestId("history-row-2");
+
+  expect(screen.getByTestId("history-player-2")).toHaveTextContent("Alice");
+  expect(screen.queryByTestId("history-player-1")).toBeNull();
+});
+
 test("the target count shows only for a reduced layout, not the full 8", async () => {
   await appendSession(summary(1, { numPositions: 6 }));
   await appendSession(summary(2, { numPositions: 8 }));

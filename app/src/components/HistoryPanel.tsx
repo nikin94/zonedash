@@ -100,6 +100,16 @@ export const HistoryPanel = ({
                     </AppText>
                   )}
                 </View>
+                {s.playerName != null && (
+                  <AppText
+                    size={13}
+                    weight="600"
+                    numberOfLines={1}
+                    testID={`history-player-${s.id}`}
+                  >
+                    {s.playerName}
+                  </AppText>
+                )}
                 <AppText size={12} color={colors.textMuted}>
                   {fmtMeta(s, now)}
                 </AppText>
