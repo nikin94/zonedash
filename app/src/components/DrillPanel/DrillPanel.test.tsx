@@ -36,6 +36,7 @@ const PAIRED = [0, 7, 6];
 
 // Settings arrive from the Settings screen. No timeout exists in the app.
 const SETTINGS: DrillSettings = {
+  ...DEFAULT_SETTINGS,
   delayMs: 500,
   allowImmediateRepeat: true,
 };
@@ -1009,4 +1010,42 @@ test("idle: the gear fills the row height as a square, with no divider below Sta
     screen.getByTestId("drill-settings-button").props.style,
   );
   expect(gear.aspectRatio).toBe(1); // square, tracking the row height
+});
+
+// The drill setup (mode + stop condition + count/duration) is persisted through
+// the settings prop: an idle panel SEEDS its config from settings, so a restart
+// keeps the coach's last mode/count instead of resetting to the defaults.
+test("idle: the config seeds from the persisted settings, not the defaults", async () => {
+  const t = await connectedTransport();
+  panel(t, PAIRED, { ...SETTINGS, mode: "random", stopBy: "count", count: 25 });
+  // The Start caption reads the seeded count, proving the panel didn't fall back
+  // to the default 10.
+  expect(screen.getByTestId("mode-summary")).toHaveTextContent(
+    "Random · 25 hits",
+  );
+});
+
+// An edit on the setup page WRITES BACK through onSettingsChange, so the change
+// rides the same prefs (+ cloud) persistence as delay/repeat — that write-back
+// is what makes the mode survive a restart.
+test("changing the mode on the setup page persists it via onSettingsChange", async () => {
+  const t = await connectedTransport();
+  const onSettingsChange = jest.fn();
+  render(
+    <DrillPanel
+      transport={t}
+      pairedSpots={PAIRED}
+      settings={SETTINGS} // starts on the default random mode
+      onSettingsChange={onSettingsChange}
+      playerName=""
+      onPlayerNameChange={() => {}}
+    />,
+    { wrapper: NavigationContainer },
+  );
+  openSetup();
+  fireEvent.press(screen.getByText("Path")); // switch mode on the setup page
+  closeSetup();
+  expect(onSettingsChange).toHaveBeenCalledWith(
+    expect.objectContaining({ mode: "path" }),
+  );
 });

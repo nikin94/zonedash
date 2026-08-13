@@ -2,6 +2,7 @@ import { getGoogleConfig } from "../config/google";
 import { getSupabaseConfig } from "../config/supabase";
 import type { AuthProvider } from "./auth";
 import { MockAuthProvider } from "./auth.mock";
+import type { RemoteSettingsStore } from "./settings";
 import type { RemoteHistoryStore } from "./sync";
 
 /**
@@ -22,6 +23,9 @@ export interface AccountsBackend {
   auth: AuthProvider;
   /** The cloud archive to reconcile local history against, or null local-only. */
   remoteHistory: RemoteHistoryStore | null;
+  /** The cloud settings row a signed-in user's drill settings sync over, or null
+   *  local-only. */
+  remoteSettings: RemoteSettingsStore | null;
 }
 
 export const createAccountsBackend = (): AccountsBackend => {
@@ -34,11 +38,18 @@ export const createAccountsBackend = (): AccountsBackend => {
       require("./SupabaseAuthProvider") as typeof import("./SupabaseAuthProvider");
     const { SupabaseRemoteHistoryStore } =
       require("./supabaseHistory") as typeof import("./supabaseHistory");
+    const { SupabaseRemoteSettingsStore } =
+      require("./supabaseSettings") as typeof import("./supabaseSettings");
     const client = createSupabaseClient(supabase);
     return {
       auth: new SupabaseAuthProvider(client, google),
       remoteHistory: new SupabaseRemoteHistoryStore(client),
+      remoteSettings: new SupabaseRemoteSettingsStore(client),
     };
   }
-  return { auth: new MockAuthProvider(), remoteHistory: null };
+  return {
+    auth: new MockAuthProvider(),
+    remoteHistory: null,
+    remoteSettings: null,
+  };
 };
