@@ -19,6 +19,9 @@ const KEY = "zonedash:prefs:v1";
 export interface StoredPrefs {
   settings?: DrillSettings;
   courtRotation?: number;
+  /** Whether the first-run login gate has been passed (signed in or "continue
+   *  without authentication") — so the gate shows once and never again. */
+  authGatePassed?: boolean;
 }
 
 /** Read the persisted prefs, or `{}` if none / unreadable / corrupt. */
