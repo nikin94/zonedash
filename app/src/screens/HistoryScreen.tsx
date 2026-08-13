@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
 import { useFocusEffect } from "@react-navigation/native";
+import { useShallow } from "zustand/react/shallow";
 
 import { AppText } from "../components/AppText";
 import { ConfirmModal } from "../components/ConfirmModal";
@@ -24,7 +25,14 @@ import { colors, glowShadow } from "../theme";
  * title now (not a button under the list); it re-reads via a local key bump.
  */
 export const HistoryScreen = () => {
-  const historyVersion = useAppStore((s) => s.historyVersion);
+  // Which identity's history to show: the signed-in account, or the anonymous
+  // device log. A sign-in/out re-keys the list to the matching bucket.
+  const { historyVersion, userId } = useAppStore(
+    useShallow((s) => ({
+      historyVersion: s.historyVersion,
+      userId: s.authUser?.id ?? null,
+    })),
+  );
 
   // Bump on focus so HistoryPanel re-reads the log each time the tab is shown.
   const [focusKey, setFocusKey] = useState(0);
@@ -44,7 +52,7 @@ export const HistoryScreen = () => {
 
   const confirmClear = async () => {
     setClearAsk(false);
-    await clearHistory();
+    await clearHistory(userId); // clear only the current identity's bucket
     setClearKey((k) => k + 1); // re-read → empty
   };
 
@@ -68,6 +76,7 @@ export const HistoryScreen = () => {
       >
         <HistoryPanel
           refreshKey={refreshKey}
+          userId={userId}
           onLoaded={(n) => setHasSessions(n > 0)}
         />
       </ScrollView>

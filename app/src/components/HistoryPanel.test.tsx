@@ -41,6 +41,17 @@ test("reports the loaded session count via onLoaded", async () => {
   expect(onLoaded).toHaveBeenLastCalledWith(2);
 });
 
+// The panel reads the bucket for its `userId`: an account's list, not the
+// device's anonymous log (nor another account's).
+test("reads the given identity's bucket, not the anonymous log", async () => {
+  await appendSession(summary(1)); // anonymous run
+  await appendSession(summary(2), "u1"); // account u1's run
+
+  render(<HistoryPanel userId="u1" />);
+  expect(await screen.findByTestId("history-row-2")).toBeTruthy(); // u1's session
+  expect(screen.queryByTestId("history-row-1")).toBeNull(); // not the anon one
+});
+
 test("lists stored sessions newest-first with mode, average and best", async () => {
   await appendSession(summary(1, { mode: "path", avgMs: 500, bestMs: 250 }));
   await appendSession(summary(2, { mode: "live" }));
