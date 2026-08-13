@@ -3,7 +3,13 @@ import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import { StyleSheet } from "react-native";
 
 import { MockCentralTransport } from "../../ble/mock";
+import { COURT_ACTION_GAP, COURT_STRIP_H } from "../../helpers/court";
 import { PairingPanel } from "./PairingPanel";
+
+// The panel column's own gap between children (PairingPanel PANEL_GAP) — the
+// action's negative top offset cancels the court strip AND this gap, so the
+// visible court→action distance lands on the shared COURT_ACTION_GAP.
+const PANEL_GAP = 12;
 
 // Zero latency + a fixed, small tap delay so the two-tap confirm lands at
 // deterministic times (candidate at tapDelayMs, bind at 2×) — the app leaves
@@ -288,8 +294,8 @@ test("the court→action gap is the shared value on every pairing stage", async 
     screen.getByTestId("pairing-action").props.style,
   );
   // Pulls the action up toward the court (cancels strip + panel gap) so the
-  // visible gap lands on the shared COURT_ACTION_GAP (14 − 22 − 12 = −20).
-  expect(idle.marginTop).toBe(-20);
+  // visible gap lands on the shared COURT_ACTION_GAP — whatever that value is.
+  expect(COURT_STRIP_H + PANEL_GAP + idle.marginTop).toBe(COURT_ACTION_GAP);
 
   // Mid-round (Cancel / Undo / Finish) — the same column, so the SAME gap.
   await startRound();

@@ -66,7 +66,8 @@ export const WheelField = ({
   onChange: (v: number) => void;
 }) => {
   const [open, setOpen] = useState(false);
-  const display = options.find((o) => o.value === value)?.label ?? String(value);
+  const display =
+    options.find((o) => o.value === value)?.label ?? String(value);
 
   return (
     <View style={[styles.row, open && styles.rowOpen]}>
@@ -139,8 +140,12 @@ const styles = StyleSheet.create({
     // never looks taller than the chips beside it.
   },
   pill: {
-    // Same construction as a small Button — matching height and corner radius.
-    paddingVertical: 5,
+    // FIXED height (PILL_H) — the same height NumberField's input field uses, so
+    // swapping this wheel for that input (Hits ↔ Seconds) never nudges the row.
+    // A bare TextInput reports a taller intrinsic height than this pill's padded
+    // text did, which is what used to make the input row stand a touch taller;
+    // pinning both to PILL_H removes it. Content is centred within the height.
+    height: PILL_H,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.border,

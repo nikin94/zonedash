@@ -6,6 +6,7 @@ import { BlurView } from "expo-blur";
 import { SPOT_NAMES, SPOT_XY } from "../../domain/spot";
 import {
   CENTRE_PAD,
+  COURT_NET_THICKNESS,
   COURT_STRIP_H,
   DOT,
   HIT,
@@ -297,7 +298,7 @@ const styles = StyleSheet.create({
   },
   netLine: {
     flex: 1,
-    height: 2,
+    height: COURT_NET_THICKNESS,
     backgroundColor: colors.border,
   },
   netLabel: {
@@ -386,14 +387,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  // Bare icon (no outline/fill), same colour as the net line, carried
-  // diagonally OUT from the court's top-right corner — an equal gap up and
-  // right (see ICON_OUT), so it clears the corner dot and the full net line.
-  // Corner is at (top: STRIP_H, right edge); centre lands ICON_OUT beyond it
-  // on both axes. It's a control, so it never moves with the view.
+  // Bare icon (no outline/fill), same colour as the net line, carried OUT past
+  // the court's top-right corner (an ICON_OUT gap to the right) and raised so its
+  // CENTRE sits on the net line — the strip's mid-line (STRIP_H / 2). That levels
+  // the rotate icon, the status dot and the net line on one row. It's a control,
+  // so it never moves with the view.
   rotate: {
     position: "absolute",
-    top: STRIP_H - ICON_OUT - ICON_BOX / 2,
+    top: STRIP_H / 2 - ICON_BOX / 2,
     right: -(ICON_OUT + ICON_BOX / 2),
     height: ICON_BOX,
     width: ICON_BOX,
@@ -401,10 +402,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   // Mirror of `rotate` on the LEFT corner — same top inset, `left` matching
-  // rotate's `right`, so the status control and rotate sit symmetrically.
+  // rotate's `right`, so the status control and rotate sit symmetrically on the
+  // net line's level.
   status: {
     position: "absolute",
-    top: STRIP_H - ICON_OUT - ICON_BOX / 2,
+    top: STRIP_H / 2 - ICON_BOX / 2,
     left: -(ICON_OUT + ICON_BOX / 2),
     height: ICON_BOX,
     width: ICON_BOX,

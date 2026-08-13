@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import { Animated, StyleSheet, Text } from "react-native";
 
-import { type SpotVisual } from "../../helpers/court";
+import { COURT_STRIP_H, type SpotVisual } from "../../helpers/court";
 import { alpha, colors } from "../../theme";
 import { CourtMap } from "./CourtMap";
 import { SpotIcon } from "./SpotIcon";
@@ -338,4 +338,22 @@ test("statusControl renders the passed node in the court corner", () => {
   // Omitted → nothing rendered (pairing/idle/drill opt in explicitly).
   rerender(<CourtMap spots={allOff} />);
   expect(screen.queryByTestId("my-status")).toBeNull();
+});
+
+// The rotate control (top-right) and status control (top-left) sit on the net
+// line's level: the icon box's vertical centre lands on the strip's mid-line,
+// where the net line is drawn — so icons and grid line up on one row.
+test("the rotate and status controls centre on the net line's level", () => {
+  render(
+    <CourtMap
+      spots={allOff}
+      onRotate={() => {}}
+      statusControl={<Text testID="sc" />}
+    />,
+  );
+  const rotate = StyleSheet.flatten(
+    screen.getByTestId("court-rotate").props.style,
+  );
+  // Box centre = top + height/2 = the strip's mid-line (the net line's level).
+  expect(rotate.top + rotate.height / 2).toBe(COURT_STRIP_H / 2);
 });

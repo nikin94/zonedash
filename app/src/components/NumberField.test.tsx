@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react-native";
 import { StyleSheet } from "react-native";
 
 import { NumberField } from "./NumberField";
+import { WheelField } from "./WheelField";
 
 const setup = (value = 500, onChange = jest.fn()) => {
   render(
@@ -24,15 +25,33 @@ test("shows the stored ms value in display units (seconds), with the unit", () =
   expect(screen.getByText("s")).toBeTruthy();
 });
 
-// The field carries a FIXED height (matching the WheelField pill, 32) so a
-// TextInput's taller intrinsic height can't stretch its row — the Hits wheel and
-// this Seconds input must occupy the same vertical footprint in the setup page.
-test("the field is a fixed 32px tall so it never stretches its row", () => {
-  setup(500);
-  const style = StyleSheet.flatten(
-    screen.getByTestId("delay-field").props.style,
+// The Seconds input and the Hits wheel occupy the SAME vertical footprint, so
+// swapping between them (Session length → Hits ↔ Seconds) never nudges the row
+// height. Both pin an explicit height; a bare TextInput's taller intrinsic
+// height (what used to make the input row stand a touch higher) is overridden.
+test("the number field and the wheel pill are the same fixed height", () => {
+  render(
+    <>
+      <NumberField
+        value={500}
+        label="Duration"
+        testID="dur"
+        unit="s"
+        onChange={jest.fn()}
+      />
+      <WheelField
+        value={10}
+        label="Targets to hit"
+        testID="count"
+        options={[{ value: 10, label: "10" }]}
+        onChange={jest.fn()}
+      />
+    </>,
   );
-  expect(style.height).toBe(32);
+  const field = StyleSheet.flatten(screen.getByTestId("dur-field").props.style);
+  const pill = StyleSheet.flatten(screen.getByTestId("count").props.style);
+  expect(field.height).toBe(32);
+  expect(pill.height).toBe(field.height); // identical → the row never jumps
 });
 
 test("a typed value commits live in ms", () => {

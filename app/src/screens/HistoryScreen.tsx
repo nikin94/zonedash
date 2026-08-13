@@ -62,7 +62,14 @@ export const HistoryScreen = () => {
     >
       <ScrollView
         style={styles.scroll}
+        // Fill-or-scroll: `flexGrow` lets a short log grow to fill the screen and
+        // `flex-end` drops it to the bottom, so the newest→oldest list ends right
+        // above the tab bar with no dead space beneath it. A log long enough to
+        // scroll already exceeds the height, so flexGrow is a no-op there and it
+        // scrolls normally, clearing the floating bar via the bottom pad.
         contentContainerStyle={{
+          flexGrow: 1,
+          justifyContent: "flex-end",
           paddingBottom: tabBarClearance(insets.bottom),
         }}
         showsVerticalScrollIndicator={false}
