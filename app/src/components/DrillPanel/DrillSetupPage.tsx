@@ -7,19 +7,14 @@ import { AppText } from "../AppText";
 import { Button } from "../Button";
 import { CustomPressable } from "../CustomPressable";
 import { InfoIcon } from "../Icons";
+import { NumberField } from "../NumberField";
 import { SettingsPanel } from "../SettingsPanel";
 import { WheelField } from "../WheelField";
-import {
-  COUNT_OPTIONS,
-  DURATION_OPTIONS,
-  MODES,
-  type StopBy,
-  type UiMode,
-} from "./drillMode";
+import { COUNT_OPTIONS, MODES, type StopBy, type UiMode } from "./drillMode";
 
 const STOP_OPTIONS: { key: StopBy; label: string }[] = [
   { key: "count", label: "Hits" },
-  { key: "time", label: "Time" },
+  { key: "time", label: "Seconds" },
 ];
 
 /**
@@ -147,11 +142,16 @@ export const DrillSetupPage = ({
                 onChange={setCount}
               />
             ) : (
-              <WheelField
+              // Free-typed whole seconds (default 30) rather than a coarse wheel.
+              // Stored as ms; the field shows/accepts seconds (scale 1000).
+              <NumberField
                 value={durationMs}
                 label="Duration"
                 testID="drill-duration"
-                options={DURATION_OPTIONS}
+                unit="s"
+                min={5000}
+                max={3600000}
+                decimals={0}
                 onChange={setDurationMs}
               />
             )}

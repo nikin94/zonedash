@@ -12,7 +12,7 @@ import { ConfirmModal } from "./ConfirmModal";
 
 const UNIT = "s";
 const fmtSec = (ms: number | null) =>
-  ms === null ? "—" : `${(ms / 1000).toFixed(2)} ${UNIT}`;
+  ms === null ? "—" : `${(ms / 1000).toFixed(2)}${UNIT}`;
 
 /** Title-case the stored UI mode label ("random" -> "Random"). */
 const fmtMode = (mode: string) =>

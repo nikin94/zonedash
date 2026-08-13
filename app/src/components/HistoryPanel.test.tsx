@@ -47,8 +47,8 @@ test("lists stored sessions newest-first with mode, average and best", async () 
   expect(screen.getByTestId("history-row-1")).toBeTruthy();
   expect(screen.getByText("Live")).toBeTruthy();
   expect(screen.getByText("Path")).toBeTruthy();
-  expect(screen.getByText("0.50 s")).toBeTruthy();
-  expect(screen.getByText("best 0.25 s")).toBeTruthy();
+  expect(screen.getByText("0.50s")).toBeTruthy(); // no space between value and unit
+  expect(screen.getByText("best 0.25s")).toBeTruthy();
 });
 
 test("the target count shows only for a reduced layout, not the full 8", async () => {

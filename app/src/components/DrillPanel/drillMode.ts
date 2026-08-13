@@ -1,5 +1,4 @@
 import type { DrillConfig } from "../../ble/transport";
-import { msOptions } from "../WheelField";
 
 /**
  * The drill-setup vocabulary shared by the Drill screen and its settings modal.
@@ -28,12 +27,12 @@ export const MODE_DESC: Record<UiMode, string> = {
   live: "Light targets by hand during the run — one tap each.",
 };
 
-/** Wheel options: 1–99 hits, and 15 s–5 min in 15 s steps. */
+/** Wheel options for the hits count: 1–99. Duration is a free-typed input now
+ *  (whole seconds), so it needs no fixed option list. */
 export const COUNT_OPTIONS = Array.from({ length: 99 }, (_, i) => ({
   value: i + 1,
   label: String(i + 1),
 }));
-export const DURATION_OPTIONS = msOptions(15000, 300000, 15000);
 
 /** Compact one-line summary of the current setup, shown in a muted caption
  *  under the Start button so the operator sees what will run without opening the
