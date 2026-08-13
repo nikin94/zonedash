@@ -59,14 +59,19 @@ const connectedTransport = async () => {
 // helpers just need a no-op so the required prop is satisfied.
 const noop = () => {};
 
-const panel = (t: MockCentralTransport, paired = PAIRED, settings = SETTINGS) =>
+const panel = (
+  t: MockCentralTransport,
+  paired = PAIRED,
+  settings = SETTINGS,
+  playerName = "",
+) =>
   render(
     <DrillPanel
       transport={t}
       pairedSpots={paired}
       settings={settings}
       onSettingsChange={noop}
-      playerName=""
+      playerName={playerName}
       onPlayerNameChange={noop}
     />,
     // DrillPanel hosts a nested native-stack (the drill surface + the pushed
@@ -901,6 +906,17 @@ test("idle: a mode caption under Start names the current setup", async () => {
   // Switch to Path on the setup page → the caption follows.
   selectMode("Path");
   expect(screen.getByTestId("mode-summary")).toHaveTextContent("Path");
+});
+
+// A set player name LEADS the Start caption — name · mode · count — so a coach
+// reads who the run is for without opening the setup page.
+test("idle: a set player name leads the Start caption before mode and count", async () => {
+  const t = await connectedTransport();
+  panel(t, PAIRED, SETTINGS, "Alex");
+
+  expect(screen.getByTestId("mode-summary")).toHaveTextContent(
+    "Alex · Random · 10 hits",
+  );
 });
 
 // The gear is an outline square beside the full-width Start: a white fill with a

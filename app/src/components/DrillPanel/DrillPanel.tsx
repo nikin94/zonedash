@@ -496,7 +496,7 @@ export const DrillPanel = ({
                       disabled={!canStart}
                       onPress={start}
                       testID="primary-action"
-                      accessibilityLabel={`Start — ${drillSummary(uiMode, stopBy, count, durationMs)}`}
+                      accessibilityLabel={`Start — ${drillSummary(uiMode, stopBy, count, durationMs, playerName)}`}
                       style={styles.actionButton}
                     >
                       <View style={styles.startContent}>
@@ -515,7 +515,13 @@ export const DrillPanel = ({
                           testID="mode-summary"
                           style={styles.startSummary}
                         >
-                          {drillSummary(uiMode, stopBy, count, durationMs)}
+                          {drillSummary(
+                            uiMode,
+                            stopBy,
+                            count,
+                            durationMs,
+                            playerName,
+                          )}
                         </AppText>
                       </View>
                     </Button>
