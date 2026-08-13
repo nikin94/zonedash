@@ -85,9 +85,10 @@ export const DrillSetupPage = ({
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* The sticky runner name — full-width so a long name fits. Tagged onto
+        {/* The sticky runner name — a one-line field like the numeric rows: the
+            label left, the input right at the shared field height. Tagged onto
             every finished session for per-athlete attribution; optional. */}
-        <View style={styles.field}>
+        <View style={styles.row}>
           <AppText color={colors.textSecondary} style={styles.paramLabel}>
             Player
           </AppText>
@@ -95,7 +96,7 @@ export const DrillSetupPage = ({
             testID="player-name-input"
             value={playerName}
             onChangeText={onPlayerNameChange}
-            placeholder="Optional — name the runner"
+            placeholder="Name (optional)"
             placeholderTextColor={colors.textMuted}
             maxLength={40}
             returnKeyType="done"
@@ -248,21 +249,19 @@ const styles = StyleSheet.create({
   paramLabel: {
     flexShrink: 1,
   },
-  // The Player field: a stacked label + full-width input, so a long runner name
-  // fits (unlike the right-aligned numeric pills).
-  field: {
-    alignSelf: "stretch",
-    gap: 6,
-  },
+  // The Player field: a fixed-width input on the right of its row, at the shared
+  // field height (32, matching the NumberField / WheelField pills) so it never
+  // stretches the row taller than the numeric fields. Width sized to fit the
+  // placeholder.
   playerInput: {
-    alignSelf: "stretch",
-    height: 40,
-    paddingHorizontal: 12,
+    width: 180,
+    height: 32,
+    paddingHorizontal: 10,
     paddingVertical: 0,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.border,
-    fontSize: 16,
+    fontSize: 15,
     color: colors.text,
   },
   infoButton: {
