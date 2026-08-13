@@ -38,6 +38,7 @@ import { type DrillSettings } from "../../state/AppState";
 import { showToast } from "../../state/toast";
 import {
   TAB_BAR_DISC_RISE,
+  TabBarSuppressor,
   tabBarClearance,
 } from "../../navigation/GlassTabBar";
 import { alpha, colors } from "../../theme";
@@ -708,6 +709,11 @@ export const DrillPanel = ({
       <DrillNav.Screen name="DrillSetup">
         {({ navigation }) => (
           <>
+            {/* Keep the floating tab bar hidden for this route's whole lifetime,
+                the close animation included — its release fires on unmount, which
+                screens defers until the slide-out finishes, so the bar can't snap
+                back and cover the page as it leaves. */}
+            <TabBarSuppressor />
             <DrillSetupPage
               onDone={() => navigation.goBack()}
               onModeInfo={() => setModeInfoOpen(true)}
