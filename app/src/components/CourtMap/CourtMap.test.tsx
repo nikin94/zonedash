@@ -8,19 +8,18 @@ import { SpotIcon } from "./SpotIcon";
 
 const allOff = Array.from({ length: 8 }, () => "off" as SpotVisual);
 
-// The restyle ships as a 3-way comparison: every spot draws one of three looks,
-// cycled by spot index so no two neighbours match and all three are on the court
-// at once. Over 8 spots that's bullseye ×3 (0,3,6), puck ×3 (1,4,7), hollow ×2
-// (2,5). Guards both the alternation and that every variant renders.
-test("targets alternate the three restyle variants per spot", () => {
+// Every spot draws the one target look (the elevated puck) — the restyle picked
+// its winner, so all 8 spots render it, no per-spot variance — with the thick
+// 2.5 px stroke carried over from the hollow variant.
+test("every target renders the elevated-puck look with the thick stroke", () => {
   render(
     <CourtMap
       spots={Array.from({ length: 8 }, () => "available" as SpotVisual)}
     />,
   );
-  expect(screen.getAllByTestId("dot-bullseye")).toHaveLength(3);
-  expect(screen.getAllByTestId("dot-puck")).toHaveLength(3);
-  expect(screen.getAllByTestId("dot-hollow")).toHaveLength(2);
+  const pucks = screen.getAllByTestId("dot-puck");
+  expect(pucks).toHaveLength(8);
+  expect(StyleSheet.flatten(pucks[0].props.style).borderWidth).toBe(2.5);
 });
 
 beforeEach(() => jest.useFakeTimers());

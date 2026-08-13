@@ -21,7 +21,7 @@ import { alpha, colors } from "../../theme";
 import { AppText } from "../AppText";
 import { CustomPressable } from "../CustomPressable";
 import { RotateIcon } from "../Icons";
-import { AnimatedDot, DOT_VARIANTS } from "./AnimatedDot";
+import { AnimatedDot } from "./AnimatedDot";
 import { CourtLines } from "./CourtLines";
 import { CourtRoute } from "./CourtRoute";
 import { RoutePreview } from "./RoutePreview";
@@ -236,10 +236,7 @@ export const CourtMap = ({
                   testID={`spot-bg-${i}`}
                   style={styles.dotBg}
                 />
-                <AnimatedDot
-                  visual={spots[i]}
-                  variant={DOT_VARIANTS[i % DOT_VARIANTS.length]}
-                />
+                <AnimatedDot visual={spots[i]} />
                 {badge != null && (
                   <View
                     pointerEvents="none"
