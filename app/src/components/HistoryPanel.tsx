@@ -3,7 +3,7 @@ import { StyleSheet, View } from "react-native";
 
 import { MAX_TARGETS } from "../ble/codec";
 import { bestAverageSessionId, type SessionSummary } from "../domain/session";
-import { formatRelativeTime } from "../helpers/time";
+import { formatSessionTime } from "../helpers/time";
 import { clearHistory, loadHistory } from "../state/history";
 import { colors } from "../theme";
 import { AppText } from "./AppText";
@@ -18,14 +18,14 @@ const fmtSec = (ms: number | null) =>
 const fmtMode = (mode: string) =>
   mode.length > 0 ? mode[0].toUpperCase() + mode.slice(1) : mode;
 
-/** The sub-line under a session's mode: when · [targets ·] hits. Time is
- *  relative ("2m ago"); the target count is noted only for a reduced layout
- *  (the full MAX_TARGETS layout is the default, so "8 targets" is noise). */
+/** The sub-line under a session's mode: when · hits [· targets]. Time is an
+ *  absolute stamp (formatSessionTime); the target count comes LAST and only for
+ *  a reduced layout (the full MAX_TARGETS layout is the default, so "8 targets"
+ *  is noise). */
 const fmtMeta = (s: SessionSummary, now: number) => {
   const hits = `${s.attempts} ${s.attempts === 1 ? "hit" : "hits"}`;
-  const parts = [formatRelativeTime(s.endedAt, now)];
+  const parts = [formatSessionTime(s.endedAt, now), hits];
   if (s.numPositions < MAX_TARGETS) parts.push(`${s.numPositions} targets`);
-  parts.push(hits);
   return parts.join(" · ");
 };
 

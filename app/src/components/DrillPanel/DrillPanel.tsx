@@ -28,7 +28,11 @@ import { MAX_DRILL_PATH } from "../../ble/codec";
 import { CourtMap, SpotIcon } from "../CourtMap";
 import { SPOT_CODES, SPOT_NAMES } from "../../domain/spot";
 import { summarize, type SessionSummary } from "../../domain/session";
-import { type SpotVisual } from "../../helpers/court";
+import {
+  COURT_ACTION_GAP,
+  COURT_STRIP_H,
+  type SpotVisual,
+} from "../../helpers/court";
 import { formatStepBadge } from "../../helpers/pathBadge";
 import { type DrillSettings } from "../../state/AppState";
 import { showToast } from "../../state/toast";
@@ -59,8 +63,9 @@ const SESSION_DONE_TOAST_MS = 3000;
 const ACTION_BAR_GAP = 12;
 // The vertical rhythm around the primary action: one gap unit, applied on both
 // sides — from the court to Start, and from Start to the config band below.
-// Roughly half the old court→Start gap so the action hugs the court more tightly.
-const ACTION_GAP = 14;
+// SHARED with the pairing surface (helpers/court) so the button sits the same
+// distance under the court on every surface and stage.
+const ACTION_GAP = COURT_ACTION_GAP;
 // The panel column separates its children by this gap; the action block's own
 // margins are computed against it (below) so the three ACTION_GAPs come out
 // equal in the flex tree.
@@ -68,7 +73,7 @@ const PANEL_GAP = 8;
 // CourtMap reserves an empty bottom strip below its court box (its net-line
 // frame, CourtMap STRIP_H) when the net is on top — so the court→Start gap
 // already carries it. The idle block pulls up by it to land on ACTION_GAP.
-const COURT_BOTTOM_STRIP = 22;
+const COURT_BOTTOM_STRIP = COURT_STRIP_H;
 
 // The Drill tab's own nested stack: the drill surface (DrillHome) plus the setup
 // page pushed onto it. A real native-stack push slides the setup IN OVER the
@@ -700,7 +705,20 @@ export const DrillPanel = ({
         )}
       </DrillNav.Screen>
 
-      <DrillNav.Screen name="DrillSetup">
+      {/* Present the setup as a native modal (`transparentModal`), NOT a card:
+          react-native-screens presents it at the window level, so it sits ABOVE
+          the floating tab bar (which lives in the parent tab navigator) with no
+          hand-rolled hiding — the tab bar simply can't cover it. `transparentModal`
+          defaults to a vertical (bottom-up) modal animation, so set the horizontal
+          slide EXPLICITLY here — otherwise it ignores the navigator's inherited
+          `slide_from_right`. The drill surface stays visible behind it. */}
+      <DrillNav.Screen
+        name="DrillSetup"
+        options={{
+          presentation: "transparentModal",
+          animation: "slide_from_right",
+        }}
+      >
         {({ navigation }) => (
           <>
             <DrillSetupPage

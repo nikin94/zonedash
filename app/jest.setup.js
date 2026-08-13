@@ -30,3 +30,10 @@ jest.mock("react-native-safe-area-context", () => {
     useSafeAreaFrame: () => frame,
   };
 });
+
+// expo-system-ui ships a native module (no JS fallback under jest); the app only
+// calls setBackgroundColorAsync to paint the root-window bg, so stub it to a
+// resolved no-op so App renders without touching native code.
+jest.mock("expo-system-ui", () => ({
+  setBackgroundColorAsync: jest.fn(() => Promise.resolve()),
+}));

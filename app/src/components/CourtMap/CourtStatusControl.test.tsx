@@ -62,7 +62,7 @@ test("Connect from the modal brings the link up — the dot turns connected", as
   expect(screen.getByTestId("court-status-dot-connected")).toBeTruthy();
 });
 
-test("connected + unpaired: Disconnect (behind a confirm), no Re-pair", async () => {
+test("connected + unpaired: Disconnect acts at once (no confirm), no Re-pair", async () => {
   const t = new MockCentralTransport();
   await renderControl(t);
   await openConnected(t);
@@ -72,10 +72,9 @@ test("connected + unpaired: Disconnect (behind a confirm), no Re-pair", async ()
   expect(screen.queryByTestId("repair-button")).toBeNull(); // nothing paired yet
   expect(screen.queryByTestId("status-connect")).toBeNull();
 
-  // Disconnect confirms, then drops the link → the dot reads disconnected again.
+  // Disconnect drops the link immediately — no confirm step.
   fireEvent.press(screen.getByTestId("disconnect-button"));
-  expect(screen.getByTestId("disconnect-confirm")).toBeTruthy();
-  fireEvent.press(screen.getByText("Yes"));
+  expect(screen.queryByTestId("disconnect-confirm")).toBeNull();
   await flush();
   expect(screen.getByTestId("court-status-dot-disconnected")).toBeTruthy();
 });

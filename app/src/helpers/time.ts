@@ -1,36 +1,34 @@
 /**
- * Human, relative time labels for the session history — "2m ago" reads faster
- * than "Mar 15, 14:30" for the recent sessions an operator actually cares about,
- * and only the older ones fall back to an absolute stamp.
+ * Absolute session-time labels for the history list. An operator wants the real
+ * clock time of a run, not a relative "2m ago": today shows just the time, the
+ * previous calendar day reads "yesterday", and anything older falls back to a
+ * plain dd.mm.yyyy date.
  *
  * Pure and `now`-injected (never reads the clock itself), so the tiers are
- * deterministically testable. Purely elapsed-based — no calendar-boundary edge
- * cases — so the same wording holds in any locale/timezone; only the ≥7-day
- * fallback is locale-formatted.
+ * deterministically testable. Calendar-day based (local time) — the today /
+ * yesterday split flips at local midnight, not on elapsed hours.
  */
 
-const SECOND = 1000;
-const MINUTE = 60 * SECOND;
-const HOUR = 60 * MINUTE;
-const DAY = 24 * HOUR;
-const WEEK = 7 * DAY;
+const DAY = 24 * 60 * 60 * 1000;
 
-/** Absolute fallback for entries older than a week (or dated in the future). */
-const absolute = (t: number): string => {
+const pad = (n: number): string => String(n).padStart(2, "0");
+
+/** Local midnight (00:00) of the day containing epoch-ms `t`. */
+const startOfDay = (t: number): number => {
   const d = new Date(t);
-  return `${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}, ${d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`;
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
 };
 
 /**
- * `endedAt` → a relative label as of `now` (both epoch ms):
- *   <45s "just now" · <1h "Nm ago" · <1d "Nh ago" · <1w "Nd ago" · else absolute.
- * A future timestamp (clock skew) reads "just now" rather than a negative age.
+ * `endedAt` → an absolute label as of `now` (both epoch ms):
+ *   today → "HH:MM" (24h) · yesterday → "yesterday" · older → "dd.mm.yyyy".
+ * A future timestamp (clock skew) counts as today, so it reads as a time.
  */
-export const formatRelativeTime = (endedAt: number, now: number): string => {
-  const diff = now - endedAt;
-  if (diff < 45 * SECOND) return "just now";
-  if (diff < HOUR) return `${Math.floor(diff / MINUTE)}m ago`;
-  if (diff < DAY) return `${Math.floor(diff / HOUR)}h ago`;
-  if (diff < WEEK) return `${Math.floor(diff / DAY)}d ago`;
-  return absolute(endedAt);
+export const formatSessionTime = (endedAt: number, now: number): string => {
+  const d = new Date(endedAt);
+  const days = Math.round((startOfDay(now) - startOfDay(endedAt)) / DAY);
+  if (days <= 0) return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  if (days === 1) return "yesterday";
+  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`;
 };

@@ -1,11 +1,20 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import type { SessionSummary } from "../domain/session";
 import { appendSession, loadHistory } from "../state/history";
 import { HistoryPanel } from "./HistoryPanel";
 
-const summary = (endedAt: number, over: Partial<SessionSummary> = {}): SessionSummary => ({
+const summary = (
+  endedAt: number,
+  over: Partial<SessionSummary> = {},
+): SessionSummary => ({
   id: String(endedAt),
   endedAt,
   mode: "random",
@@ -51,6 +60,26 @@ test("the target count shows only for a reduced layout, not the full 8", async (
 
   expect(screen.getByText(/6 targets/)).toBeTruthy();
   expect(screen.queryByText(/8 targets/)).toBeNull();
+});
+
+test("the meta line reads hits BEFORE targets (targets last in the row)", async () => {
+  await appendSession(summary(1, { attempts: 3, numPositions: 6 }));
+
+  render(<HistoryPanel />);
+  await screen.findByTestId("history-row-1");
+
+  // One text node: "<when> · 3 hits · 6 targets" — hits precede targets.
+  expect(screen.getByText(/3 hits · 6 targets/)).toBeTruthy();
+  expect(screen.queryByText(/6 targets · 3 hits/)).toBeNull();
+});
+
+test("the meta line stamps an absolute time, never a relative 'ago' label", async () => {
+  await appendSession(summary(1));
+
+  render(<HistoryPanel />);
+  const row = await screen.findByTestId("history-row-1");
+
+  expect(within(row).queryByText(/ago|just now/)).toBeNull();
 });
 
 test("badges the fastest-average session, and only that one", async () => {

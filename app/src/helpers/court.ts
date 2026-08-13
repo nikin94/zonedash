@@ -37,3 +37,12 @@ export const INSET = 10;
 const CENTRE_CONTENT = Math.round((MAP_W - 2 * 76) / 1.15);
 export const CENTRE_PAD = Math.round((MAP_W - CENTRE_CONTENT) / 2);
 
+// The net-line strip CourtMap reserves under (and over) its court box — empty
+// space that already sits between the visible court and whatever follows it in
+// the column below. A surface cancels it when spacing its primary action so the
+// button lands the intended distance from the court, not that distance + strip.
+export const COURT_STRIP_H = 22;
+// The intended visual gap from the court to the primary action button, shared by
+// the drill and pairing surfaces so the button sits the SAME distance under the
+// court on every surface and every pairing stage.
+export const COURT_ACTION_GAP = 14;
