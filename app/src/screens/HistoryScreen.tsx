@@ -1,5 +1,11 @@
-import { useCallback, useState } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Animated,
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from "react-native";
 
 import { useFocusEffect } from "@react-navigation/native";
 import { useShallow } from "zustand/react/shallow";
@@ -7,9 +13,11 @@ import { useShallow } from "zustand/react/shallow";
 import { AppText } from "../components/AppText";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { CustomPressable } from "../components/CustomPressable";
+import { MODES } from "../components/DrillPanel/drillMode";
 import { HistoryPanel } from "../components/HistoryPanel";
 import { MoreIcon } from "../components/Icons";
 import { ScreenWrapper } from "../components/ScreenWrapper";
+import { SegmentedTabs } from "../components/SegmentedTabs";
 import { clearHistory } from "../state/history";
 import { useAppStore } from "../state/AppState";
 import { colors, glowShadow } from "../theme";
@@ -23,29 +31,86 @@ import { colors, glowShadow } from "../theme";
  * synced from another device while this tab is already open, shows up without a
  * tab round-trip. Clearing the log lives in an overflow (⋮) menu beside the
  * title now (not a button under the list); it re-reads via a local key bump.
+ *
+ * A mode tab bar (Random · Path · Live) sits under the title, its tabs derived
+ * straight from the drill MODES list — add a mode there and a history tab for it
+ * appears automatically. Each tab filters the list to its own mode; an empty tab
+ * shows the panel's "no sessions" hint. The Clear affordance still wipes the
+ * WHOLE identity bucket (every mode), so it gates on the total count, not the
+ * active tab's.
  */
 export const HistoryScreen = () => {
   // Which identity's history to show: the signed-in account, or the anonymous
   // device log. A sign-in/out re-keys the list to the matching bucket.
-  const { historyVersion, userId } = useAppStore(
+  // lastSessionMode is the mode of the most recent run — the tab to open on.
+  const { historyVersion, userId, lastSessionMode } = useAppStore(
     useShallow((s) => ({
       historyVersion: s.historyVersion,
       userId: s.authUser?.id ?? null,
+      lastSessionMode: s.lastSessionMode,
     })),
   );
 
-  // Bump on focus so HistoryPanel re-reads the log each time the tab is shown.
+  // The active mode tab — its rows are filtered to this mode. Defaults to the
+  // first drill mode, so the tab bar opens on a real tab whatever MODES holds.
+  const [activeMode, setActiveMode] = useState<string>(MODES[0].key);
+
+  // Bump on focus so HistoryPanel re-reads the log each time the tab is shown,
+  // and open the tab on the mode of the last recorded run — so a just-finished
+  // Path/Live run is on the visible tab, not hidden behind the default Random.
   const [focusKey, setFocusKey] = useState(0);
   useFocusEffect(
     useCallback(() => {
       setFocusKey((k) => k + 1);
-    }, []),
+      if (lastSessionMode !== null) setActiveMode(lastSessionMode);
+    }, [lastSessionMode]),
   );
   // A clear bumps this to force a re-read (→ empty list). Combined with focus +
   // historyVersion (bumped when a sign-in sync writes the merged history); all
   // monotonic, so the sum changes on any of them.
   const [clearKey, setClearKey] = useState(0);
   const refreshKey = focusKey + historyVersion + clearKey;
+
+  // Slide the filtered list in from the side of travel on a mode change — a
+  // directional page-slide + fade (RN Animated, native-driven), matching the
+  // thumb that slides in the tab bar. The ScrollView clips it horizontally, so a
+  // half-width offset reads as the list sliding in. No swipe gesture: taps drive
+  // it, which is all a segmented control needs (and keeps it dependency-free).
+  const { width } = useWindowDimensions();
+  const slideX = useRef(new Animated.Value(0)).current;
+  const slideOpacity = useRef(new Animated.Value(1)).current;
+  const prevIndexRef = useRef(MODES.findIndex((m) => m.key === activeMode));
+  const didMountRef = useRef(false);
+  const activeIndex = Math.max(
+    0,
+    MODES.findIndex((m) => m.key === activeMode),
+  );
+  useEffect(() => {
+    // Skip the first run — only an actual tab change should animate, not the
+    // screen mounting (or re-mounting on tab focus).
+    if (!didMountRef.current) {
+      didMountRef.current = true;
+      prevIndexRef.current = activeIndex;
+      return;
+    }
+    const dir = Math.sign(activeIndex - prevIndexRef.current) || 1;
+    prevIndexRef.current = activeIndex;
+    slideX.setValue(dir * width * 0.5);
+    slideOpacity.setValue(0);
+    Animated.parallel([
+      Animated.spring(slideX, {
+        toValue: 0,
+        useNativeDriver: true,
+        speed: 16,
+        bounciness: 4,
+      }),
+      Animated.timing(slideOpacity, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [activeIndex, width, slideX, slideOpacity]);
 
   const [hasSessions, setHasSessions] = useState(false);
   const [clearAsk, setClearAsk] = useState(false);
@@ -65,6 +130,19 @@ export const HistoryScreen = () => {
         ) : undefined
       }
     >
+      {/* Mode tabs, auto-derived from MODES — a new drill mode adds a tab here
+          with no extra wiring. Fixed above the scroll so switching modes never
+          scrolls the list; inset to the shared horizontal gutter so the filled
+          track lines up with the title and the list below. */}
+      <View style={styles.tabsWrap}>
+        <SegmentedTabs
+          testID="history-mode-tabs"
+          tabs={MODES}
+          activeKey={activeMode}
+          onChange={setActiveMode}
+        />
+      </View>
+
       <ScrollView
         style={styles.scroll}
         // The list stretches to fill the screen (`flexGrow`) with no reserved
@@ -74,11 +152,20 @@ export const HistoryScreen = () => {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <HistoryPanel
-          refreshKey={refreshKey}
-          userId={userId}
-          onLoaded={(n) => setHasSessions(n > 0)}
-        />
+        <Animated.View
+          testID="history-slide"
+          style={[
+            styles.slide,
+            { transform: [{ translateX: slideX }], opacity: slideOpacity },
+          ]}
+        >
+          <HistoryPanel
+            refreshKey={refreshKey}
+            userId={userId}
+            mode={activeMode}
+            onLoaded={(n) => setHasSessions(n > 0)}
+          />
+        </Animated.View>
       </ScrollView>
 
       <ConfirmModal
@@ -148,10 +235,24 @@ const HistoryMenu = ({ onClear }: { onClear: () => void }) => {
 };
 
 const styles = StyleSheet.create({
+  // The filled tab track sits in the shared 24px gutter with a little room
+  // below it before the list starts.
+  tabsWrap: {
+    paddingHorizontal: 24,
+    paddingBottom: 12,
+  },
   scroll: {
     flex: 1,
+    // Clip the horizontal slide so a list entering from the side reads as a
+    // page-slide, not content peeking past the edge.
+    overflow: "hidden",
   },
   content: {
+    flexGrow: 1,
+  },
+  // The animated wrapper fills the content so a short (or empty) list still
+  // stretches flush to the bottom while it slides.
+  slide: {
     flexGrow: 1,
   },
   menuButton: {

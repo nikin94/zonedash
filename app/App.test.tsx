@@ -345,6 +345,95 @@ test("the History overflow menu clears the log behind a confirm", async () => {
   expect(screen.queryByTestId("history-menu-button")).toBeNull();
 });
 
+// The History mode tabs filter the log by drill mode: the default (first) tab
+// shows its own mode's runs, and switching tabs swaps the list. An empty tab
+// shows the "no sessions" hint while the log (other modes) is untouched.
+test("the History mode tabs filter the log by drill mode", async () => {
+  const sess = (id: string, mode: string): SessionSummary => ({
+    id,
+    endedAt: Number(id),
+    mode,
+    numPositions: 6,
+    attempts: 3,
+    totalMs: 1200,
+    avgMs: 400,
+    bestMs: 300,
+  });
+  await appendSession(sess("10", "random"));
+  await appendSession(sess("20", "path"));
+
+  await renderApp();
+  fireEvent.press(screen.getByTestId("tab-history"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+
+  // Default tab is Random — the random run shows, the path run does not.
+  expect(screen.getByTestId("history-row-10")).toBeTruthy();
+  expect(screen.queryByTestId("history-row-20")).toBeNull();
+
+  // Switch to the Path tab → the path run shows, the random one drops.
+  fireEvent.press(screen.getByTestId("segment-path"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+  expect(screen.getByTestId("history-row-20")).toBeTruthy();
+  expect(screen.queryByTestId("history-row-10")).toBeNull();
+
+  // The Live tab has no runs → the empty hint, but the log still has sessions so
+  // the Clear affordance (kebab) stays available.
+  fireEvent.press(screen.getByTestId("segment-live"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+  expect(screen.getByTestId("history-empty")).toBeTruthy();
+  expect(screen.getByTestId("history-menu-button")).toBeTruthy();
+});
+
+// Regression: a finished run must be visible on the History tab without manually
+// switching modes. The mode tabs default to Random, so a Path/Live run used to
+// land behind a hidden tab and look "missing" — recordSession now remembers the
+// run's mode and the History tab opens on it.
+test("a finished Path run is visible on the History tab, not hidden behind Random", async () => {
+  await renderApp();
+  await connect();
+  await pairTwo(); // drill controls over a real 2-spot layout
+
+  // Author a one-step Path drill: pick Path in the setup, tap a paired spot.
+  fireEvent.press(screen.getByTestId("drill-settings-button"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+  fireEvent.press(screen.getByText("Path"));
+  fireEvent.press(screen.getByTestId("drill-settings-done"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+  fireEvent.press(screen.getAllByTestId(/spot-\d-available/)[0]);
+
+  // Run it to completion, then dismiss the results popup.
+  fireEvent.press(screen.getByText("Start"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+  fireEvent.press(screen.getByTestId("session-result-done"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+
+  // Open History → it opens on the Path tab (the run's mode), so the run shows
+  // straight away instead of the empty Random tab.
+  fireEvent.press(screen.getByTestId("tab-history"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+  expect(
+    screen.getByTestId("segment-path").props.accessibilityState.selected,
+  ).toBe(true);
+  expect(screen.getByTestId("history-list")).toBeTruthy();
+  expect(screen.queryByTestId("history-empty")).toBeNull();
+});
+
 // The Account tab is the sign-in surface (history moved to its own tab).
 // Signed-out by default (no backend configured in tests), sign-in walks the mock
 // provider to signed-in, and Sign out returns to the logged-out state.

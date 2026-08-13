@@ -51,28 +51,42 @@ class FakeRemote implements RemoteHistoryStore {
 // A consumer that surfaces auth status/error and drives sign-in/out. The
 // "record" button files a fresh finished session (id 9) through recordSession.
 const Probe = () => {
-  const { authStatus, authUser, authError, signIn, signOut, recordSession } =
-    useAppStore(
-      useShallow((s) => ({
-        authStatus: s.authStatus,
-        authUser: s.authUser,
-        authError: s.authError,
-        signIn: s.signIn,
-        signOut: s.signOut,
-        recordSession: s.recordSession,
-      })),
-    );
+  const {
+    authStatus,
+    authUser,
+    authError,
+    lastSessionMode,
+    signIn,
+    signOut,
+    recordSession,
+  } = useAppStore(
+    useShallow((s) => ({
+      authStatus: s.authStatus,
+      authUser: s.authUser,
+      authError: s.authError,
+      lastSessionMode: s.lastSessionMode,
+      signIn: s.signIn,
+      signOut: s.signOut,
+      recordSession: s.recordSession,
+    })),
+  );
   return (
     <>
       <Text testID="status">{authStatus}</Text>
       <Text testID="who">{authUser?.name ?? "-"}</Text>
       <Text testID="error">{authError ?? "-"}</Text>
+      <Text testID="last-mode">{lastSessionMode ?? "-"}</Text>
       <Button testID="in" label="in" onPress={signIn} />
       <Button testID="out" label="out" onPress={signOut} />
       <Button
         testID="record"
         label="rec"
         onPress={() => recordSession(sess(9))}
+      />
+      <Button
+        testID="record-path"
+        label="rec-path"
+        onPress={() => recordSession({ ...sess(9), mode: "path" })}
       />
     </>
   );
@@ -255,4 +269,16 @@ test("recording a session while signed out stays local — no cloud push", async
     expect((await loadHistory()).map((s) => s.id)).toEqual(["9"]),
   );
   expect(remote.rows.has("9")).toBe(false); // nothing pushed to the cloud
+});
+
+// recordSession remembers the run's mode so the History screen opens on its tab
+// — otherwise a Path/Live run hides behind the default Random tab.
+test("recording a session remembers its mode for the History tab", async () => {
+  await renderApp(new MockAuthProvider());
+  expect(screen.getByTestId("last-mode")).toHaveTextContent("-"); // none yet
+
+  await act(async () => {
+    fireEvent.press(screen.getByTestId("record-path"));
+  });
+  expect(screen.getByTestId("last-mode")).toHaveTextContent("path");
 });

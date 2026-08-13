@@ -888,6 +888,33 @@ test("the idle Start is an accent hero button, its row centred below the court",
   expect(block.marginBottom).toBeGreaterThan(0);
 });
 
+// Start and Stop are ONE button in the same slot: the court→button top gap rides
+// the base action block, so it's identical running or idle — Stop never sits a
+// different distance under the court than Start did.
+test("Stop keeps the same court→button gap as Start (one button, one offset)", async () => {
+  const t = await connectedTransport();
+
+  panel(t);
+  const idleTop = StyleSheet.flatten(
+    screen.getByTestId("action-block").props.style,
+  ).marginTop;
+  expect(idleTop).toBeLessThan(0); // pulls the row up onto the court→action gap
+
+  // Author and run a Path drill so the primary action becomes Stop.
+  selectMode("Path");
+  fireEvent.press(screen.getByTestId("spot-0-available"));
+  fireEvent.press(screen.getByText("Start"));
+  await act(() => jest.advanceTimersByTimeAsync(0));
+  expect(screen.getByText("Stop")).toBeTruthy();
+
+  const runningTop = StyleSheet.flatten(
+    screen.getByTestId("action-block").props.style,
+  ).marginTop;
+  expect(runningTop).toBe(idleTop); // same offset from the court
+
+  await act(() => jest.runAllTimersAsync());
+});
+
 // A muted caption under Start names what will run — the current mode and its
 // key parameter — so the setup reads without opening the gear. It tracks the
 // live config: the default random/10-hits, and updates when the mode changes.
