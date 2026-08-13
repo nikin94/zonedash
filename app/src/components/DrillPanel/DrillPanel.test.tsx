@@ -338,8 +338,10 @@ test("tapping a step chip removes THAT step, and the badges renumber", async () 
 // synchronous tap each, and every tap re-renders the whole step-chip strip — so
 // the cost is O(n^2) in the cap. That is far past any real hand-authored path,
 // but the boundary is exactly what this test guards, so it can't tap fewer. A
-// generous timeout keeps it green on a slow CI runner (it ran ~2 s locally but
-// tripped the default 5 s cap on CI); real usage never approaches this size.
+// generous timeout keeps it green on a slow CI runner: it runs ~6 s locally, and
+// with the cumulatively heavier dot render (the elevated-puck restyle) it tripped
+// the earlier 20 s cap on a slow CI runner, so give it wide headroom. Real usage
+// never approaches this path size.
 test("authoring past the cap no-ops — the wire path never exceeds MAX_DRILL_PATH", async () => {
   const t = await connectedTransport();
   const load = jest.spyOn(t, "loadDrill");
@@ -356,7 +358,7 @@ test("authoring past the cap no-ops — the wire path never exceeds MAX_DRILL_PA
   fireEvent.press(screen.getByText("Start"));
   await act(() => jest.advanceTimersByTimeAsync(0));
   expect(load.mock.calls[0][0].path).toHaveLength(MAX_DRILL_PATH);
-}, 20000);
+}, 60000);
 
 test("a re-pair filters the authored path — nothing translates to -1", async () => {
   const t = await connectedTransport();
