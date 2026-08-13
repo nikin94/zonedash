@@ -13,10 +13,10 @@ import { colors } from "../theme";
  * fully-functional local-only mode), so this screen never blocks the app — it
  * just offers the choice once:
  *  - "Sign in with Google" → cloud sync across devices (loading while in flight)
- *  - "Continue without authentication" → skip; the app runs local-only
+ *  - "Continue offline" → skip; the app runs local-only
  *
- * Either choice latches `authGatePassed` (durable), so the gate shows once and
- * never again; re-signing-in later lives on the Account tab. Reads the store
+ * Either choice latches `authGatePassed` (durable), so the gate shows once —
+ * until an explicit Sign out (on the Account tab) reopens it. Reads the store
  * directly (the AuthProvider seam), so it behaves identically on the mock and
  * the real Supabase provider.
  */
@@ -68,7 +68,7 @@ export const LoginScreen = () => {
         />
         <Button
           testID="login-skip"
-          label="Continue without authentication"
+          label="Continue offline"
           textColor={colors.textSecondary}
           disabled={signingIn}
           onPress={skipAuthGate}

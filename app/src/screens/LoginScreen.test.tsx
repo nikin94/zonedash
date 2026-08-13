@@ -31,6 +31,7 @@ test("offers Google sign-in and a continue-without-auth skip", () => {
   expect(screen.getByText("ZoneDash")).toBeTruthy();
   expect(screen.getByTestId("login-google")).toBeTruthy();
   expect(screen.getByTestId("login-skip")).toBeTruthy();
+  expect(screen.getByText("Continue offline")).toBeTruthy(); // the short skip label
 });
 
 test("continue-without-auth passes the gate without signing in", () => {

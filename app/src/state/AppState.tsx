@@ -89,10 +89,9 @@ export interface AppState {
   signIn: () => void;
   /** Sign out — back to local-only. */
   signOut: () => void;
-  /** Whether the first-run login gate has been passed — by signing in OR by
-   *  choosing "continue without authentication". Durable (prefs), so the gate
-   *  shows once and never again (a later sign-out re-authenticates from the
-   *  Account tab, not the gate). */
+  /** Whether the login gate has been passed — by signing in OR by choosing
+   *  "continue offline". Durable (prefs), so the gate stays down across
+   *  relaunches; an explicit sign-out reopens it (back to the login screen). */
   authGatePassed: boolean;
   /** Dismiss the login gate without signing in (continue local-only). Sets the
    *  durable flag so the gate stays gone. */
@@ -247,9 +246,17 @@ export const createAppStore = ({
         // Surface a failed/cancelled sign-in (signed-out WITH a reason); clear it
         // on any other transition so a stale error never lingers.
         authError: e.status === "signed-out" ? (e.reason ?? null) : null,
-        // Signing in passes the gate for good — a later sign-out returns to the
-        // app (re-auth on the Account tab), never back to the gate.
-        authGatePassed: s.authGatePassed || e.status === "signed-in",
+        // The gate tracks the account choice: signing in passes it, and an
+        // explicit sign-out (signed-in → signed-out) REOPENS it, dropping the
+        // user back on the login screen. A cancelled/failed sign-in
+        // (signing-in → signed-out) leaves it untouched, so the gate stays as it
+        // was. The skip path (never signed-in) is unaffected.
+        authGatePassed:
+          e.status === "signed-in"
+            ? true
+            : e.status === "signed-out" && s.authStatus === "signed-in"
+              ? false
+              : s.authGatePassed,
       })),
 
     _bumpHistory: () => set((s) => ({ historyVersion: s.historyVersion + 1 })),
