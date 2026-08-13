@@ -6,6 +6,7 @@ import { BlurView } from "expo-blur";
 import { SPOT_NAMES, SPOT_XY } from "../../domain/spot";
 import {
   CENTRE_PAD,
+  COURT_STRIP_H,
   DOT,
   HIT,
   HIT_SLOP,
@@ -38,7 +39,7 @@ const A11Y_STATE: Record<SpotVisual, string> = {
   hit: "hit",
 };
 
-const STRIP_H = 22; // top/bottom net-line strip
+const STRIP_H = COURT_STRIP_H; // top/bottom net-line strip (shared source)
 const ICON_BOX = 20; // rotate control's touch box
 // The rotate control sits diagonally OUT from the court's top-right corner, an
 // equal gap in x and y — clear of both the corner dot and the (now full) net

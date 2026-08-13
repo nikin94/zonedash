@@ -4,7 +4,11 @@ import { StyleSheet, View } from "react-native";
 import type { PairingProgress } from "../../ble/contract";
 import type { CentralTransport } from "../../ble/transport";
 import { SPOT_NAMES } from "../../domain/spot";
-import { type SpotVisual } from "../../helpers/court";
+import {
+  COURT_ACTION_GAP,
+  COURT_STRIP_H,
+  type SpotVisual,
+} from "../../helpers/court";
 import { colors } from "../../theme";
 import { AppText } from "../AppText";
 import { Button } from "../Button";
@@ -15,6 +19,9 @@ import { UndoIcon } from "../Icons";
 /** Every layout can bind up to this many targets; a round opens at the max and
  *  Finish trims it to however many the operator actually placed. */
 const MAX_TARGETS = 8;
+
+/** The panel column's gap between its children (court · action · status · error). */
+const PANEL_GAP = 12;
 
 /**
  * Pairing round UI (display-ui.md screen 2, phone side). There is no count to
@@ -166,7 +173,7 @@ export const PairingPanel = ({
           nothing (the status marks the round complete before the drill hands
           off). */}
       {running ? (
-        <View style={styles.actionCol}>
+        <View testID="pairing-action" style={styles.actionCol}>
           {/* Cancel (destructive, red) sits left; Undo is a compact icon to its
               right. Both Undo and Finish enable only once there is a bind to act
               on (and never mid-prompt). */}
@@ -196,7 +203,7 @@ export const PairingPanel = ({
           />
         </View>
       ) : done ? null : (
-        <View style={styles.actionCol}>
+        <View testID="pairing-action" style={styles.actionCol}>
           <Button
             testID="start-pairing"
             label="Start pairing"
@@ -301,14 +308,20 @@ const styles = StyleSheet.create({
     // margin — the pairing → drill handoff can't jump the court. Horizontal
     // padding gives the stretched action buttons a margin off the screen edges.
     alignItems: "center",
-    gap: 12,
+    gap: PANEL_GAP,
     alignSelf: "stretch",
     paddingHorizontal: 24,
   },
+  // Every pairing stage (idle Start pairing / mid-round Cancel·Finish) uses this
+  // column, so the negative top pulls the court→action gap onto the shared
+  // COURT_ACTION_GAP on all of them — cancelling the court's bottom strip and
+  // the panel gap, exactly as the drill surface does, so the button sits the
+  // same distance under the court on both screens.
   actionCol: {
     alignItems: "stretch",
     alignSelf: "stretch",
     gap: 10,
+    marginTop: COURT_ACTION_GAP - COURT_STRIP_H - PANEL_GAP,
   },
   controlRow: {
     flexDirection: "row",

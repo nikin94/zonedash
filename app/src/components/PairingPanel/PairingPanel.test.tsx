@@ -9,7 +9,11 @@ import { PairingPanel } from "./PairingPanel";
 // deterministic times (candidate at tapDelayMs, bind at 2×) — the app leaves
 // the tap delay random (750–1000 ms).
 const connectedTransport = async () => {
-  const t = new MockCentralTransport({ latencyMs: 0, stepMs: 100, tapDelayMs: 50 });
+  const t = new MockCentralTransport({
+    latencyMs: 0,
+    stepMs: 100,
+    tapDelayMs: 50,
+  });
   const p = t.connect();
   await jest.runAllTimersAsync();
   await p;
@@ -243,7 +247,9 @@ test("info-block slots stay mounted through every round phase", async () => {
 test("the pairing surface carries no top margin — the offset is on ScreenWrapper", async () => {
   const t = await connectedTransport();
   render(<PairingPanel transport={t} />);
-  const style = StyleSheet.flatten(screen.getByTestId("pairing-surface").props.style);
+  const style = StyleSheet.flatten(
+    screen.getByTestId("pairing-surface").props.style,
+  );
   expect(style.marginTop).toBeUndefined();
 });
 
@@ -265,4 +271,30 @@ test("idle layout: clean court, Start pairing hero, hint under the button", asyn
     .getAllByTestId(/^(start-pairing|status-slot)$/)
     .map((n) => n.props.testID);
   expect(order).toEqual(["start-pairing", "status-slot"]);
+});
+
+// The court→action gap is shared with the drill surface (helpers/court:
+// COURT_ACTION_GAP) and must be EQUAL across every pairing stage. Both the idle
+// "Start pairing" hero and the mid-round Cancel/Finish controls hang off the
+// same action column, which carries a negative top offset that cancels the
+// court's bottom strip + panel gap so the button lands the shared distance under
+// the court — the same offset on both stages, not just the Start hero.
+test("the court→action gap is the shared value on every pairing stage", async () => {
+  const t = await connectedTransport();
+  render(<PairingPanel transport={t} />);
+
+  // Idle (Start pairing hero).
+  const idle = StyleSheet.flatten(
+    screen.getByTestId("pairing-action").props.style,
+  );
+  // Pulls the action up toward the court (cancels strip + panel gap) so the
+  // visible gap lands on the shared COURT_ACTION_GAP (14 − 22 − 12 = −20).
+  expect(idle.marginTop).toBe(-20);
+
+  // Mid-round (Cancel / Undo / Finish) — the same column, so the SAME gap.
+  await startRound();
+  const midRound = StyleSheet.flatten(
+    screen.getByTestId("pairing-action").props.style,
+  );
+  expect(midRound.marginTop).toBe(idle.marginTop);
 });
