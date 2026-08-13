@@ -22,6 +22,7 @@ export const colors = {
   danger: "#dc2626", // errors, error indicator
   dangerBorder: "#dc2626", // destructive confirm button
   dim: "#a1a1aa", // available court dots — filled, visible under glare
+  dimSoft: "#d4d4d8", // zinc-300 — lighter neutral for court-target depth (restyle)
   shadow: "#000", // floating-chrome drop shadow
   scrim: "#000", // modal dim base (used at partial alpha)
 } as const;
