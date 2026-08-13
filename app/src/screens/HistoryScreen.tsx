@@ -1,5 +1,11 @@
-import { useCallback, useState } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Animated,
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from "react-native";
 
 import { useFocusEffect } from "@react-navigation/native";
 import { useShallow } from "zustand/react/shallow";
@@ -60,6 +66,47 @@ export const HistoryScreen = () => {
   // first drill mode, so the tab bar opens on a real tab whatever MODES holds.
   const [activeMode, setActiveMode] = useState<string>(MODES[0].key);
 
+  // Slide the filtered list in from the side of travel on a mode change — a
+  // directional page-slide + fade (RN Animated, native-driven), matching the
+  // thumb that slides in the tab bar. The ScrollView clips it horizontally, so a
+  // half-width offset reads as the list sliding in. No swipe gesture: taps drive
+  // it, which is all a segmented control needs (and keeps it dependency-free).
+  const { width } = useWindowDimensions();
+  const slideX = useRef(new Animated.Value(0)).current;
+  const slideOpacity = useRef(new Animated.Value(1)).current;
+  const prevIndexRef = useRef(MODES.findIndex((m) => m.key === activeMode));
+  const didMountRef = useRef(false);
+  const activeIndex = Math.max(
+    0,
+    MODES.findIndex((m) => m.key === activeMode),
+  );
+  useEffect(() => {
+    // Skip the first run — only an actual tab change should animate, not the
+    // screen mounting (or re-mounting on tab focus).
+    if (!didMountRef.current) {
+      didMountRef.current = true;
+      prevIndexRef.current = activeIndex;
+      return;
+    }
+    const dir = Math.sign(activeIndex - prevIndexRef.current) || 1;
+    prevIndexRef.current = activeIndex;
+    slideX.setValue(dir * width * 0.5);
+    slideOpacity.setValue(0);
+    Animated.parallel([
+      Animated.spring(slideX, {
+        toValue: 0,
+        useNativeDriver: true,
+        speed: 16,
+        bounciness: 4,
+      }),
+      Animated.timing(slideOpacity, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [activeIndex, width, slideX, slideOpacity]);
+
   const [hasSessions, setHasSessions] = useState(false);
   const [clearAsk, setClearAsk] = useState(false);
 
@@ -100,12 +147,20 @@ export const HistoryScreen = () => {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <HistoryPanel
-          refreshKey={refreshKey}
-          userId={userId}
-          mode={activeMode}
-          onLoaded={(n) => setHasSessions(n > 0)}
-        />
+        <Animated.View
+          testID="history-slide"
+          style={[
+            styles.slide,
+            { transform: [{ translateX: slideX }], opacity: slideOpacity },
+          ]}
+        >
+          <HistoryPanel
+            refreshKey={refreshKey}
+            userId={userId}
+            mode={activeMode}
+            onLoaded={(n) => setHasSessions(n > 0)}
+          />
+        </Animated.View>
       </ScrollView>
 
       <ConfirmModal
@@ -183,8 +238,16 @@ const styles = StyleSheet.create({
   },
   scroll: {
     flex: 1,
+    // Clip the horizontal slide so a list entering from the side reads as a
+    // page-slide, not content peeking past the edge.
+    overflow: "hidden",
   },
   content: {
+    flexGrow: 1,
+  },
+  // The animated wrapper fills the content so a short (or empty) list still
+  // stretches flush to the bottom while it slides.
+  slide: {
     flexGrow: 1,
   },
   menuButton: {

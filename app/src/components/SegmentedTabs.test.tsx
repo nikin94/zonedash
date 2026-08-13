@@ -36,10 +36,10 @@ test("a tap reports the segment's key through onChange", () => {
   expect(onChange).toHaveBeenCalledWith("c");
 });
 
-// The bar is a filled track with the app's main colour forming a thumb under
-// the active segment (and no bottom divider). Only the active tab carries the
-// main-colour fill; the rest ride flush on the track.
-test("fills only the active segment with the main colour, no bottom divider", () => {
+// The bar is a filled track with the app's main colour forming a SINGLE sliding
+// thumb (not a per-segment fill), and no bottom divider. The segments themselves
+// are transparent — the thumb below is the only selection fill.
+test("has a main-colour sliding thumb over a filled track, no bottom divider", () => {
   render(
     <SegmentedTabs
       tabs={TABS}
@@ -48,14 +48,14 @@ test("fills only the active segment with the main colour, no bottom divider", ()
       testID="bar"
     />,
   );
-  const active = StyleSheet.flatten(
-    screen.getByTestId("segment-b").props.style,
-  );
-  const inactive = StyleSheet.flatten(
-    screen.getByTestId("segment-a").props.style,
-  );
-  expect(active.backgroundColor).toBe(colors.background); // main-colour thumb
-  expect(inactive.backgroundColor).toBeUndefined(); // flush on the track
+  // The thumb is the app's main colour, positioned absolutely so it can slide.
+  const thumb = StyleSheet.flatten(screen.getByTestId("bar-thumb").props.style);
+  expect(thumb.backgroundColor).toBe(colors.background);
+  expect(thumb.position).toBe("absolute");
+
+  // Segments carry no fill of their own — the thumb is the only selection mark.
+  const seg = StyleSheet.flatten(screen.getByTestId("segment-b").props.style);
+  expect(seg.backgroundColor).toBeUndefined();
 
   const bar = StyleSheet.flatten(screen.getByTestId("bar").props.style);
   expect(bar.backgroundColor).toBe(colors.surfaceAlt); // filled track
