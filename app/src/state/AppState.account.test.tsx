@@ -1,4 +1,10 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Text } from "react-native";
 
@@ -38,17 +44,20 @@ class FakeRemote implements RemoteHistoryStore {
   }
 }
 
-// A consumer that surfaces auth status/error and drives sign-in/out.
+// A consumer that surfaces auth status/error and drives sign-in/out. The
+// "record" button files a fresh finished session (id 9) through recordSession.
 const Probe = () => {
-  const { authStatus, authUser, authError, signIn, signOut } = useAppStore(
-    useShallow((s) => ({
-      authStatus: s.authStatus,
-      authUser: s.authUser,
-      authError: s.authError,
-      signIn: s.signIn,
-      signOut: s.signOut,
-    })),
-  );
+  const { authStatus, authUser, authError, signIn, signOut, recordSession } =
+    useAppStore(
+      useShallow((s) => ({
+        authStatus: s.authStatus,
+        authUser: s.authUser,
+        authError: s.authError,
+        signIn: s.signIn,
+        signOut: s.signOut,
+        recordSession: s.recordSession,
+      })),
+    );
   return (
     <>
       <Text testID="status">{authStatus}</Text>
@@ -56,11 +65,19 @@ const Probe = () => {
       <Text testID="error">{authError ?? "-"}</Text>
       <Button testID="in" label="in" onPress={signIn} />
       <Button testID="out" label="out" onPress={signOut} />
+      <Button
+        testID="record"
+        label="rec"
+        onPress={() => recordSession(sess(9))}
+      />
     </>
   );
 };
 
-const renderApp = async (auth: MockAuthProvider, remote?: RemoteHistoryStore) => {
+const renderApp = async (
+  auth: MockAuthProvider,
+  remote?: RemoteHistoryStore,
+) => {
   const r = render(
     <AppStateProvider
       transport={new MockCentralTransport()}
@@ -185,4 +202,43 @@ test("without a backend, sign-in does not touch history (local-only)", async () 
   });
 
   expect((await loadHistory()).map((s) => s.id)).toEqual(["1"]); // unchanged
+});
+
+// Per-session cloud push: a run finished WHILE signed in reaches the account's
+// archive right away (not only at the next sign-in reconcile). recordSession
+// pushes that one session up, best-effort, off the critical path.
+test("recording a session while signed in pushes it to the cloud at once", async () => {
+  const remote = new FakeRemote();
+  const auth = new MockAuthProvider();
+  await renderApp(auth, remote);
+
+  await act(async () => {
+    fireEvent.press(screen.getByTestId("in")); // sign in first
+  });
+  await act(async () => {
+    fireEvent.press(screen.getByTestId("record")); // a run finishes now
+  });
+
+  // The session is in the cloud archive without any sign-out/in round trip…
+  await waitFor(() => expect(remote.rows.has("9")).toBe(true));
+  // …and in the device-local log too (recordSession always writes local first).
+  await waitFor(async () =>
+    expect((await loadHistory()).map((s) => s.id)).toEqual(["9"]),
+  );
+});
+
+// Signed-out stays purely local — recordSession writes the device log and never
+// reaches for the cloud (there is no account to push to).
+test("recording a session while signed out stays local — no cloud push", async () => {
+  const remote = new FakeRemote();
+  await renderApp(new MockAuthProvider(), remote); // signed-out by default
+
+  await act(async () => {
+    fireEvent.press(screen.getByTestId("record"));
+  });
+
+  await waitFor(async () =>
+    expect((await loadHistory()).map((s) => s.id)).toEqual(["9"]),
+  );
+  expect(remote.rows.has("9")).toBe(false); // nothing pushed to the cloud
 });

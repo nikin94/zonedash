@@ -27,9 +27,13 @@ export interface SessionRow {
   total_ms: number;
   avg_ms: number | null;
   best_ms: number | null;
+  /** The runner name, or null when the run was unnamed (migration 0002). */
+  player_name: string | null;
 }
 
-/** DB row → the app's SessionSummary (drops the server-owned columns). */
+/** DB row → the app's SessionSummary (drops the server-owned columns). A null
+ *  player_name maps to an OMITTED key, matching summarize()'s shape so an
+ *  unnamed cloud row and an unnamed local one compare equal. */
 export const rowToSummary = (r: SessionRow): SessionSummary => ({
   id: r.id,
   endedAt: r.ended_at,
@@ -39,9 +43,11 @@ export const rowToSummary = (r: SessionRow): SessionSummary => ({
   totalMs: r.total_ms,
   avgMs: r.avg_ms,
   bestMs: r.best_ms,
+  ...(r.player_name != null ? { playerName: r.player_name } : {}),
 });
 
-/** SessionSummary + owning user → a DB row ready to insert. */
+/** SessionSummary + owning user → a DB row ready to insert. An unset name
+ *  persists as an explicit null so the column is always written. */
 export const summaryToRow = (
   userId: string,
   s: SessionSummary,
@@ -55,6 +61,7 @@ export const summaryToRow = (
   total_ms: s.totalMs,
   avg_ms: s.avgMs,
   best_ms: s.bestMs,
+  player_name: s.playerName ?? null,
 });
 
 const TABLE = "sessions";

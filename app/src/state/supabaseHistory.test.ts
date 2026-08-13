@@ -30,6 +30,7 @@ const row = (over: Partial<SessionRow> = {}): SessionRow => ({
   total_ms: 1200,
   avg_ms: 400,
   best_ms: 300,
+  player_name: null,
   ...over,
 });
 
@@ -46,8 +47,26 @@ describe("row mappers", () => {
   });
 
   test("null avg/best (no attempts) survive the round trip, not coerced to 0", () => {
-    const empty = summary({ attempts: 0, totalMs: 0, avgMs: null, bestMs: null });
+    const empty = summary({
+      attempts: 0,
+      totalMs: 0,
+      avgMs: null,
+      bestMs: null,
+    });
     expect(rowToSummary(summaryToRow("u1", empty))).toEqual(empty);
+  });
+
+  test("a set player name round-trips; an unnamed run stores null and omits the key", () => {
+    // Named: the name persists as a column value and comes back on the summary.
+    const named = summary({ playerName: "Alex" });
+    expect(summaryToRow("u1", named).player_name).toBe("Alex");
+    expect(rowToSummary(summaryToRow("u1", named))).toEqual(named);
+
+    // Unnamed: written as an explicit null, mapped back to an OMITTED key (not
+    // `playerName: undefined`) so it compares equal to a summarize()'d run.
+    expect(summaryToRow("u1", summary()).player_name).toBeNull();
+    const back = rowToSummary(row({ player_name: null }));
+    expect(back).not.toHaveProperty("playerName");
   });
 });
 
@@ -74,7 +93,12 @@ class FakeSupabase {
         self.lastEq = { col, val };
         return builder;
       },
-      then(resolve: (r: { data: SessionRow[] | null; error: { message: string } | null }) => unknown) {
+      then(
+        resolve: (r: {
+          data: SessionRow[] | null;
+          error: { message: string } | null;
+        }) => unknown,
+      ) {
         return Promise.resolve(
           self.listError
             ? { data: null, error: { message: self.listError } }
@@ -84,9 +108,13 @@ class FakeSupabase {
       upsert(rows: SessionRow[], opts: unknown) {
         self.lastUpsert = { rows, opts };
         return {
-          then: (resolve: (r: { error: { message: string } | null }) => unknown) =>
+          then: (
+            resolve: (r: { error: { message: string } | null }) => unknown,
+          ) =>
             Promise.resolve(
-              self.upsertError ? { error: { message: self.upsertError } } : { error: null },
+              self.upsertError
+                ? { error: { message: self.upsertError } }
+                : { error: null },
             ).then(resolve),
         };
       },
@@ -110,7 +138,10 @@ describe("SupabaseRemoteHistoryStore", () => {
 
   test("upsert tags the owner and uses insert-or-ignore (never an update)", async () => {
     const fake = new FakeSupabase();
-    await store(fake).upsert("u1", [summary({ id: "1" }), summary({ id: "2" })]);
+    await store(fake).upsert("u1", [
+      summary({ id: "1" }),
+      summary({ id: "2" }),
+    ]);
 
     expect(fake.lastUpsert?.opts).toEqual({
       onConflict: "user_id,id",
@@ -129,7 +160,9 @@ describe("SupabaseRemoteHistoryStore", () => {
   test("a list error rejects with the store's message", async () => {
     const fake = new FakeSupabase();
     fake.listError = "network down";
-    await expect(store(fake).list("u1")).rejects.toThrow(/supabase list failed: network down/);
+    await expect(store(fake).list("u1")).rejects.toThrow(
+      /supabase list failed: network down/,
+    );
   });
 
   test("an upsert error rejects with the store's message", async () => {

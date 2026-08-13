@@ -13,7 +13,6 @@ import {
   COURT_STRIP_H,
   type SpotVisual,
 } from "../helpers/court";
-import { appendSession } from "../state/history";
 import { useAppStore } from "../state/AppState";
 import { colors } from "../theme";
 
@@ -45,6 +44,7 @@ export const DrillScreen = () => {
     courtRotation,
     rotateCourt,
     drillView,
+    recordSession,
   } = useAppStore(
     useShallow((s) => ({
       transport: s.transport,
@@ -58,6 +58,7 @@ export const DrillScreen = () => {
       courtRotation: s.courtRotation,
       rotateCourt: s.rotateCourt,
       drillView: s.drillView,
+      recordSession: s.recordSession,
     })),
   );
 
@@ -79,7 +80,7 @@ export const DrillScreen = () => {
           rotation={courtRotation}
           onRotate={rotateCourt}
           statusControl={<CourtStatusControl />}
-          onSessionComplete={(s) => void appendSession(s)}
+          onSessionComplete={recordSession}
         />
       ) : showPairing ? (
         <PairingPanel

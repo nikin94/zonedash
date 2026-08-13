@@ -66,7 +66,8 @@ client id**), then rebuild (`npx expo prebuild --clean && npx expo run:ios`):
 ]
 ```
 
-**4. Apply the migration** (`0001`, below) so the `sessions` table exists.
+**4. Apply the migrations** (`0001` creates the `sessions` table; `0002` adds the
+optional `player_name` column) so the schema is current.
 
 With those set, sign-in in the Settings modal exchanges the native Google id
 token for a Supabase session (`SupabaseAuthProvider`) and history syncs to the

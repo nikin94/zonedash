@@ -15,8 +15,10 @@ import type {
   ConnectionState,
   StatusEvent,
 } from "../ble/transport";
+import type { SessionSummary } from "../domain/session";
 import type { AuthEvent, AuthProvider, AuthStatus, AuthUser } from "./auth";
 import { createAccountsBackend } from "./createAccountsBackend";
+import { appendSession } from "./history";
 import { reconcileHistory } from "./historySync";
 import { loadPrefs, savePrefs } from "./prefs";
 import type { RemoteHistoryStore } from "./sync";
@@ -84,6 +86,12 @@ export interface AppState {
   drillView: DrillView;
   /** Send the Drill screen back to the pairing surface (Re-pair). */
   resetToPairing: () => void;
+  /** Persist a finished session — always to the device-local log, and, when
+   *  signed in with a cloud backend, pushed to the account's archive right away
+   *  (best-effort, off the critical path). So a run reaches the cloud the moment
+   *  it finishes, not only at the next sign-in reconcile. Signed-out / offline
+   *  stays purely local, exactly as before. */
+  recordSession: (summary: SessionSummary) => void;
   /** Account status off the AuthProvider seam — "signed-out" is the default and
    *  first-class (local-only). */
   authStatus: AuthStatus;
@@ -161,7 +169,7 @@ export const createAppStore = ({
     }
   };
 
-  return createStore<AppStoreInternal>((set) => ({
+  return createStore<AppStoreInternal>((set, get) => ({
     transport,
     auth,
     remoteHistory,
@@ -190,6 +198,19 @@ export const createAppStore = ({
     resetToPairing: () => {
       cancelHandoff();
       set({ drillView: "pairing" });
+    },
+    recordSession: (summary) => {
+      // Device-local log first — the history view reads this, signed in or not,
+      // and it's the durable copy an offline / signed-out user relies on.
+      void appendSession(summary);
+      // Signed in with a cloud backend → archive THIS session to the account
+      // straight away, best-effort. insert-or-ignore on (user_id, id) makes it
+      // idempotent with the sign-in reconcile, so a duplicate push is harmless
+      // and a network failure is swallowed (the next reconcile still catches it).
+      const { authStatus, authUser } = get();
+      if (authStatus === "signed-in" && authUser !== null && remoteHistory) {
+        void remoteHistory.upsert(authUser.id, [summary]).catch(() => {});
+      }
     },
     signIn: () => {
       // The event stream drives the UI (signing-in → signed-in / back to
