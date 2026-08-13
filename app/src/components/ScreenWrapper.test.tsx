@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react-native";
 import { StyleSheet, Text } from "react-native";
 
+import { TAB_BAR_DISC_RISE } from "../navigation/GlassTabBar";
 import { SCREEN_PAD_TOP, ScreenWrapper } from "./ScreenWrapper";
 
 test("renders its children", () => {
@@ -53,6 +54,9 @@ test("applies the single shared top offset every screen inherits", () => {
   const style = StyleSheet.flatten(screen.getByTestId("wrap").props.style);
   expect(style.paddingTop).toBe(SCREEN_PAD_TOP);
   expect(style.flex).toBe(1);
+  // A shared bottom pad clears the tab bar's raised centre disc, so content
+  // stretched flush to the bottom never crosses under it.
+  expect(style.paddingBottom).toBe(TAB_BAR_DISC_RISE);
 });
 
 // A per-screen style override merges over the shell without dropping the offset.

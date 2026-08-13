@@ -2,6 +2,7 @@ import { type ReactNode } from "react";
 import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { TAB_BAR_DISC_RISE } from "../navigation/GlassTabBar";
 import { colors } from "../theme";
 import { AppText } from "./AppText";
 
@@ -22,6 +23,11 @@ export const SCREEN_PAD_TOP = 8;
  * (scrolling) content — so every titled tab (Account, History) shares the exact
  * same top offset and title style. `headerRight` rides the title row, pinned to
  * the right edge (e.g. the History overflow menu).
+ *
+ * A shared bottom pad (TAB_BAR_DISC_RISE) keeps content clear of the tab bar's
+ * raised centre disc, which pokes UP above the bar row — the only chrome that
+ * overlaps a scene stretched flush to the bottom. Applied here once so every tab
+ * inherits it without repeating the constant.
  */
 export const ScreenWrapper = ({
   children,
@@ -61,6 +67,9 @@ export const ScreenWrapper = ({
 const styles = StyleSheet.create({
   wrap: {
     flex: 1,
+    // Clear the tab bar's raised centre disc so content stretched to the bottom
+    // (e.g. the History list) never crosses under it.
+    paddingBottom: TAB_BAR_DISC_RISE,
     backgroundColor: colors.background,
   },
   // Title row: heading left, optional accessory pinned right. A high zIndex so a
