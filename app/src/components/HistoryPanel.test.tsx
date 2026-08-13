@@ -1,14 +1,8 @@
-import {
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react-native";
+import { render, screen, within } from "@testing-library/react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import type { SessionSummary } from "../domain/session";
-import { appendSession, loadHistory } from "../state/history";
+import { appendSession } from "../state/history";
 import { HistoryPanel } from "./HistoryPanel";
 
 const summary = (
@@ -30,11 +24,21 @@ beforeEach(async () => {
   await AsyncStorage.clear();
 });
 
-test("empty history shows the hint, no list and no clear action", async () => {
+test("empty history shows the hint and no list — the list is pure now", async () => {
   render(<HistoryPanel />);
   expect(await screen.findByTestId("history-empty")).toBeTruthy();
   expect(screen.queryByTestId("history-list")).toBeNull();
+  // The Clear action moved to the screen's overflow menu — the panel renders none.
   expect(screen.queryByText("Clear history")).toBeNull();
+});
+
+test("reports the loaded session count via onLoaded", async () => {
+  const onLoaded = jest.fn();
+  await appendSession(summary(1));
+  await appendSession(summary(2));
+  render(<HistoryPanel onLoaded={onLoaded} />);
+  await screen.findByTestId("history-row-2");
+  expect(onLoaded).toHaveBeenLastCalledWith(2);
 });
 
 test("lists stored sessions newest-first with mode, average and best", async () => {
@@ -111,18 +115,4 @@ test("re-pulls the log when refreshKey changes", async () => {
   await appendSession(summary(1));
   rerender(<HistoryPanel refreshKey={1} />);
   expect(await screen.findByTestId("history-row-1")).toBeTruthy();
-});
-
-test("Clear history wipes the log behind a confirm", async () => {
-  await appendSession(summary(1));
-  render(<HistoryPanel />);
-  await screen.findByTestId("history-row-1");
-
-  fireEvent.press(screen.getByText("Clear history")); // arms the confirm only
-  expect(screen.getByTestId("clear-history-confirm")).toBeTruthy();
-  expect(await loadHistory()).toHaveLength(1); // not cleared yet
-
-  fireEvent.press(screen.getByText("Clear")); // the confirm's action
-  await waitFor(() => expect(screen.getByTestId("history-empty")).toBeTruthy());
-  expect(await loadHistory()).toEqual([]); // wiped from storage
 });

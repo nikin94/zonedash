@@ -1,4 +1,5 @@
 import type { DrillConfig } from "../../ble/transport";
+import { formatSeconds } from "../../helpers/time";
 
 /**
  * The drill-setup vocabulary shared by the Drill screen and its settings modal.
@@ -36,7 +37,7 @@ export const COUNT_OPTIONS = Array.from({ length: 99 }, (_, i) => ({
 
 /** Compact one-line summary of the current setup, shown in a muted caption
  *  under the Start button so the operator sees what will run without opening the
- *  setup page — e.g. "Random · 10 hits", "Random · 30 s", "Path", "Live". */
+ *  setup page — e.g. "Random · 10 hits", "Random · 30s", "Path", "Live". */
 export const drillSummary = (
   uiMode: UiMode,
   stopBy: StopBy,
@@ -47,7 +48,7 @@ export const drillSummary = (
   if (uiMode === "live") return "Live";
   const tail =
     stopBy === "time"
-      ? `${Math.round(durationMs / 1000)} s`
+      ? formatSeconds(durationMs, 0) // whole seconds, slitno ("30s")
       : `${count} ${count === 1 ? "hit" : "hits"}`;
   return `Random · ${tail}`;
 };

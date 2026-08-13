@@ -32,3 +32,14 @@ export const formatSessionTime = (endedAt: number, now: number): string => {
   if (days === 1) return "yesterday";
   return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`;
 };
+
+/**
+ * A duration in ms → a compact seconds label with NO space before the unit
+ * ("0.82s", "30s"). Times read slitno app-wide (reaction times, the drill-length
+ * caption, history averages) so there is one formatter for all of them; hit
+ * COUNTS keep their space ("10 hits") and are formatted separately.
+ * `decimals` sets the fractional digits — 2 for reaction times, 0 for the whole
+ * seconds of the drill-length caption.
+ */
+export const formatSeconds = (ms: number, decimals = 2): string =>
+  `${(ms / 1000).toFixed(decimals)}s`;

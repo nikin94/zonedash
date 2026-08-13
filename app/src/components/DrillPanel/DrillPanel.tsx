@@ -34,6 +34,7 @@ import {
   type SpotVisual,
 } from "../../helpers/court";
 import { formatStepBadge } from "../../helpers/pathBadge";
+import { formatSeconds } from "../../helpers/time";
 import { type DrillSettings } from "../../state/AppState";
 import { showToast } from "../../state/toast";
 import {
@@ -46,10 +47,9 @@ import { alpha, colors } from "../../theme";
  *  engine's default step cadence so the flash clears before the next arm. */
 const FLASH_MS = 450;
 
-/** Reaction/aggregate times read as seconds with 2 decimals (e.g. "0.82 s").
- *  UNIT is a single knob — flip to "сек" here if a Cyrillic label is wanted. */
-const UNIT = "s";
-const fmtSec = (ms: number) => `${(ms / 1000).toFixed(2)} ${UNIT}`;
+/** Reaction/aggregate times read as seconds with 2 decimals (e.g. "0.82s") —
+ *  slitno via the shared formatter, so every time in the app reads the same. */
+const fmtSec = (ms: number) => formatSeconds(ms);
 
 // Fixed footprints for the court-centre block, so idle → running → done never
 // shifts the layout.

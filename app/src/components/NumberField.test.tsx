@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react-native";
+import { StyleSheet } from "react-native";
 
 import { NumberField } from "./NumberField";
 
@@ -21,6 +22,17 @@ test("shows the stored ms value in display units (seconds), with the unit", () =
   const { input } = setup(500);
   expect(input.props.value).toBe("0.5"); // 500 ms → 0.5 s
   expect(screen.getByText("s")).toBeTruthy();
+});
+
+// The field carries a FIXED height (matching the WheelField pill, 32) so a
+// TextInput's taller intrinsic height can't stretch its row — the Hits wheel and
+// this Seconds input must occupy the same vertical footprint in the setup page.
+test("the field is a fixed 32px tall so it never stretches its row", () => {
+  setup(500);
+  const style = StyleSheet.flatten(
+    screen.getByTestId("delay-field").props.style,
+  );
+  expect(style.height).toBe(32);
 });
 
 test("a typed value commits live in ms", () => {

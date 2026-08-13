@@ -43,7 +43,8 @@ export const NumberField = ({
   onChange: (v: number) => void;
 }) => {
   // Trim trailing zeros: 500 → "0.5", 1000 → "1", 0 → "0".
-  const toDisplay = (v: number) => String(Number((v / scale).toFixed(decimals)));
+  const toDisplay = (v: number) =>
+    String(Number((v / scale).toFixed(decimals)));
   const clamp = (v: number) => Math.min(max, Math.max(min, v));
 
   const [text, setText] = useState(() => toDisplay(value));
@@ -79,7 +80,10 @@ export const NumberField = ({
       <AppText color={colors.textSecondary} style={styles.label}>
         {label}
       </AppText>
-      <View style={[styles.field, focused && styles.fieldActive]}>
+      <View
+        testID={`${testID}-field`}
+        style={[styles.field, focused && styles.fieldActive]}
+      >
         <TextInput
           testID={testID}
           value={shown}
@@ -115,12 +119,17 @@ const styles = StyleSheet.create({
   label: {
     flexShrink: 1,
   },
-  // Same construction as the WheelField pill / a small Button.
+  // Same construction as the WheelField pill / a small Button — and a FIXED
+  // height equal to that pill's (PILL_H, 32) so swapping the hits wheel for this
+  // input (Hits ↔ Seconds) never changes the row height. A bare TextInput
+  // reports a taller intrinsic height than a Text at the same size, which is
+  // what used to stretch the row; the explicit height pins it, and the input is
+  // vertically centred within it.
   field: {
+    height: 32,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingVertical: 5,
     paddingHorizontal: 10,
     borderRadius: 14,
     borderWidth: 1,

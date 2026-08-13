@@ -28,8 +28,9 @@ export const AccountScreen = () => {
   );
 
   return (
-    <ScreenWrapper>
+    <ScreenWrapper title="Account">
       <ScrollView
+        style={styles.scroll}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
@@ -55,6 +56,9 @@ export const AccountScreen = () => {
 };
 
 const styles = StyleSheet.create({
+  scroll: {
+    flex: 1,
+  },
   content: {
     paddingBottom: 120, // clear the floating glass tab bar
     gap: 16,
