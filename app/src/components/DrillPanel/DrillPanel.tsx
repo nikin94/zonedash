@@ -800,14 +800,16 @@ const styles = StyleSheet.create({
   // primary action, a gap between them, both with the normal rounded corners.
   // The block ALWAYS stretches (running included) so Stop fills the row instead
   // of collapsing to a sliver next to the gear.
+  // The court→button gap lands on ACTION_GAP in EVERY state (pull up to cancel
+  // the court's empty bottom strip + the panel gap), so Start and Stop sit the
+  // SAME distance under the court — the primary action is one button, one offset.
   actionBlock: {
     alignSelf: "stretch",
-  },
-  // Idle adds the vertical rhythm: pull up so the court→Start gap lands on
-  // ACTION_GAP (cancelling the court's empty bottom strip + the panel gap), and
-  // leave ACTION_GAP below Start to the config band (panel gap + this margin).
-  actionBlockIdle: {
     marginTop: ACTION_GAP - COURT_BOTTOM_STRIP - PANEL_GAP,
+  },
+  // Idle also leaves ACTION_GAP below the button to the config band (panel gap +
+  // this margin) — running has the status slot there instead, so it's idle-only.
+  actionBlockIdle: {
     marginBottom: ACTION_GAP - PANEL_GAP,
   },
   // alignItems stretch so the gear matches the FULL row height set by Start;
