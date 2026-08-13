@@ -80,13 +80,16 @@ export const HistoryScreen = () => {
     >
       {/* Mode tabs, auto-derived from MODES — a new drill mode adds a tab here
           with no extra wiring. Fixed above the scroll so switching modes never
-          scrolls the list. */}
-      <SegmentedTabs
-        testID="history-mode-tabs"
-        tabs={MODES}
-        activeKey={activeMode}
-        onChange={setActiveMode}
-      />
+          scrolls the list; inset to the shared horizontal gutter so the filled
+          track lines up with the title and the list below. */}
+      <View style={styles.tabsWrap}>
+        <SegmentedTabs
+          testID="history-mode-tabs"
+          tabs={MODES}
+          activeKey={activeMode}
+          onChange={setActiveMode}
+        />
+      </View>
 
       <ScrollView
         style={styles.scroll}
@@ -172,6 +175,12 @@ const HistoryMenu = ({ onClear }: { onClear: () => void }) => {
 };
 
 const styles = StyleSheet.create({
+  // The filled tab track sits in the shared 24px gutter with a little room
+  // below it before the list starts.
+  tabsWrap: {
+    paddingHorizontal: 24,
+    paddingBottom: 12,
+  },
   scroll: {
     flex: 1,
   },
