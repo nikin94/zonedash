@@ -42,7 +42,15 @@ export const CENTRE_PAD = Math.round((MAP_W - CENTRE_CONTENT) / 2);
 // the column below. A surface cancels it when spacing its primary action so the
 // button lands the intended distance from the court, not that distance + strip.
 export const COURT_STRIP_H = 22;
+// The net line's thickness (the grid line CourtMap draws across the net edge).
+export const COURT_NET_THICKNESS = 2;
+// Gap from the net line to the field (court) on ONE side. The net line is
+// centred in the strip, so the empty space above it and below it are equal —
+// (strip − line) / 2. The rotate/status icons centre on the line at this level.
+export const COURT_NET_GAP = (COURT_STRIP_H - COURT_NET_THICKNESS) / 2;
 // The intended visual gap from the court to the primary action button, shared by
 // the drill and pairing surfaces so the button sits the SAME distance under the
-// court on every surface and every pairing stage.
-export const COURT_ACTION_GAP = 14;
+// court on every surface and every pairing stage. Derived from the net-line
+// framing: the gap on each side of the line PLUS the line itself, so the action
+// clears the court by the full net-strip span (= 2·gap + thickness = STRIP_H).
+export const COURT_ACTION_GAP = 2 * COURT_NET_GAP + COURT_NET_THICKNESS;

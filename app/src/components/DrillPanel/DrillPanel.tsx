@@ -34,6 +34,7 @@ import {
   type SpotVisual,
 } from "../../helpers/court";
 import { formatStepBadge } from "../../helpers/pathBadge";
+import { formatSeconds } from "../../helpers/time";
 import { type DrillSettings } from "../../state/AppState";
 import { showToast } from "../../state/toast";
 import {
@@ -46,10 +47,9 @@ import { alpha, colors } from "../../theme";
  *  engine's default step cadence so the flash clears before the next arm. */
 const FLASH_MS = 450;
 
-/** Reaction/aggregate times read as seconds with 2 decimals (e.g. "0.82 s").
- *  UNIT is a single knob — flip to "сек" here if a Cyrillic label is wanted. */
-const UNIT = "s";
-const fmtSec = (ms: number) => `${(ms / 1000).toFixed(2)} ${UNIT}`;
+/** Reaction/aggregate times read as seconds with 2 decimals (e.g. "0.82s") —
+ *  slitno via the shared formatter, so every time in the app reads the same. */
+const fmtSec = (ms: number) => formatSeconds(ms);
 
 // Fixed footprints for the court-centre block, so idle → running → done never
 // shifts the layout.
@@ -570,13 +570,16 @@ export const DrillPanel = ({
               {/* Under the court: only the Path sequence authoring stays here (the
           operator taps the court, so its chips belong beside it). Mode and the
           Random params moved to the drill-setup page behind the gear. Locked
-          while a run is on so the loaded drill always matches what is on screen. */}
-              <View
-                pointerEvents={running ? "none" : "auto"}
-                style={[styles.config, running && styles.dimmed]}
-              >
-                {uiMode === "path" &&
-                  (path.length > 0 ? (
+          while a run is on so the loaded drill always matches what is on screen.
+          Rendered ONLY for Path — random/live have nothing to author here, so an
+          empty band would add phantom panel gaps and push the results divider
+          away from Start. */}
+              {uiMode === "path" && (
+                <View
+                  pointerEvents={running ? "none" : "auto"}
+                  style={[styles.config, running && styles.dimmed]}
+                >
+                  {path.length > 0 ? (
                     <>
                       {/* Ordered step chips — the sequence, in order, each removable by
                   a tap (a targeted delete the map badges point back to). A
@@ -623,8 +626,9 @@ export const DrillPanel = ({
                     <AppText center size={13} color={colors.textMuted}>
                       Tap paired spots on the map in the order to run
                     </AppText>
-                  ))}
-              </View>
+                  )}
+                </View>
+              )}
 
               {showDone && records !== null && (
                 <View style={styles.stats} testID="stats-panel">
@@ -683,10 +687,10 @@ export const DrillPanel = ({
                   )}
                   <View style={styles.statDivider} />
                   <View style={styles.statRow}>
-                    <AppText size={13} color={colors.textSecondary}>
+                    <AppText size={15} weight="700" color={colors.text}>
                       Total time
                     </AppText>
-                    <AppText size={13} weight="600">
+                    <AppText size={15} weight="700">
                       {fmtSec(totalMs)}
                     </AppText>
                   </View>
@@ -834,10 +838,12 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     textTransform: "uppercase",
   },
+  // The results panel's top border is the divider under Start. No own top
+  // margin: the action block's balance (marginBottom + the panel gap) already
+  // lands the divider ACTION_GAP below Start, matching the court→Start gap above.
   stats: {
     alignSelf: "stretch",
     gap: 10,
-    marginTop: 8,
     paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: colors.border,

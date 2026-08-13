@@ -290,6 +290,45 @@ test("the History tab shows the session log", async () => {
   expect(screen.queryByText("Drill settings")).toBeNull();
 });
 
+// Clearing the log now lives in the ⋮ overflow menu beside the title (not a
+// button under the list): open the menu, Clear → confirm → the log empties and
+// the menu affordance disappears (nothing left to clear).
+test("the History overflow menu clears the log behind a confirm", async () => {
+  await appendSession({
+    id: "h1",
+    endedAt: 1_000,
+    mode: "random",
+    numPositions: 6,
+    attempts: 3,
+    totalMs: 1200,
+    avgMs: 400,
+    bestMs: 300,
+  });
+  await renderApp();
+
+  fireEvent.press(screen.getByTestId("tab-history"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+  // The kebab shows only with sessions to act on; there is no Clear button below.
+  expect(screen.getByTestId("history-menu-button")).toBeTruthy();
+  expect(screen.queryByText("Clear history")).toBeNull(); // hidden in the menu
+
+  // Open the menu → Clear arms the confirm; nothing is wiped yet.
+  fireEvent.press(screen.getByTestId("history-menu-button"));
+  fireEvent.press(screen.getByTestId("clear-history-button"));
+  expect(screen.getByTestId("clear-history-confirm")).toBeTruthy();
+  expect(screen.getByTestId("history-row-h1")).toBeTruthy();
+
+  // Confirm → the log empties and the kebab is gone (nothing to clear).
+  fireEvent.press(screen.getByText("Clear"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+  expect(screen.getByTestId("history-empty")).toBeTruthy();
+  expect(screen.queryByTestId("history-menu-button")).toBeNull();
+});
+
 // The Account tab is the sign-in surface (history moved to its own tab).
 // Signed-out by default (no backend configured in tests), sign-in walks the mock
 // provider to signed-in, and Sign out returns to the logged-out state.

@@ -127,7 +127,7 @@ test("stop-by-time resolves to the engine's time mode with a duration", async ()
   panel(t);
 
   openSetup();
-  fireEvent.press(screen.getByText("Time"));
+  fireEvent.press(screen.getByText("Seconds")); // the "Time" stop-by is labelled Seconds
   expect(screen.queryByText("Targets to hit")).toBeNull();
   expect(screen.getByText("Duration")).toBeTruthy();
   closeSetup();
@@ -196,7 +196,7 @@ test("live mode is operator-driven — a court tap lights a target at once, then
   // ready for the next pick (liveBusy cleared).
   await act(() => jest.advanceTimersByTimeAsync(20));
   expect(screen.getByTestId("spot-0-hit")).toBeTruthy();
-  expect(screen.getByText("0.02 s")).toBeTruthy(); // reaction, shown in seconds
+  expect(screen.getByText("0.02s")).toBeTruthy(); // reaction, shown in seconds
 });
 
 test("path is authored on the same court map — slot-index wire format", async () => {
@@ -378,7 +378,7 @@ test("a run arms spots, flashes hits, and ends in a hits-only summary", async ()
   // The step resolves as a hit → green flash + the reaction time (seconds).
   await act(() => jest.advanceTimersByTimeAsync(50));
   expect(screen.getByTestId("spot-6-hit")).toBeTruthy();
-  expect(screen.getByText("0.02 s")).toBeTruthy();
+  expect(screen.getByText("0.02s")).toBeTruthy();
   expect(screen.getByText("Step 2")).toBeTruthy();
 
   // Run out: second step resolves, session flips done, results panel fetched —
@@ -388,9 +388,25 @@ test("a run arms spots, flashes hits, and ends in a hits-only summary", async ()
   // Completion is announced by the header toast now, not a line under the court.
   expect(getToast()?.message).toBe("Session complete");
   expect(screen.getByTestId("stats-panel")).toBeTruthy();
-  expect(screen.getAllByText("0.02 s")).toHaveLength(3); // 2 attempts + average
-  expect(screen.getByText("0.04 s")).toBeTruthy(); // total time
+  expect(screen.getAllByText("0.02s")).toHaveLength(3); // 2 attempts + average
+  expect(screen.getByText("0.04s")).toBeTruthy(); // total time
   expect(screen.getByText("Average")).toBeTruthy();
+
+  // The results divider (the panel's top border) carries no top margin of its
+  // own — the action block's balance lands it ACTION_GAP below Start, matching
+  // the court→Start gap above (symmetric spacing).
+  const statsStyle = StyleSheet.flatten(
+    screen.getByTestId("stats-panel").props.style,
+  );
+  expect(statsStyle.marginTop).toBeUndefined();
+
+  // Total time is the emphasised summary row — bold and a touch larger than the
+  // per-attempt / Average rows (size 13).
+  const totalLabel = StyleSheet.flatten(
+    screen.getByText("Total time").props.style,
+  );
+  expect(totalLabel.fontWeight).toBe("700");
+  expect(totalLabel.fontSize).toBe(15);
   // Each attempt is tagged with its two-letter spot code: slots 2,0 →
   // canonical 6 (back left, BL) then 0 (net left, FL). Scoped to the results
   // list — the authored path's step chips carry the same codes on the surface

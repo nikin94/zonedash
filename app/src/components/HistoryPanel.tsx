@@ -3,16 +3,12 @@ import { StyleSheet, View } from "react-native";
 
 import { MAX_TARGETS } from "../ble/codec";
 import { bestAverageSessionId, type SessionSummary } from "../domain/session";
-import { formatSessionTime } from "../helpers/time";
-import { clearHistory, loadHistory } from "../state/history";
+import { formatSeconds, formatSessionTime } from "../helpers/time";
+import { loadHistory } from "../state/history";
 import { colors } from "../theme";
 import { AppText } from "./AppText";
-import { Button } from "./Button";
-import { ConfirmModal } from "./ConfirmModal";
 
-const UNIT = "s";
-const fmtSec = (ms: number | null) =>
-  ms === null ? "—" : `${(ms / 1000).toFixed(2)} ${UNIT}`;
+const fmtSec = (ms: number | null) => (ms === null ? "—" : formatSeconds(ms));
 
 /** Title-case the stored UI mode label ("random" -> "Random"). */
 const fmtMode = (mode: string) =>
@@ -32,13 +28,22 @@ const fmtMeta = (s: SessionSummary, now: number) => {
 /**
  * Session-history list — newest first, with a "best" badge on the fastest
  * average. Reads the device-local log (history.ts) on mount and whenever
- * `refreshKey` changes, so the Account screen can re-pull it on tab focus (a
- * session finished on the Drill tab shows up next time this is focused). No
- * modal chrome: it renders inline on the Account screen.
+ * `refreshKey` changes, so the History screen can re-pull it on tab focus (a
+ * session finished on the Drill tab shows up next time this is focused) and
+ * after a clear. It reports its loaded count up via `onLoaded`, so the screen's
+ * overflow menu (which owns the Clear flow) can hide when there is nothing to
+ * clear. Pure list: the screen title and the Clear action live on the screen.
  */
-export const HistoryPanel = ({ refreshKey = 0 }: { refreshKey?: number }) => {
+export const HistoryPanel = ({
+  refreshKey = 0,
+  onLoaded,
+}: {
+  refreshKey?: number;
+  /** Reports the loaded session count on every (re)read — the screen gates its
+   *  Clear affordance on it. */
+  onLoaded?: (count: number) => void;
+}) => {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
-  const [clearAsk, setClearAsk] = useState(false);
   // The clock the relative labels read against — stamped on each (re)load.
   const [now, setNow] = useState(() => Date.now());
 
@@ -46,29 +51,23 @@ export const HistoryPanel = ({ refreshKey = 0 }: { refreshKey?: number }) => {
     let live = true;
     setNow(Date.now());
     loadHistory().then((s) => {
-      if (live) setSessions(s);
+      if (live) {
+        setSessions(s);
+        onLoaded?.(s.length);
+      }
     });
     return () => {
       live = false;
     };
+    // Re-read only on refreshKey; onLoaded is a plain reporter, not a trigger.
   }, [refreshKey]);
 
   // The fastest-average session gets a "best" badge — progression at a glance;
   // null (no badge) until there are two comparable sessions.
   const bestId = bestAverageSessionId(sessions);
 
-  const confirmClear = () => {
-    setClearAsk(false);
-    void clearHistory();
-    setSessions([]);
-  };
-
   return (
     <View style={styles.panel}>
-      <AppText size={12} color={colors.textSecondary} style={styles.heading}>
-        Session history
-      </AppText>
-
       {sessions.length === 0 ? (
         <AppText
           center
@@ -117,28 +116,6 @@ export const HistoryPanel = ({ refreshKey = 0 }: { refreshKey?: number }) => {
           ))}
         </View>
       )}
-
-      {sessions.length > 0 && (
-        <Button
-          label="Clear history"
-          size="small"
-          danger
-          onPress={() => setClearAsk(true)}
-          style={styles.clear}
-        />
-      )}
-
-      <ConfirmModal
-        visible={clearAsk}
-        onDismiss={() => setClearAsk(false)}
-        testID="clear-history-confirm"
-        title="Clear session history?"
-        body="This permanently removes every saved session on this device."
-        actions={[
-          { label: "Keep", onPress: () => setClearAsk(false) },
-          { label: "Clear", danger: true, onPress: confirmClear },
-        ]}
-      />
     </View>
   );
 };
@@ -148,10 +125,6 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     paddingHorizontal: 24,
     gap: 12,
-  },
-  heading: {
-    letterSpacing: 2,
-    textTransform: "uppercase",
   },
   empty: {
     paddingVertical: 12,
@@ -186,8 +159,5 @@ const styles = StyleSheet.create({
   rowStats: {
     alignItems: "flex-end",
     gap: 2,
-  },
-  clear: {
-    alignSelf: "center",
   },
 });

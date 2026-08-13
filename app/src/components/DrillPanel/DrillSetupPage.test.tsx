@@ -31,12 +31,25 @@ test("random mode shows the mode selector, stop-by and the hits wheel", () => {
   expect(screen.getByText("Drill setup")).toBeTruthy();
   expect(screen.getByText("Session length")).toBeTruthy();
   expect(screen.getByText("Targets to hit")).toBeTruthy();
+  // The stop-by options read Hits / Seconds (the old "Time" label is gone).
+  expect(screen.getByText("Hits")).toBeTruthy();
+  expect(screen.getByText("Seconds")).toBeTruthy();
+  expect(screen.queryByText("Time")).toBeNull();
 });
 
-test("stop-by time swaps the hits wheel for the duration wheel", () => {
+test("stop-by seconds swaps the hits wheel for a duration input, default 30", () => {
   setup({ stopBy: "time" });
   expect(screen.queryByText("Targets to hit")).toBeNull();
   expect(screen.getByText("Duration")).toBeTruthy();
+  // A free-typed input (not a wheel), showing the default 30 s.
+  expect(screen.getByTestId("drill-duration").props.value).toBe("30");
+});
+
+test("editing the duration input reports whole seconds as ms", () => {
+  const p = setup({ stopBy: "time" });
+  fireEvent(screen.getByTestId("drill-duration"), "focus");
+  fireEvent.changeText(screen.getByTestId("drill-duration"), "45");
+  expect(p.setDurationMs).toHaveBeenLastCalledWith(45000);
 });
 
 // Path/Live drop the Random params AND the old inline how-to line — that copy
