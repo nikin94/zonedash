@@ -24,7 +24,15 @@ import { RotateIcon } from "../Icons";
 import { AnimatedDot } from "./AnimatedDot";
 import { CourtLines } from "./CourtLines";
 import { CourtRoute } from "./CourtRoute";
+import { ReactionCallout } from "./ReactionCallout";
 import { RoutePreview } from "./RoutePreview";
+
+/** A live reaction-time callout: the canonical spot it hangs off and the time. */
+export interface Callout {
+  id: number;
+  spot: number;
+  reactionMs: number;
+}
 
 // Screen-reader wording per state — the label must carry it, since fill and
 // glyph are the only visual differentiators between the states.
@@ -78,6 +86,8 @@ export const CourtMap = ({
   onRotate,
   statusControl,
   hideOff = false,
+  callouts = [],
+  onCalloutDone,
 }: {
   spots: SpotVisual[]; // length 8, canonical order
   onPressSpot?: (index: number) => void;
@@ -102,6 +112,13 @@ export const CourtMap = ({
    *  the rotate control's top-right (same inset). The court surfaces pass the
    *  central-unit CourtStatusControl; a control, so it never moves with the view. */
   statusControl?: ReactNode;
+  /** Transient reaction-time callouts drawn off their targets — a two-segment
+   *  leader line with the hit time, one per resolved hit. Each fades on its own
+   *  clock and reports back via `onCalloutDone` so the owner can prune it. Omit
+   *  outside a run (pairing / idle draw none). */
+  callouts?: Callout[];
+  /** A callout finished its fade — the owner drops it from `callouts`. */
+  onCalloutDone?: (id: number) => void;
 }) => {
   const r = ((rotation % 4) + 4) % 4;
   const edge = NET_EDGE[r];
@@ -249,6 +266,26 @@ export const CourtMap = ({
                   </View>
                 )}
               </CustomPressable>
+            );
+          })}
+          {/* Reaction-time callouts over the dots — a leader line off each just-
+              hit target with its time. Their position turns with the view
+              (rotateNorm), like the dots; non-interactive, so the perimeter
+              targets stay tappable underneath. */}
+          {callouts.map((c) => {
+            const { x, y } = rotateNorm(
+              SPOT_XY[c.spot].x,
+              SPOT_XY[c.spot].y,
+              r,
+            );
+            return (
+              <ReactionCallout
+                key={c.id}
+                x={x}
+                y={y}
+                reactionMs={c.reactionMs}
+                onDone={() => onCalloutDone?.(c.id)}
+              />
             );
           })}
         </View>

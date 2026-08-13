@@ -207,6 +207,33 @@ test("live mode is operator-driven — a court tap lights a target at once, then
   expect(screen.getByText("0.02s")).toBeTruthy(); // reaction, shown in seconds
 });
 
+// The reaction time renders as a per-target callout (a leader line off the hit
+// spot), NOT as a number in the status line under the court.
+test("a resolved hit shows a reaction-time callout, not a number in the status", async () => {
+  const t = await connectedTransport();
+  panel(t, PAIRED, DEFAULT_SETTINGS);
+
+  // A two-step path so the run is still live after step 1 resolves.
+  selectMode("Path");
+  fireEvent.press(screen.getByTestId("spot-6-available"));
+  fireEvent.press(screen.getByTestId("spot-0-available"));
+  fireEvent.press(screen.getByText("Start"));
+  await act(() => jest.advanceTimersByTimeAsync(0)); // seq 0 armed
+
+  // Before the hit: no callout, and the status line is instructional.
+  expect(screen.queryByTestId("reaction-callout")).toBeNull();
+  expect(screen.getByText("React when a target lights up")).toBeTruthy();
+
+  // Step 1 resolves → the time appears as a callout on the target (run still on).
+  await act(() => jest.advanceTimersByTimeAsync(50));
+  expect(screen.getByTestId("reaction-callout")).toBeTruthy();
+  expect(screen.getByText("0.02s")).toBeTruthy();
+  // The status line still narrates, never the number.
+  expect(
+    within(screen.getByTestId("status-slot")).queryByText("0.02s"),
+  ).toBeNull();
+});
+
 test("path is authored on the same court map — slot-index wire format", async () => {
   const t = await connectedTransport();
   const load = jest.spyOn(t, "loadDrill");

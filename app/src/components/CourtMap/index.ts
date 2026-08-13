@@ -5,6 +5,6 @@
  * components; spot facts live in domain/spot.ts and the view constants /
  * SpotVisual in helpers/court.ts.
  */
-export { CourtMap } from "./CourtMap";
+export { CourtMap, type Callout } from "./CourtMap";
 export { CourtStatusControl } from "./CourtStatusControl";
 export { SpotIcon } from "./SpotIcon";

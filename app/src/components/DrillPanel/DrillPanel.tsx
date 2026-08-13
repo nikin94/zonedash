@@ -26,7 +26,7 @@ import {
   type UiMode,
 } from "./drillMode";
 import { MAX_DRILL_PATH } from "../../ble/codec";
-import { CourtMap, SpotIcon } from "../CourtMap";
+import { type Callout, CourtMap, SpotIcon } from "../CourtMap";
 import { SPOT_CODES, SPOT_NAMES } from "../../domain/spot";
 import { summarize, type SessionSummary } from "../../domain/session";
 import {
@@ -197,7 +197,12 @@ export const DrillPanel = ({
   const [resolvedCount, setResolvedCount] = useState(
     live ? snap.resolvedCount : 0,
   );
-  const [lastReactionMs, setLastReactionMs] = useState<number | null>(null);
+  // Reaction-time callouts, one per resolved hit — a leader line off the target
+  // carries the time now (it left the status line below). Each has a unique id so
+  // a fast series stacks independent, overlapping fades; a callout prunes itself
+  // once its fade finishes (onCalloutDone).
+  const [callouts, setCallouts] = useState<Callout[]>([]);
+  const calloutId = useRef(0);
   // Live mode: a target is armed or in flight after the operator's tap, so
   // further taps are ignored until it resolves. Seed busy from a lit target so
   // a remount can't arm a second one over the one already up.
@@ -218,17 +223,24 @@ export const DrillPanel = ({
         const spot = pairedSpots[e.position];
         setArmedSpot((was) => (was === spot ? null : was));
         setResolvedCount((n) => n + 1);
-        setLastReactionMs(e.reactionMs);
         setLiveBusy(false); // ready for the next live pick
         if (spot != null) {
           setFlashSpot(spot);
           if (flashTimer.current !== null) clearTimeout(flashTimer.current);
           flashTimer.current = setTimeout(() => setFlashSpot(null), FLASH_MS);
+          // Hang a reaction-time callout off the target it landed on.
+          const id = (calloutId.current += 1);
+          setCallouts((cs) => [...cs, { id, spot, reactionMs: e.reactionMs }]);
         }
       }
       if (e.kind === "session") {
         setSession(e.state);
-        if (e.state !== "running") setLiveBusy(false);
+        if (e.state !== "running") {
+          setLiveBusy(false);
+          // The run is over — the results take the surface, so drop any callouts
+          // still fading rather than let them hang over the finished court.
+          setCallouts([]);
+        }
         if (e.state === "done") {
           setArmedSpot(null);
           // The run is over — pull the buffered hit records for the summary.
@@ -272,7 +284,7 @@ export const DrillPanel = ({
     if (session === "running") return;
     setRecords(null);
     setResolvedCount(0);
-    setLastReactionMs(null);
+    setCallouts([]);
     setFlashSpot(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- clear on path/layout change only, not on the session transition into it
   }, [path, pairedSpots]);
@@ -342,7 +354,7 @@ export const DrillPanel = ({
     setError(null);
     setRecords(null);
     setResolvedCount(0);
-    setLastReactionMs(null);
+    setCallouts([]);
     setFlashSpot(null);
     setLiveBusy(false);
     transport
@@ -421,18 +433,14 @@ export const DrillPanel = ({
     setResultOpen(true);
   }, [done, records, runMode, pairedSpots, playerName, onSessionComplete]);
 
-  // Secondary status line during a run. Auto modes narrate the athlete's
-  // reaction; live mode narrates the operator's turn: tap → armed → time.
+  // Secondary status line during a run — instructional only now: the reaction
+  // time moved onto the target (a per-hit callout), so this line no longer
+  // narrates the number. Live mode still narrates whose turn it is.
   const runStatus = liveRunning
     ? liveBusy
       ? "Hit the lit target"
-      : lastReactionMs !== null
-        ? fmtSec(lastReactionMs)
-        : "Tap a target to arm it"
-    : lastReactionMs === null
-      ? "React when a target lights up"
-      : fmtSec(lastReactionMs);
-  const runStatusHit = !liveBusy && lastReactionMs !== null;
+      : "Tap a target to arm it"
+    : "React when a target lights up";
 
   return (
     <DrillNav.Navigator
@@ -464,6 +472,10 @@ export const DrillPanel = ({
                 rotation={rotation}
                 onRotate={onRotate}
                 statusControl={statusControl}
+                callouts={callouts}
+                onCalloutDone={(id) =>
+                  setCallouts((cs) => cs.filter((c) => c.id !== id))
+                }
                 hideOff
               />
 
@@ -557,7 +569,7 @@ export const DrillPanel = ({
                   <AppText
                     center
                     size={13}
-                    color={runStatusHit ? colors.success : colors.textMuted}
+                    color={colors.textMuted}
                     style={styles.slotText}
                   >
                     {runStatus}
