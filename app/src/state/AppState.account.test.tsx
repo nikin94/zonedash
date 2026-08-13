@@ -12,7 +12,12 @@ import { MockCentralTransport } from "../ble/mock";
 import type { SessionSummary } from "../domain/session";
 import { useShallow } from "zustand/react/shallow";
 
-import { AppStateProvider, type DrillSettings, useAppStore } from "./AppState";
+import {
+  AppStateProvider,
+  DEFAULT_SETTINGS,
+  type DrillSettings,
+  useAppStore,
+} from "./AppState";
 import { MockAuthProvider } from "./auth.mock";
 import { appendSession, loadHistory } from "./history";
 import type { RemoteSettingsStore } from "./settings";
@@ -319,6 +324,7 @@ test("recording a session remembers its mode for the History tab", async () => {
 // defaults.
 test("sign-in adopts the account's saved drill settings", async () => {
   const remoteSettings = new FakeRemoteSettings().seed({
+    ...DEFAULT_SETTINGS,
     delayMs: 1500,
     allowImmediateRepeat: true,
   });
@@ -348,10 +354,7 @@ test("first sign-in seeds the cloud from the device's current settings", async (
   });
 
   await waitFor(() =>
-    expect(remoteSettings.row).toEqual({
-      delayMs: 1500,
-      allowImmediateRepeat: false,
-    }),
+    expect(remoteSettings.row).toEqual({ ...DEFAULT_SETTINGS, delayMs: 1500 }),
   );
   expect(screen.getByTestId("delay")).toHaveTextContent("1500"); // kept, not reset
 });
@@ -359,10 +362,7 @@ test("first sign-in seeds the cloud from the device's current settings", async (
 // A settings edit WHILE signed in pushes to the account's cloud row right away
 // (best-effort), so it survives a reload and follows the account.
 test("editing settings while signed in pushes them to the cloud", async () => {
-  const remoteSettings = new FakeRemoteSettings().seed({
-    delayMs: 0,
-    allowImmediateRepeat: false,
-  });
+  const remoteSettings = new FakeRemoteSettings().seed({ ...DEFAULT_SETTINGS });
   await renderApp(new MockAuthProvider(), undefined, remoteSettings);
   await act(async () => {
     fireEvent.press(screen.getByTestId("in")); // sign in first (load runs)
@@ -373,8 +373,8 @@ test("editing settings while signed in pushes them to the cloud", async () => {
   });
   await waitFor(() =>
     expect(remoteSettings.saves.at(-1)).toEqual({
+      ...DEFAULT_SETTINGS,
       delayMs: 1500,
-      allowImmediateRepeat: false,
     }),
   );
 });

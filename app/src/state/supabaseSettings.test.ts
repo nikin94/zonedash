@@ -9,6 +9,10 @@ import {
 } from "./supabaseSettings";
 
 const settings = (over: Partial<DrillSettings> = {}): DrillSettings => ({
+  mode: "path",
+  stopBy: "time",
+  count: 15,
+  durationMs: 45000,
   delayMs: 1500,
   allowImmediateRepeat: true,
   ...over,
@@ -16,6 +20,10 @@ const settings = (over: Partial<DrillSettings> = {}): DrillSettings => ({
 
 const row = (over: Partial<SettingsRow> = {}): SettingsRow => ({
   user_id: "u1",
+  mode: "path",
+  stop_by: "time",
+  count: 15,
+  duration_ms: 45000,
   delay_ms: 1500,
   allow_immediate_repeat: true,
   ...over,

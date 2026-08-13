@@ -1,8 +1,22 @@
 import type { DrillSettings } from "./AppState";
 import { reconcileSettings, type RemoteSettingsStore } from "./settings";
 
-const DEFAULTS: DrillSettings = { delayMs: 0, allowImmediateRepeat: false };
-const TWEAKED: DrillSettings = { delayMs: 1500, allowImmediateRepeat: true };
+const DEFAULTS: DrillSettings = {
+  mode: "random",
+  stopBy: "count",
+  count: 10,
+  durationMs: 30000,
+  delayMs: 0,
+  allowImmediateRepeat: false,
+};
+const TWEAKED: DrillSettings = {
+  mode: "path",
+  stopBy: "time",
+  count: 15,
+  durationMs: 45000,
+  delayMs: 1500,
+  allowImmediateRepeat: true,
+};
 
 class FakeRemoteSettings implements RemoteSettingsStore {
   row: DrillSettings | null = null;

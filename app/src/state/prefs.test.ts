@@ -14,12 +14,26 @@ test("load returns {} when nothing is stored", async () => {
 
 test("save then load round-trips the durable prefs", async () => {
   await savePrefs({
-    settings: { delayMs: 1500, allowImmediateRepeat: true },
+    settings: {
+      mode: "random",
+      stopBy: "count",
+      count: 10,
+      durationMs: 30000,
+      delayMs: 1500,
+      allowImmediateRepeat: true,
+    },
     courtRotation: 2,
     playerName: "Alice",
   });
   expect(await loadPrefs()).toEqual({
-    settings: { delayMs: 1500, allowImmediateRepeat: true },
+    settings: {
+      mode: "random",
+      stopBy: "count",
+      count: 10,
+      durationMs: 30000,
+      delayMs: 1500,
+      allowImmediateRepeat: true,
+    },
     courtRotation: 2,
     playerName: "Alice",
   });

@@ -151,16 +151,24 @@ export const DrillPanel = ({
   const live = snap.state === "running";
   const ui = uiFromWire(snap.mode);
 
-  const [uiMode, setUiMode] = useState<UiMode>(live ? ui.uiMode : "random");
-  const [stopBy, setStopBy] = useState<StopBy>(live ? ui.stopBy : "count");
+  // Idle seeds from the persisted setup (settings) so a restart / remount keeps
+  // the coach's last mode + stop condition; a live run seeds from the wire snapshot.
+  const [uiMode, setUiMode] = useState<UiMode>(
+    live ? ui.uiMode : settings.mode,
+  );
+  const [stopBy, setStopBy] = useState<StopBy>(
+    live ? ui.stopBy : settings.stopBy,
+  );
   // Seed the config params from the snapshot too, so a rehydrated run keeps the
   // numbers it actually ran with — otherwise re-running (Start after a finished
   // run) breaks for path (empty sequence) and random/time show the defaults,
   // not what's on the wire. The
   // snapshot path is slot indices; the panel holds canonical spots, so map back.
-  const [count, setCount] = useState(live ? (snap.count ?? 10) : 10);
+  const [count, setCount] = useState(
+    live ? (snap.count ?? 10) : settings.count,
+  );
   const [durationMs, setDurationMs] = useState(
-    live ? (snap.durationMs ?? 30000) : 30000,
+    live ? (snap.durationMs ?? 30000) : settings.durationMs,
   );
   const [path, setPath] = useState<number[]>(
     live && snap.path
@@ -177,7 +185,9 @@ export const DrillPanel = ({
   );
   // The mode the current records belong to, so a finished run's stats show
   // only while that mode is selected — switching modes hides them.
-  const [runMode, setRunMode] = useState<UiMode>(live ? ui.uiMode : "random");
+  const [runMode, setRunMode] = useState<UiMode>(
+    live ? ui.uiMode : settings.mode,
+  );
   const [armedSpot, setArmedSpot] = useState<number | null>(
     live && snap.armedPosition != null
       ? (pairedSpots[snap.armedPosition] ?? null)
@@ -742,13 +752,28 @@ export const DrillPanel = ({
               onDone={() => navigation.goBack()}
               onModeInfo={() => setModeInfoOpen(true)}
               uiMode={uiMode}
-              setUiMode={setUiMode}
+              // Each edit updates the live control AND persists it onto the
+              // setup (settings) — so the mode + stop condition survive a restart
+              // and, signed in, follow the account (same path as delay/repeat).
+              setUiMode={(m) => {
+                setUiMode(m);
+                onSettingsChange({ ...settings, mode: m });
+              }}
               stopBy={stopBy}
-              setStopBy={setStopBy}
+              setStopBy={(sb) => {
+                setStopBy(sb);
+                onSettingsChange({ ...settings, stopBy: sb });
+              }}
               count={count}
-              setCount={setCount}
+              setCount={(c) => {
+                setCount(c);
+                onSettingsChange({ ...settings, count: c });
+              }}
               durationMs={durationMs}
-              setDurationMs={setDurationMs}
+              setDurationMs={(d) => {
+                setDurationMs(d);
+                onSettingsChange({ ...settings, durationMs: d });
+              }}
               playerName={playerName}
               onPlayerNameChange={onPlayerNameChange}
               settings={settings}

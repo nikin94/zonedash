@@ -19,12 +19,22 @@ import type { RemoteSettingsStore } from "./settings";
  *  and `updated_at` are server-owned and not part of DrillSettings. */
 export interface SettingsRow {
   user_id: string;
+  mode: string;
+  stop_by: string;
+  count: number;
+  duration_ms: number;
   delay_ms: number;
   allow_immediate_repeat: boolean;
 }
 
-/** DB row → the app's DrillSettings (drops the server-owned columns). */
+/** DB row → the app's DrillSettings (drops the server-owned columns). The
+ *  mode/stop_by strings are the wire values app-side already; cast is safe
+ *  because the column CHECK constraints pin them to the same unions. */
 export const rowToSettings = (r: SettingsRow): DrillSettings => ({
+  mode: r.mode as DrillSettings["mode"],
+  stopBy: r.stop_by as DrillSettings["stopBy"],
+  count: r.count,
+  durationMs: r.duration_ms,
   delayMs: r.delay_ms,
   allowImmediateRepeat: r.allow_immediate_repeat,
 });
@@ -35,6 +45,10 @@ export const settingsToRow = (
   s: DrillSettings,
 ): SettingsRow => ({
   user_id: userId,
+  mode: s.mode,
+  stop_by: s.stopBy,
+  count: s.count,
+  duration_ms: s.durationMs,
   delay_ms: s.delayMs,
   allow_immediate_repeat: s.allowImmediateRepeat,
 });

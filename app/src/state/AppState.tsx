@@ -17,6 +17,7 @@ import type {
   StatusEvent,
 } from "../ble/transport";
 import type { SessionSummary } from "../domain/session";
+import type { StopBy, UiMode } from "../components/DrillPanel/drillMode";
 import type { AuthEvent, AuthProvider, AuthStatus, AuthUser } from "./auth";
 import { createAccountsBackend } from "./createAccountsBackend";
 import { appendSession } from "./history";
@@ -26,18 +27,35 @@ import { reconcileSettings, type RemoteSettingsStore } from "./settings";
 import type { RemoteHistoryStore } from "./sync";
 
 /**
- * Session-wide drill settings, edited on the Settings screen and consumed by
- * the exercise screen when composing the LoadDrill config. Which of them go on
- * the wire still depends on the drill mode (the engine ignores delay in Live).
- * No timeout here on purpose: the app never arms auto-miss, so a run counts
- * hits only.
+ * The coach's drill setup — everything the drill-setup page configures, so it
+ * survives a restart and (signed in) follows the account. Consumed by the
+ * exercise screen when composing the LoadDrill config; which fields go on the
+ * wire still depends on the mode (the engine ignores delay in Live). No timeout
+ * on purpose: the app never arms auto-miss, so a run counts hits only.
+ *
+ * `mode` / `stopBy` / `count` / `durationMs` are the mode + stop condition the
+ * setup page's chips and wheels drive; `delayMs` / `allowImmediateRepeat` are
+ * the SettingsPanel toggles below them. A live run seeds its OWN config from the
+ * transport snapshot (rehydration) — this is the IDLE default the setup opens on.
  */
 export interface DrillSettings {
+  /** Which drill mode the setup opens on. */
+  mode: UiMode;
+  /** Random mode's stop condition — by hit count or by a duration window. */
+  stopBy: StopBy;
+  /** Target count for a count-stopped random run. */
+  count: number;
+  /** Duration window (ms) for a time-stopped random run. */
+  durationMs: number;
   delayMs: number;
   allowImmediateRepeat: boolean;
 }
 
 export const DEFAULT_SETTINGS: DrillSettings = {
+  mode: "random",
+  stopBy: "count",
+  count: 10,
+  durationMs: 30000,
   delayMs: 0,
   allowImmediateRepeat: false,
 };
@@ -246,7 +264,12 @@ export const createAppStore = ({
 
     _adoptPrefs: (p) =>
       set((s) => ({
-        settings: p.settings ?? s.settings,
+        // Merge over the defaults so a prefs blob written before mode/stopBy/
+        // count/durationMs existed backfills the new fields (no undefined config
+        // on an upgrade), while a stored value still wins field by field.
+        settings: p.settings
+          ? { ...DEFAULT_SETTINGS, ...p.settings }
+          : s.settings,
         playerName:
           typeof p.playerName === "string" ? p.playerName : s.playerName,
         courtRotation:

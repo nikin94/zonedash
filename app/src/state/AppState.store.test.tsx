@@ -138,3 +138,37 @@ test("selecting a stable seam (transport) never re-renders on a state change", a
   // transport is a stable field set once — reading it is inert to state changes.
   expect(transportRenders).toBe(baseline);
 });
+
+// The drill setup (mode/stopBy/count/durationMs + delay/repeat) is durable: a
+// stored settings blob hydrates into the store on mount. A blob written before
+// the mode/count fields existed backfills them from DEFAULT_SETTINGS, so an
+// upgrade never leaves the config undefined — the stored delay still wins.
+test("settings hydrate from prefs; an old blob backfills the new drill-setup fields", async () => {
+  const SettingsProbe = () => {
+    const s = useAppStore((st) => st.settings);
+    return (
+      <Text testID="settings">{`${s.mode}/${s.stopBy}/${s.count}/${s.durationMs}/${s.delayMs}`}</Text>
+    );
+  };
+
+  // An OLD-shape prefs blob: only the two 0003 fields, no mode/stopBy/count/
+  // durationMs (cast past the now-wider type to mimic a pre-upgrade write).
+  await savePrefs({
+    settings: { delayMs: 1500, allowImmediateRepeat: true } as never,
+  });
+  render(
+    <AppStateProvider
+      transport={new MockCentralTransport()}
+      auth={new MockAuthProvider()}
+      remoteHistory={null}
+    >
+      <SettingsProbe />
+    </AppStateProvider>,
+  );
+  await act(async () => {});
+
+  // Stored delay kept; the four new fields backfilled from DEFAULT_SETTINGS.
+  expect(screen.getByTestId("settings")).toHaveTextContent(
+    "random/count/10/30000/1500",
+  );
+});
