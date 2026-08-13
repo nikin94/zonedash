@@ -342,22 +342,15 @@ test("switching tabs keeps the BLE link and drill surface intact", async () => {
   expect(screen.queryByTestId("start-pairing")).toBeNull();
 });
 
-test("Disconnect lives in the status modal behind the confirm — No keeps the link", async () => {
+test("Disconnect in the status modal drops the link at once — no confirm", async () => {
   await renderApp();
   await connect();
 
+  // Disconnect acts immediately: no confirm dialog, straight to the
+  // disconnected surface.
   fireEvent.press(screen.getByTestId("court-status"));
   fireEvent.press(screen.getByTestId("disconnect-button"));
-  expect(screen.getByText("Disconnect from the central unit?")).toBeTruthy();
-
-  fireEvent.press(screen.getByText("No"));
   expect(screen.queryByTestId("disconnect-confirm")).toBeNull();
-  expect(screen.getByTestId("start-pairing")).toBeTruthy(); // still connected
-
-  // Yes actually disconnects and falls back to the disconnected surface.
-  fireEvent.press(screen.getByTestId("court-status"));
-  fireEvent.press(screen.getByTestId("disconnect-button"));
-  fireEvent.press(screen.getByText("Yes"));
   await act(async () => {
     await jest.runAllTimersAsync();
   });
@@ -386,8 +379,7 @@ test("a disconnect clears the paired layout — reconnect returns to pairing", a
   expect(screen.getByTestId("drill-settings-button")).toBeTruthy();
 
   fireEvent.press(screen.getByTestId("court-status"));
-  fireEvent.press(screen.getByTestId("disconnect-button"));
-  fireEvent.press(screen.getByText("Yes"));
+  fireEvent.press(screen.getByTestId("disconnect-button")); // acts at once, no confirm
   await act(async () => {
     await jest.runAllTimersAsync();
   });

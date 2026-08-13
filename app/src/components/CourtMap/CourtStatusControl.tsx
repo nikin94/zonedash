@@ -58,7 +58,6 @@ export const CourtStatusControl = () => {
   );
 
   const [menuOpen, setMenuOpen] = useState(false);
-  const [disconnectAsk, setDisconnectAsk] = useState(false);
   const [repairAsk, setRepairAsk] = useState(false);
 
   const connected = connection === "connected";
@@ -79,14 +78,11 @@ export const CourtStatusControl = () => {
     setRepairAsk(false);
     resetToPairing();
   };
-  const askDisconnect = () => {
-    setMenuOpen(false);
-    setDisconnectAsk(true);
-  };
+  // Disconnect acts at once — no confirm. Dropping the link clears the paired
+  // layout (AppState); the Drill screen falls back to its disconnected surface
+  // on its own.
   const disconnect = () => {
-    setDisconnectAsk(false);
-    // Dropping the link clears the paired layout (AppState); the Drill screen
-    // falls back to its disconnected surface on its own.
+    setMenuOpen(false);
     transport.disconnect().catch(() => {});
   };
 
@@ -156,7 +152,7 @@ export const CourtStatusControl = () => {
                   testID="disconnect-button"
                   label="Disconnect"
                   danger
-                  onPress={askDisconnect}
+                  onPress={disconnect}
                   style={styles.action}
                 />
               </>
@@ -174,16 +170,6 @@ export const CourtStatusControl = () => {
         </View>
       </Modal>
 
-      <ConfirmModal
-        visible={disconnectAsk}
-        onDismiss={() => setDisconnectAsk(false)}
-        testID="disconnect-confirm"
-        title="Disconnect from the central unit?"
-        actions={[
-          { label: "No", onPress: () => setDisconnectAsk(false) },
-          { label: "Yes", danger: true, onPress: disconnect },
-        ]}
-      />
       <ConfirmModal
         visible={repairAsk}
         onDismiss={() => setRepairAsk(false)}

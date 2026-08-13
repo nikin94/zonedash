@@ -72,7 +72,9 @@ export const DrillSetupPage = ({
   const insets = useSafeAreaInsets();
   return (
     <View style={styles.page} testID="drill-settings-page">
-      <View style={styles.header}>
+      {/* Presented as a window-level modal, this page no longer sits under the
+          ScreenWrapper's shared top offset — so it clears the notch itself. */}
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <AppText size={18} weight="700">
           Drill setup
         </AppText>
@@ -195,7 +197,6 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 24,
-    paddingTop: 8,
     paddingBottom: 12,
   },
   scroll: {

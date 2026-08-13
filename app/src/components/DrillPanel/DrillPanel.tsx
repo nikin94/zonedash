@@ -708,12 +708,16 @@ export const DrillPanel = ({
       {/* Present the setup as a native modal (`transparentModal`), NOT a card:
           react-native-screens presents it at the window level, so it sits ABOVE
           the floating tab bar (which lives in the parent tab navigator) with no
-          hand-rolled hiding — the tab bar simply can't cover it. Transparent +
-          the inherited `slide_from_right` keeps the horizontal slide with the
-          drill surface visible behind it (an opaque page covers all at rest). */}
+          hand-rolled hiding — the tab bar simply can't cover it. `transparentModal`
+          defaults to a vertical (bottom-up) modal animation, so set the horizontal
+          slide EXPLICITLY here — otherwise it ignores the navigator's inherited
+          `slide_from_right`. The drill surface stays visible behind it. */}
       <DrillNav.Screen
         name="DrillSetup"
-        options={{ presentation: "transparentModal" }}
+        options={{
+          presentation: "transparentModal",
+          animation: "slide_from_right",
+        }}
       >
         {({ navigation }) => (
           <>
