@@ -67,15 +67,17 @@ client id**), then rebuild (`npx expo prebuild --clean && npx expo run:ios`):
 ```
 
 **4. Apply the migrations** (`0001` creates the `sessions` table; `0002` adds the
-optional `player_name` column) so the schema is current.
+optional `player_name` column; `0003` creates the `user_settings` table) so the
+schema is current.
 
 With those set, sign-in in the Settings modal exchanges the native Google id
-token for a Supabase session (`SupabaseAuthProvider`) and history syncs to the
-account (`reconcileHistory` on sign-in).
+token for a Supabase session (`SupabaseAuthProvider`); history syncs to the
+account (`reconcileHistory` on sign-in) and drill settings sync over the
+`user_settings` row (`reconcileSettings` on sign-in, upsert on change).
 
 ## Migrations
 
-`migrations/` is hand-ordered (`0001_…`, `0002_…`). Apply either way:
+`migrations/` is hand-ordered (`0001_…`, `0002_…`, `0003_…`). Apply either way:
 
 ```sh
 # Supabase CLI (from app/):

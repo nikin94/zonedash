@@ -2,6 +2,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -21,6 +22,7 @@ import { createAccountsBackend } from "./createAccountsBackend";
 import { appendSession } from "./history";
 import { reconcileHistory } from "./historySync";
 import { loadPrefs, savePrefs } from "./prefs";
+import { reconcileSettings, type RemoteSettingsStore } from "./settings";
 import type { RemoteHistoryStore } from "./sync";
 
 /**
@@ -134,9 +136,10 @@ export interface AppState {
  * carries these methods.
  */
 interface AppStoreInternal extends AppState {
-  /** The seams the actions/effects close over (auth, cloud store). */
+  /** The seams the actions/effects close over (auth, cloud stores). */
   auth: AuthProvider;
   remoteHistory: RemoteHistoryStore | null;
+  remoteSettings: RemoteSettingsStore | null;
   /** Adopt the loaded prefs (settings + court orientation), then mark hydrated. */
   _adoptPrefs: (p: Awaited<ReturnType<typeof loadPrefs>>) => void;
   /** Fold a transport Status event into connection / paired layout / handoff. */
@@ -160,10 +163,12 @@ export const createAppStore = ({
   transport,
   auth,
   remoteHistory,
+  remoteSettings,
 }: {
   transport: CentralTransport;
   auth: AuthProvider;
   remoteHistory: RemoteHistoryStore | null;
+  remoteSettings: RemoteSettingsStore | null;
 }): AppStore => {
   // The pairing → drill handoff timer, a closure var (not reactive state) so a
   // re-pair or a link drop can cancel it mid-flight without a render.
@@ -179,6 +184,7 @@ export const createAppStore = ({
     transport,
     auth,
     remoteHistory,
+    remoteSettings,
     // Seed auth from the seam so a freshly-mounted tree reflects an already-active
     // session (same rehydrate reason as connection/session snapshots).
     connection: "disconnected",
@@ -329,6 +335,7 @@ export const AppStateProvider = ({
   transport: injectedTransport,
   auth: injectedAuth,
   remoteHistory: injectedRemoteHistory,
+  remoteSettings: injectedRemoteSettings,
   children,
 }: {
   transport?: CentralTransport;
@@ -340,6 +347,9 @@ export const AppStateProvider = ({
    *  "not injected, use the backend default"; an explicit `null` forces
    *  local-only. */
   remoteHistory?: RemoteHistoryStore | null;
+  /** The cloud settings row a signed-in user's drill settings sync over. Same
+   *  inject/undefined/null contract as `remoteHistory`. */
+  remoteSettings?: RemoteSettingsStore | null;
   children?: ReactNode;
 }) => {
   const [store] = useState<AppStore>(() => {
@@ -353,7 +363,11 @@ export const AppStateProvider = ({
       injectedRemoteHistory !== undefined
         ? injectedRemoteHistory
         : backend.remoteHistory;
-    return createAppStore({ transport, auth, remoteHistory });
+    const remoteSettings =
+      injectedRemoteSettings !== undefined
+        ? injectedRemoteSettings
+        : backend.remoteSettings;
+    return createAppStore({ transport, auth, remoteHistory, remoteSettings });
   });
 
   // Hydrate device-local prefs once on mount. Only the durable bits (settings,
@@ -424,6 +438,56 @@ export const AppStateProvider = ({
       cancelled = true;
     };
   }, [authStatus, userId, store]);
+
+  // Cloud settings sync (signed-in only; anonymous stays on the local prefs
+  // above). Two halves, coordinated by `settingsSyncRef` so a load never races a
+  // push into overwriting the account's real row with the pre-load defaults:
+  //   1. On sign-in, reconcile: the account's saved settings win, or a fresh
+  //      account is seeded from the device's current settings (never a reset to
+  //      defaults). The ref then records "this user's settings are in sync",
+  //      pinned to the value we just adopted.
+  //   2. While signed in, an edit pushes the new settings up (best-effort). The
+  //      push is GATED on the ref: it won't fire until the load has run for this
+  //      user (so it can't clobber the row first), and it skips a value equal to
+  //      what was just loaded/saved (so the load doesn't echo back as a write).
+  // (`settings` is the reactive selector already declared for the prefs persist
+  //  effect above — reused here.)
+  const settingsSyncRef = useRef<{ userId: string; json: string } | null>(null);
+  useEffect(() => {
+    const { remoteSettings } = store.getState();
+    if (authStatus !== "signed-in" || userId === null || !remoteSettings) {
+      settingsSyncRef.current = null; // sign-out: a later sign-in reconciles fresh
+      return;
+    }
+    let cancelled = false;
+    reconcileSettings(userId, store.getState().settings, remoteSettings)
+      .then((s) => {
+        if (cancelled) return;
+        store.setState({ settings: s });
+        settingsSyncRef.current = { userId, json: JSON.stringify(s) };
+      })
+      .catch(() => {
+        // swallow — a failed load leaves the in-memory (and local) settings as-is.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authStatus, userId, store]);
+
+  // Push an edit to the account's cloud row. Gated on settingsSyncRef so it never
+  // fires before the sign-in load (which would overwrite the row with pre-load
+  // settings) and never echoes the just-loaded value back as a redundant write.
+  useEffect(() => {
+    const { remoteSettings } = store.getState();
+    if (authStatus !== "signed-in" || userId === null || !remoteSettings)
+      return;
+    const guard = settingsSyncRef.current;
+    if (guard === null || guard.userId !== userId) return; // load not done yet
+    const json = JSON.stringify(settings);
+    if (guard.json === json) return; // unchanged since load / last push
+    settingsSyncRef.current = { userId, json };
+    void remoteSettings.save(userId, settings).catch(() => {});
+  }, [settings, authStatus, userId, store]);
 
   return (
     <AppStoreContext.Provider value={store}>

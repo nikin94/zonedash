@@ -12,9 +12,10 @@ import { MockCentralTransport } from "../ble/mock";
 import type { SessionSummary } from "../domain/session";
 import { useShallow } from "zustand/react/shallow";
 
-import { AppStateProvider, useAppStore } from "./AppState";
+import { AppStateProvider, type DrillSettings, useAppStore } from "./AppState";
 import { MockAuthProvider } from "./auth.mock";
 import { appendSession, loadHistory } from "./history";
+import type { RemoteSettingsStore } from "./settings";
 import type { RemoteHistoryStore } from "./sync";
 import { Button } from "../components/Button";
 import { HistoryPanel } from "../components/HistoryPanel";
@@ -48,6 +49,22 @@ class FakeRemote implements RemoteHistoryStore {
   }
 }
 
+class FakeRemoteSettings implements RemoteSettingsStore {
+  row: DrillSettings | null = null;
+  saves: DrillSettings[] = [];
+  seed(s: DrillSettings): this {
+    this.row = s;
+    return this;
+  }
+  async load(): Promise<DrillSettings | null> {
+    return this.row;
+  }
+  async save(_userId: string, s: DrillSettings): Promise<void> {
+    this.saves.push(s);
+    this.row = s;
+  }
+}
+
 // A consumer that surfaces auth status/error and drives sign-in/out. The
 // "record" button files a fresh finished session (id 9) through recordSession.
 const Probe = () => {
@@ -56,6 +73,8 @@ const Probe = () => {
     authUser,
     authError,
     lastSessionMode,
+    settings,
+    setSettings,
     signIn,
     signOut,
     recordSession,
@@ -65,6 +84,8 @@ const Probe = () => {
       authUser: s.authUser,
       authError: s.authError,
       lastSessionMode: s.lastSessionMode,
+      settings: s.settings,
+      setSettings: s.setSettings,
       signIn: s.signIn,
       signOut: s.signOut,
       recordSession: s.recordSession,
@@ -76,8 +97,14 @@ const Probe = () => {
       <Text testID="who">{authUser?.name ?? "-"}</Text>
       <Text testID="error">{authError ?? "-"}</Text>
       <Text testID="last-mode">{lastSessionMode ?? "-"}</Text>
+      <Text testID="delay">{settings.delayMs}</Text>
       <Button testID="in" label="in" onPress={signIn} />
       <Button testID="out" label="out" onPress={signOut} />
+      <Button
+        testID="set-delay"
+        label="set-delay"
+        onPress={() => setSettings({ ...settings, delayMs: 1500 })}
+      />
       <Button
         testID="record"
         label="rec"
@@ -95,12 +122,14 @@ const Probe = () => {
 const renderApp = async (
   auth: MockAuthProvider,
   remote?: RemoteHistoryStore,
+  remoteSettings?: RemoteSettingsStore,
 ) => {
   const r = render(
     <AppStateProvider
       transport={new MockCentralTransport()}
       auth={auth}
       remoteHistory={remote ?? null}
+      remoteSettings={remoteSettings ?? null}
     >
       <Probe />
     </AppStateProvider>,
@@ -281,4 +310,84 @@ test("recording a session remembers its mode for the History tab", async () => {
     fireEvent.press(screen.getByTestId("record-path"));
   });
   expect(screen.getByTestId("last-mode")).toHaveTextContent("path");
+});
+
+// ── Cloud settings sync (signed-in) ──────────────────────────────────────────
+
+// Sign-in adopts the account's saved settings — the coach's changed values
+// follow the account, so a fresh install / new device no longer resets to the
+// defaults.
+test("sign-in adopts the account's saved drill settings", async () => {
+  const remoteSettings = new FakeRemoteSettings().seed({
+    delayMs: 1500,
+    allowImmediateRepeat: true,
+  });
+  await renderApp(new MockAuthProvider(), undefined, remoteSettings);
+  expect(screen.getByTestId("delay")).toHaveTextContent("0"); // defaults before sign-in
+
+  await act(async () => {
+    fireEvent.press(screen.getByTestId("in"));
+  });
+  await waitFor(() =>
+    expect(screen.getByTestId("delay")).toHaveTextContent("1500"),
+  );
+});
+
+// A fresh account (no row yet) is SEEDED from the device's current settings on
+// sign-in — not reset to the defaults — so signing in never wipes a tweak.
+test("first sign-in seeds the cloud from the device's current settings", async () => {
+  const remoteSettings = new FakeRemoteSettings(); // empty — no row
+  await renderApp(new MockAuthProvider(), undefined, remoteSettings);
+
+  // Tweak while signed-out (local-only), then sign in with an empty account.
+  await act(async () => {
+    fireEvent.press(screen.getByTestId("set-delay"));
+  });
+  await act(async () => {
+    fireEvent.press(screen.getByTestId("in"));
+  });
+
+  await waitFor(() =>
+    expect(remoteSettings.row).toEqual({
+      delayMs: 1500,
+      allowImmediateRepeat: false,
+    }),
+  );
+  expect(screen.getByTestId("delay")).toHaveTextContent("1500"); // kept, not reset
+});
+
+// A settings edit WHILE signed in pushes to the account's cloud row right away
+// (best-effort), so it survives a reload and follows the account.
+test("editing settings while signed in pushes them to the cloud", async () => {
+  const remoteSettings = new FakeRemoteSettings().seed({
+    delayMs: 0,
+    allowImmediateRepeat: false,
+  });
+  await renderApp(new MockAuthProvider(), undefined, remoteSettings);
+  await act(async () => {
+    fireEvent.press(screen.getByTestId("in")); // sign in first (load runs)
+  });
+
+  await act(async () => {
+    fireEvent.press(screen.getByTestId("set-delay")); // change the delay
+  });
+  await waitFor(() =>
+    expect(remoteSettings.saves.at(-1)).toEqual({
+      delayMs: 1500,
+      allowImmediateRepeat: false,
+    }),
+  );
+});
+
+// Signed-out, a settings change never reaches the cloud — there is no account to
+// push to; it stays purely local (the prefs blob).
+test("editing settings while signed out never touches the cloud", async () => {
+  const remoteSettings = new FakeRemoteSettings();
+  await renderApp(new MockAuthProvider(), undefined, remoteSettings); // signed-out
+
+  await act(async () => {
+    fireEvent.press(screen.getByTestId("set-delay"));
+  });
+  expect(remoteSettings.saves).toEqual([]); // nothing pushed
+  expect(remoteSettings.row).toBeNull();
 });
