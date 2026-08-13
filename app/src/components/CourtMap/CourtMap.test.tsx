@@ -28,6 +28,27 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
+// A reaction-time callout hangs off its target with the hit time; once it fades
+// it reports back so the owner prunes it.
+test("renders reaction-time callouts and prunes them via onCalloutDone", () => {
+  const onCalloutDone = jest.fn();
+  render(
+    <CourtMap
+      spots={allOff}
+      callouts={[{ id: 7, spot: 0, reactionMs: 420 }]}
+      onCalloutDone={onCalloutDone}
+    />,
+  );
+  expect(screen.getByTestId("reaction-callout")).toBeTruthy();
+  expect(screen.getByText("0.42s")).toBeTruthy();
+  expect(onCalloutDone).not.toHaveBeenCalled();
+
+  act(() => {
+    jest.advanceTimersByTime(2000); // let the fade run out
+  });
+  expect(onCalloutDone).toHaveBeenCalledWith(7); // owner told to drop this one
+});
+
 test("badges render an order label only on the spots that have one", () => {
   const badges = Array.from({ length: 8 }, () => null as string | null);
   badges[2] = "1";
