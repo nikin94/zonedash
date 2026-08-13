@@ -40,6 +40,8 @@ export const DrillScreen = () => {
     pairedSpots,
     settings,
     setSettings,
+    playerName,
+    setPlayerName,
     courtRotation,
     rotateCourt,
     drillView,
@@ -51,6 +53,8 @@ export const DrillScreen = () => {
       pairedSpots: s.pairedSpots,
       settings: s.settings,
       setSettings: s.setSettings,
+      playerName: s.playerName,
+      setPlayerName: s.setPlayerName,
       courtRotation: s.courtRotation,
       rotateCourt: s.rotateCourt,
       drillView: s.drillView,
@@ -70,6 +74,8 @@ export const DrillScreen = () => {
           pairedSpots={pairedSpots}
           settings={settings}
           onSettingsChange={setSettings}
+          playerName={playerName}
+          onPlayerNameChange={setPlayerName}
           rotation={courtRotation}
           onRotate={rotateCourt}
           statusControl={<CourtStatusControl />}

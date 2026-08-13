@@ -1,4 +1,4 @@
-import { ScrollView, StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { type DrillSettings } from "../../state/AppState";
@@ -44,6 +44,8 @@ export const DrillSetupPage = ({
   setCount,
   durationMs,
   setDurationMs,
+  playerName,
+  onPlayerNameChange,
   settings,
   onSettingsChange,
 }: {
@@ -59,6 +61,9 @@ export const DrillSetupPage = ({
   setCount: (n: number) => void;
   durationMs: number;
   setDurationMs: (ms: number) => void;
+  /** The sticky runner name attributed to finished sessions. Empty = unset. */
+  playerName: string;
+  onPlayerNameChange: (next: string) => void;
   /** The session-wide drill settings (delay + immediate repeat), edited here now
    *  that the Settings tab is gone — the History list took its place. */
   settings: DrillSettings;
@@ -80,6 +85,25 @@ export const DrillSetupPage = ({
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
+        {/* The sticky runner name — full-width so a long name fits. Tagged onto
+            every finished session for per-athlete attribution; optional. */}
+        <View style={styles.field}>
+          <AppText color={colors.textSecondary} style={styles.paramLabel}>
+            Player
+          </AppText>
+          <TextInput
+            testID="player-name-input"
+            value={playerName}
+            onChangeText={onPlayerNameChange}
+            placeholder="Optional — name the runner"
+            placeholderTextColor={colors.textMuted}
+            maxLength={40}
+            returnKeyType="done"
+            accessibilityLabel="Player name"
+            style={styles.playerInput}
+          />
+        </View>
+
         <View style={styles.row}>
           <View style={styles.modeLabel}>
             <AppText color={colors.textSecondary} style={styles.paramLabel}>
@@ -223,6 +247,23 @@ const styles = StyleSheet.create({
   },
   paramLabel: {
     flexShrink: 1,
+  },
+  // The Player field: a stacked label + full-width input, so a long runner name
+  // fits (unlike the right-aligned numeric pills).
+  field: {
+    alignSelf: "stretch",
+    gap: 6,
+  },
+  playerInput: {
+    alignSelf: "stretch",
+    height: 40,
+    paddingHorizontal: 12,
+    paddingVertical: 0,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    fontSize: 16,
+    color: colors.text,
   },
   infoButton: {
     alignItems: "center",

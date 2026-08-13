@@ -37,20 +37,28 @@ export const COUNT_OPTIONS = Array.from({ length: 99 }, (_, i) => ({
 
 /** Compact one-line summary of the current setup, shown in a muted caption
  *  under the Start button so the operator sees what will run without opening the
- *  setup page — e.g. "Random · 10 hits", "Random · 30s", "Path", "Live". */
+ *  setup page — e.g. "Random · 10 hits", "Random · 30s", "Path", "Live". A set
+ *  `playerName` leads (name · mode · count), so a coach reads who the run is for
+ *  at a glance; an empty/blank name is dropped, leaving just mode · count. */
 export const drillSummary = (
   uiMode: UiMode,
   stopBy: StopBy,
   count: number,
   durationMs: number,
+  playerName?: string,
 ): string => {
-  if (uiMode === "path") return "Path";
-  if (uiMode === "live") return "Live";
-  const tail =
-    stopBy === "time"
-      ? formatSeconds(durationMs, 0) // whole seconds, slitno ("30s")
-      : `${count} ${count === 1 ? "hit" : "hits"}`;
-  return `Random · ${tail}`;
+  const modeAndTail =
+    uiMode === "path"
+      ? "Path"
+      : uiMode === "live"
+        ? "Live"
+        : `Random · ${
+            stopBy === "time"
+              ? formatSeconds(durationMs, 0) // whole seconds, slitno ("30s")
+              : `${count} ${count === 1 ? "hit" : "hits"}`
+          }`;
+  const name = playerName?.trim();
+  return name ? `${name} · ${modeAndTail}` : modeAndTail;
 };
 
 /** Inverse of the wire mode: the UI mode + stop-by a wire config resolves back

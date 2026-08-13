@@ -6,6 +6,7 @@ import { MockCentralTransport } from "../ble/mock";
 import { Button } from "../components/Button";
 import { AppStateProvider, useAppStore } from "./AppState";
 import { MockAuthProvider } from "./auth.mock";
+import { loadPrefs, savePrefs } from "./prefs";
 
 // The migration's whole point: selectors subscribe to ONE slice, so an
 // unrelated change no longer re-renders a component. These probes count their
@@ -68,6 +69,43 @@ test("a selector subscribes to one slice — an unrelated change doesn't re-rend
   expect(screen.getByTestId("rot")).toHaveTextContent("1");
   // …but the connection reader, which selects a different slice, did NOT.
   expect(connectionRenders).toBe(connBaseline);
+});
+
+// The sticky player name is durable: a stored name hydrates into the store on
+// mount, and an edit is written back to prefs — so it survives a restart, like
+// the court orientation.
+test("the player name hydrates from prefs and an edit persists back", async () => {
+  const PlayerProbe = () => {
+    const name = useAppStore((s) => s.playerName);
+    return <Text testID="player">{name || "-"}</Text>;
+  };
+  const SetPlayer = () => {
+    const set = useAppStore((s) => s.setPlayerName);
+    return <Button testID="set" label="set" onPress={() => set("Bob")} />;
+  };
+
+  await savePrefs({ playerName: "Alice" });
+  render(
+    <AppStateProvider
+      transport={new MockCentralTransport()}
+      auth={new MockAuthProvider()}
+      remoteHistory={null}
+    >
+      <PlayerProbe />
+      <SetPlayer />
+    </AppStateProvider>,
+  );
+  // Hydrated from the stored prefs.
+  await act(async () => {});
+  expect(screen.getByTestId("player")).toHaveTextContent("Alice");
+
+  // An edit persists back to prefs (durable across a restart).
+  await act(async () => {
+    fireEvent.press(screen.getByTestId("set"));
+  });
+  expect(screen.getByTestId("player")).toHaveTextContent("Bob");
+  await act(async () => {});
+  expect((await loadPrefs()).playerName).toBe("Bob");
 });
 
 test("selecting a stable seam (transport) never re-renders on a state change", async () => {

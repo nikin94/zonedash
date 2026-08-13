@@ -15,6 +15,7 @@ import { Button } from "../Button";
 import { GearIcon } from "../Icons";
 import { PathChipStrip, type PathChipStripHandle } from "./PathChipStrip";
 import { ModeInfoModal } from "./ModeInfoModal";
+import { SessionResultModal } from "./SessionResultModal";
 import { DrillSetupPage } from "./DrillSetupPage";
 import {
   MODES,
@@ -36,7 +37,6 @@ import {
 import { formatStepBadge } from "../../helpers/pathBadge";
 import { formatSeconds } from "../../helpers/time";
 import { type DrillSettings } from "../../state/AppState";
-import { showToast } from "../../state/toast";
 import {
   TAB_BAR_DISC_RISE,
   tabBarClearance,
@@ -54,10 +54,6 @@ const fmtSec = (ms: number) => formatSeconds(ms);
 // Fixed footprints for the court-centre block, so idle → running → done never
 // shifts the layout.
 const TEXT_SLOT_H = 40; // fixed status area: room for the 2-line running status
-// How long the "session complete" toast stays up (ms). Its own named knob —
-// bump it here to change just this popup, independent of the TOAST_DEFAULT_MS
-// every other toast inherits.
-const SESSION_DONE_TOAST_MS = 3000;
 // Breathing room between the last scrolled item and the tab bar's centre
 // (Drill) disc, on top of the bar clearance (tabBarClearance + TAB_BAR_DISC_RISE).
 const ACTION_BAR_GAP = 12;
@@ -105,6 +101,8 @@ export const DrillPanel = ({
   pairedSpots,
   settings,
   onSettingsChange,
+  playerName,
+  onPlayerNameChange,
   rotation,
   onRotate,
   statusControl,
@@ -117,6 +115,10 @@ export const DrillPanel = ({
    *  repeat) — driven from the drill setup page now that the Settings tab is
    *  gone. */
   onSettingsChange: (next: DrillSettings) => void;
+  /** The sticky runner name attributed to finished sessions, edited on the
+   *  drill-setup page. Empty string = unset. */
+  playerName: string;
+  onPlayerNameChange: (next: string) => void;
   /** Court view orientation + its rotate control, threaded to the map (see CourtMap). */
   rotation?: number;
   onRotate?: () => void;
@@ -194,6 +196,8 @@ export const DrillPanel = ({
   const [error, setError] = useState<string | null>(null);
   // The drill-modes explainer (opened from the info icon by the Mode selector).
   const [modeInfoOpen, setModeInfoOpen] = useState(false);
+  // The session-complete popup, opened once a finished run's records land.
+  const [resultOpen, setResultOpen] = useState(false);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     const unsub = transport.onStatus((e) => {
@@ -396,26 +400,16 @@ export const DrillPanel = ({
         endedAt: Date.now(),
         mode: runMode, // the mode that actually ran (stable through done)
         numPositions: pairedSpots.length,
+        // Tag the session with the sticky runner name, when set.
+        playerName: playerName.trim() || undefined,
       }),
     );
-  }, [done, records, runMode, pairedSpots, onSessionComplete]);
-
-  // Announce a finished session through the header toast — the completion signal
-  // no longer lives as a line under the court, so it surfaces even if the
-  // operator has navigated to another tab. Fired exactly once per done
-  // transition (a prevDone ref), so a re-render or a mode toggle while already
-  // done can't re-fire it. `showToast` writes the toast store only, so this
-  // never re-renders the panel.
-  const prevDone = useRef(done);
-  useEffect(() => {
-    if (done && !prevDone.current) {
-      showToast("Session complete", {
-        tone: "success",
-        durationMs: SESSION_DONE_TOAST_MS,
-      });
-    }
-    prevDone.current = done;
-  }, [done]);
+    // Announce completion with the results popup (the summary a coach reads at a
+    // glance). It opens exactly when the session's records land — once per
+    // records object, same guard as the log above — so a re-render can't re-open
+    // it and a 0-attempt abort (no records here) shows nothing.
+    setResultOpen(true);
+  }, [done, records, runMode, pairedSpots, playerName, onSessionComplete]);
 
   // Secondary status line during a run. Auto modes narrate the athlete's
   // reaction; live mode narrates the operator's turn: tap → armed → time.
@@ -502,7 +496,7 @@ export const DrillPanel = ({
                       disabled={!canStart}
                       onPress={start}
                       testID="primary-action"
-                      accessibilityLabel={`Start — ${drillSummary(uiMode, stopBy, count, durationMs)}`}
+                      accessibilityLabel={`Start — ${drillSummary(uiMode, stopBy, count, durationMs, playerName)}`}
                       style={styles.actionButton}
                     >
                       <View style={styles.startContent}>
@@ -521,7 +515,13 @@ export const DrillPanel = ({
                           testID="mode-summary"
                           style={styles.startSummary}
                         >
-                          {drillSummary(uiMode, stopBy, count, durationMs)}
+                          {drillSummary(
+                            uiMode,
+                            stopBy,
+                            count,
+                            durationMs,
+                            playerName,
+                          )}
                         </AppText>
                       </View>
                     </Button>
@@ -705,6 +705,19 @@ export const DrillPanel = ({
                 </View>
               )}
             </ScrollView>
+
+            {/* The session-complete popup — the run's headline numbers (runner
+                name when set, hits, total, average). Opened on the drill surface
+                once a finished run's records land; the per-attempt detail stays
+                in the panel above. */}
+            <SessionResultModal
+              visible={resultOpen}
+              onDismiss={() => setResultOpen(false)}
+              playerName={playerName.trim() || null}
+              attempts={attempts.length}
+              totalMs={totalMs}
+              avgMs={avgMs}
+            />
           </>
         )}
       </DrillNav.Screen>
@@ -736,6 +749,8 @@ export const DrillPanel = ({
               setCount={setCount}
               durationMs={durationMs}
               setDurationMs={setDurationMs}
+              playerName={playerName}
+              onPlayerNameChange={onPlayerNameChange}
               settings={settings}
               onSettingsChange={onSettingsChange}
             />

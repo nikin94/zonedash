@@ -19,6 +19,9 @@ const KEY = "zonedash:prefs:v1";
 export interface StoredPrefs {
   settings?: DrillSettings;
   courtRotation?: number;
+  /** The sticky player/runner name attributed to sessions — durable so it
+   *  outlives a restart and every run is tagged with whoever the coach set. */
+  playerName?: string;
   /** Whether the login gate has been passed (signed in or "continue offline") —
    *  so the gate stays down across relaunches, until an explicit sign-out
    *  reopens it. */

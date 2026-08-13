@@ -10,3 +10,21 @@ test("drillSummary reads the current setup for the Start caption", () => {
   expect(drillSummary("path", "count", 10, 30000)).toBe("Path");
   expect(drillSummary("live", "count", 10, 30000)).toBe("Live");
 });
+
+test("a set player name leads the caption: name · mode · count", () => {
+  // Name first, then mode, then the count — all joined by the central dot.
+  expect(drillSummary("random", "count", 10, 30000, "Alex")).toBe(
+    "Alex · Random · 10 hits",
+  );
+  expect(drillSummary("random", "time", 10, 45000, "Alex")).toBe(
+    "Alex · Random · 45s",
+  );
+  expect(drillSummary("path", "count", 10, 30000, "Alex")).toBe("Alex · Path");
+  // A blank / whitespace-only name is dropped — just mode · count remains.
+  expect(drillSummary("random", "count", 10, 30000, "  ")).toBe(
+    "Random · 10 hits",
+  );
+  expect(drillSummary("random", "count", 10, 30000, undefined)).toBe(
+    "Random · 10 hits",
+  );
+});

@@ -19,7 +19,7 @@ import {
 import { MockCentralTransport } from "../../ble/mock";
 import type { DrillConfig } from "../../ble/transport";
 import { DEFAULT_SETTINGS, type DrillSettings } from "../../state/AppState";
-import { dismissToast, getToast } from "../../state/toast";
+import { dismissToast } from "../../state/toast";
 import { colors } from "../../theme";
 import { DrillPanel } from "./DrillPanel";
 
@@ -59,13 +59,20 @@ const connectedTransport = async () => {
 // helpers just need a no-op so the required prop is satisfied.
 const noop = () => {};
 
-const panel = (t: MockCentralTransport, paired = PAIRED, settings = SETTINGS) =>
+const panel = (
+  t: MockCentralTransport,
+  paired = PAIRED,
+  settings = SETTINGS,
+  playerName = "",
+) =>
   render(
     <DrillPanel
       transport={t}
       pairedSpots={paired}
       settings={settings}
       onSettingsChange={noop}
+      playerName={playerName}
+      onPlayerNameChange={noop}
     />,
     // DrillPanel hosts a nested native-stack (the drill surface + the pushed
     // setup route), so it needs a NavigationContainer ancestor. The wrapper
@@ -332,6 +339,8 @@ test("a re-pair filters the authored path — nothing translates to -1", async (
       pairedSpots={PAIRED}
       settings={SETTINGS}
       onSettingsChange={noop}
+      playerName=""
+      onPlayerNameChange={noop}
     />,
     { wrapper: NavigationContainer },
   );
@@ -347,6 +356,8 @@ test("a re-pair filters the authored path — nothing translates to -1", async (
       pairedSpots={[0, 7]}
       settings={SETTINGS}
       onSettingsChange={noop}
+      playerName=""
+      onPlayerNameChange={noop}
     />,
   );
   expect(pathCodes()).toEqual(["FL"]);
@@ -385,8 +396,15 @@ test("a run arms spots, flashes hits, and ends in a hits-only summary", async ()
   // the numbers live below the court, not on it.
   await act(() => jest.runAllTimersAsync());
   expect(screen.getByText("Start")).toBeTruthy(); // constant label, even when done
-  // Completion is announced by the header toast now, not a line under the court.
-  expect(getToast()?.message).toBe("Session complete");
+  // Completion is announced by the results popup now (not a toast): it carries
+  // the headline numbers — hits, total, average. Dismiss it before reading the
+  // panel below, so its copies of the numbers don't double the panel's counts.
+  expect(screen.getByTestId("session-result")).toBeTruthy();
+  expect(screen.getByTestId("result-hits")).toHaveTextContent("2");
+  expect(screen.getByTestId("result-total")).toHaveTextContent("0.04s");
+  expect(screen.getByTestId("result-average")).toHaveTextContent("0.02s");
+  fireEvent.press(screen.getByTestId("session-result-done"));
+
   expect(screen.getByTestId("stats-panel")).toBeTruthy();
   expect(screen.getAllByText("0.02s")).toHaveLength(3); // 2 attempts + average
   expect(screen.getByText("0.04s")).toBeTruthy(); // total time
@@ -515,6 +533,8 @@ test("a layout change after a run clears the stale results summary", async () =>
       pairedSpots={PAIRED}
       settings={DEFAULT_SETTINGS}
       onSettingsChange={noop}
+      playerName=""
+      onPlayerNameChange={noop}
     />,
     { wrapper: NavigationContainer },
   );
@@ -533,6 +553,8 @@ test("a layout change after a run clears the stale results summary", async () =>
       pairedSpots={[1, 2, 3]}
       settings={DEFAULT_SETTINGS}
       onSettingsChange={noop}
+      playerName=""
+      onPlayerNameChange={noop}
     />,
   );
   expect(screen.queryByTestId("stats-panel")).toBeNull();
@@ -547,6 +569,8 @@ test("a finished run reports a summary to onSessionComplete exactly once", async
       pairedSpots={PAIRED}
       settings={SETTINGS}
       onSettingsChange={noop}
+      playerName=""
+      onPlayerNameChange={noop}
       onSessionComplete={onSessionComplete}
     />,
     { wrapper: NavigationContainer },
@@ -559,7 +583,7 @@ test("a finished run reports a summary to onSessionComplete exactly once", async
   fireEvent.press(screen.getByText("Start"));
   await act(() => jest.runAllTimersAsync());
 
-  expect(getToast()?.message).toBe("Session complete"); // completion → header toast
+  expect(screen.getByTestId("session-result")).toBeTruthy(); // completion → popup
   expect(onSessionComplete).toHaveBeenCalledTimes(1);
   expect(onSessionComplete.mock.calls[0][0]).toMatchObject({
     mode: "path",
@@ -567,6 +591,40 @@ test("a finished run reports a summary to onSessionComplete exactly once", async
     attempts: 2,
     avgMs: 20, // both hits at the 20 ms tap delay
     bestMs: 20,
+  });
+});
+
+// A set player name headlines the completion popup AND rides the logged summary,
+// so a finished run is attributed to the runner both on screen and in history.
+test("a set player name headlines the popup and tags the session summary", async () => {
+  const t = await connectedTransport();
+  const onSessionComplete = jest.fn();
+  render(
+    <DrillPanel
+      transport={t}
+      pairedSpots={PAIRED}
+      settings={SETTINGS}
+      onSettingsChange={noop}
+      playerName="Alice"
+      onPlayerNameChange={noop}
+      onSessionComplete={onSessionComplete}
+    />,
+    { wrapper: NavigationContainer },
+  );
+
+  selectMode("Path");
+  fireEvent.press(screen.getByTestId("spot-6-available"));
+  fireEvent.press(screen.getByTestId("spot-0-available"));
+  fireEvent.press(screen.getByText("Start"));
+  await act(() => jest.runAllTimersAsync());
+
+  // The popup headlines the runner's name.
+  expect(screen.getByTestId("session-result-player")).toHaveTextContent(
+    "Alice",
+  );
+  // …and the logged summary carries it for the history row.
+  expect(onSessionComplete.mock.calls[0][0]).toMatchObject({
+    playerName: "Alice",
   });
 });
 
@@ -579,6 +637,8 @@ test("an aborted run with no attempts is not logged", async () => {
       pairedSpots={PAIRED}
       settings={SETTINGS}
       onSettingsChange={noop}
+      playerName=""
+      onPlayerNameChange={noop}
       onSessionComplete={onSessionComplete}
     />,
     { wrapper: NavigationContainer },
@@ -846,6 +906,17 @@ test("idle: a mode caption under Start names the current setup", async () => {
   // Switch to Path on the setup page → the caption follows.
   selectMode("Path");
   expect(screen.getByTestId("mode-summary")).toHaveTextContent("Path");
+});
+
+// A set player name LEADS the Start caption — name · mode · count — so a coach
+// reads who the run is for without opening the setup page.
+test("idle: a set player name leads the Start caption before mode and count", async () => {
+  const t = await connectedTransport();
+  panel(t, PAIRED, SETTINGS, "Alex");
+
+  expect(screen.getByTestId("mode-summary")).toHaveTextContent(
+    "Alex · Random · 10 hits",
+  );
 });
 
 // The gear is an outline square beside the full-width Start: a white fill with a
