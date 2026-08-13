@@ -8,6 +8,20 @@ import { SpotIcon } from "./SpotIcon";
 
 const allOff = Array.from({ length: 8 }, () => "off" as SpotVisual);
 
+// Every spot draws the one target look (the elevated puck) — the restyle picked
+// its winner, so all 8 spots render it, no per-spot variance — with the thick
+// 2.5 px stroke carried over from the hollow variant.
+test("every target renders the elevated-puck look with the thick stroke", () => {
+  render(
+    <CourtMap
+      spots={Array.from({ length: 8 }, () => "available" as SpotVisual)}
+    />,
+  );
+  const pucks = screen.getAllByTestId("dot-puck");
+  expect(pucks).toHaveLength(8);
+  expect(StyleSheet.flatten(pucks[0].props.style).borderWidth).toBe(2.5);
+});
+
 beforeEach(() => jest.useFakeTimers());
 afterEach(() => {
   jest.useRealTimers();
