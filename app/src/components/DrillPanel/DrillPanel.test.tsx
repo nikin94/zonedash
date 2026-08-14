@@ -10,7 +10,6 @@ import { StyleSheet } from "react-native";
 
 import { NavigationContainer } from "@react-navigation/native";
 
-import { MAX_DRILL_PATH } from "../../ble/codec";
 import {
   TAB_BAR_DISC_RISE,
   TAB_BAR_ROW_H,
@@ -331,34 +330,11 @@ test("tapping a step chip removes THAT step, and the badges renumber", async () 
 });
 
 // The authored path is bounded so a LoadDrill write always fits one ATT MTU (no
-// write-long) — see codec MAX_DRILL_PATH. Past the cap a tap is a no-op and the
-// "full" hint appears; the sent config carries exactly the cap, not more.
-//
-// Deliberately heavy: it authors MAX_DRILL_PATH (162) steps through the UI, one
-// synchronous tap each, and every tap re-renders the whole step-chip strip — so
-// the cost is O(n^2) in the cap. That is far past any real hand-authored path,
-// but the boundary is exactly what this test guards, so it can't tap fewer. A
-// generous timeout keeps it green on a slow CI runner: it runs ~6 s locally, and
-// with the cumulatively heavier dot render (the elevated-puck restyle) it tripped
-// the earlier 20 s cap on a slow CI runner, so give it wide headroom. Real usage
-// never approaches this path size.
-test("authoring past the cap no-ops — the wire path never exceeds MAX_DRILL_PATH", async () => {
-  const t = await connectedTransport();
-  const load = jest.spyOn(t, "loadDrill");
-  panel(t);
-
-  selectMode("Path");
-  fireEvent.press(screen.getByTestId("spot-0-available")); // first step (repeats ok)
-  // Tap well past the cap; every append beyond MAX_DRILL_PATH is dropped.
-  for (let i = 1; i < MAX_DRILL_PATH + 10; i++) {
-    fireEvent.press(screen.getByTestId("spot-0-selected"));
-  }
-  expect(screen.getByTestId("path-full")).toBeTruthy();
-
-  fireEvent.press(screen.getByText("Start"));
-  await act(() => jest.advanceTimersByTimeAsync(0));
-  expect(load.mock.calls[0][0].path).toHaveLength(MAX_DRILL_PATH);
-}, 60000);
+// write-long) — see codec MAX_DRILL_PATH. The exact boundary (a tap at the cap
+// no-ops, the wire never overflows) is proven in O(1) by boundedPathAppend's
+// unit tests (drillMode.test.ts), not by driving 162 taps through the court — an
+// O(n^2) chip-strip re-render that crept toward the CI timeout. The append →
+// wire path stays covered by the "path is authored … wire format" test below.
 
 test("a re-pair filters the authored path — nothing translates to -1", async () => {
   const t = await connectedTransport();

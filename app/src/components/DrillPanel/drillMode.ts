@@ -72,3 +72,17 @@ export const uiFromWire = (
   if (mode === "live") return { uiMode: "live", stopBy: "count" };
   return { uiMode: "random", stopBy: "count" };
 };
+
+/**
+ * Append a step to a Path sequence, bounded to `cap`. The Path can't exceed
+ * MAX_DRILL_PATH — a LoadDrill write has to fit one ATT MTU (ble/codec) — so a
+ * tap past the cap must no-op rather than overflow the wire. Pure so the exact
+ * boundary is unit-tested cheaply, instead of driving the cap through hundreds
+ * of UI taps (an O(n²) chip-strip re-render). Returns the SAME array reference
+ * when the cap is hit, so a bounded append is a no-op re-render for the caller.
+ */
+export const boundedPathAppend = (
+  path: number[],
+  spot: number,
+  cap: number,
+): number[] => (path.length >= cap ? path : [...path, spot]);

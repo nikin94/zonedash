@@ -20,6 +20,7 @@ import { DrillSetupPage } from "./DrillSetupPage";
 import {
   MODES,
   MODE_DESC,
+  boundedPathAppend,
   drillSummary,
   uiFromWire,
   type StopBy,
@@ -297,8 +298,8 @@ export const DrillPanel = ({
     // Bound the path so a LoadDrill write always fits one ATT MTU (see
     // MAX_DRILL_PATH). The cap sits far above any real drill, so a tap only
     // no-ops in the pathological case — the hint below tells the operator why.
-    if (path.length >= MAX_DRILL_PATH) return;
-    setPath([...path, spot]);
+    // boundedPathAppend returns the SAME array at the cap, so this is a no-op.
+    setPath((p) => boundedPathAppend(p, spot, MAX_DRILL_PATH));
   };
 
   const liveRunning = running && uiMode === "live";
