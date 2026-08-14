@@ -1,10 +1,12 @@
 import { ScrollView, StyleSheet } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useShallow } from "zustand/react/shallow";
 
 import { AccountSection } from "../components/AccountSection";
 import { AppText } from "../components/AppText";
 import { ScreenWrapper } from "../components/ScreenWrapper";
+import { tabBarClearance } from "../navigation/GlassTabBar";
 import { useAppStore } from "../state/AppState";
 import { colors } from "../theme";
 
@@ -17,6 +19,7 @@ import { colors } from "../theme";
  * so this screen is sign-in only now.
  */
 export const AccountScreen = () => {
+  const insets = useSafeAreaInsets();
   const { authStatus, authUser, authError, signIn, signOut } = useAppStore(
     useShallow((s) => ({
       authStatus: s.authStatus,
@@ -30,8 +33,14 @@ export const AccountScreen = () => {
   return (
     <ScreenWrapper title="Account">
       <ScrollView
+        testID="account-scroll"
         style={styles.scroll}
-        contentContainerStyle={styles.content}
+        // Clear the floating glass tab bar with the shared clearance (bar row +
+        // safe-area gap), same source every screen uses — no magic constant.
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: tabBarClearance(insets.bottom) },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         <AccountSection
@@ -60,7 +69,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingBottom: 120, // clear the floating glass tab bar
     gap: 16,
   },
   error: {

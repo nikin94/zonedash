@@ -11,6 +11,7 @@ import { StyleSheet } from "react-native";
 import App from "./App";
 import type { SessionSummary } from "./src/domain/session";
 import { COURT_ACTION_GAP, COURT_STRIP_H } from "./src/helpers/court";
+import { tabBarClearance } from "./src/navigation/GlassTabBar";
 import { appendSession } from "./src/state/history";
 import { loadPrefs, savePrefs } from "./src/state/prefs";
 
@@ -462,6 +463,24 @@ test("the Account tab signs in, and a sign-out returns to the login gate", async
   });
   expect(screen.getByTestId("login-screen")).toBeTruthy();
   expect(screen.queryByTestId("tab-account")).toBeNull(); // the app shell is gone
+});
+
+// The Account list clears the floating tab bar with the SHARED clearance (bar
+// row + safe-area gap), not a hand-tuned magic constant — so a bar-geometry
+// change flows through one source instead of drifting per screen. In tests the
+// bottom inset is 0, so the pad is exactly tabBarClearance(0).
+test("the Account list clears the tab bar via the shared clearance, not a magic pad", async () => {
+  await renderApp();
+  fireEvent.press(screen.getByTestId("tab-account"));
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+
+  const content = StyleSheet.flatten(
+    screen.getByTestId("account-scroll").props.contentContainerStyle,
+  );
+  expect(content.paddingBottom).toBe(tabBarClearance(0));
+  expect(content.paddingBottom).not.toBe(120); // not the old magic constant
 });
 
 // Navigation must never touch the BLE link: the transport lives above the
