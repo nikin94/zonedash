@@ -20,6 +20,7 @@ import {
 } from "./AppState";
 import { MockAuthProvider } from "./auth.mock";
 import { appendSession, loadHistory } from "./history";
+import { loadPrefs } from "./prefs";
 import type { RemoteSettingsStore } from "./settings";
 import type { RemoteHistoryStore } from "./sync";
 import { Button } from "../components/Button";
@@ -390,4 +391,75 @@ test("editing settings while signed out never touches the cloud", async () => {
   });
   expect(remoteSettings.saves).toEqual([]); // nothing pushed
   expect(remoteSettings.row).toBeNull();
+});
+
+// ── Per-identity settings isolation (the leak history is careful to avoid) ────
+
+// An account's settings live in the CLOUD, not on the shared device: signing in
+// adopts them, but sign-out restores the device's OWN anonymous settings, and
+// the account's values never overwrite the anonymous prefs blob. So account A
+// tweaking settings on a club device never changes what the next anonymous user
+// (or a fresh sign-in) sees — the same per-identity isolation history has.
+test("an account's settings never persist onto the device — sign-out restores the anonymous ones", async () => {
+  const remoteSettings = new FakeRemoteSettings().seed({
+    ...DEFAULT_SETTINGS,
+    delayMs: 300, // the account's own delay
+  });
+  await renderApp(new MockAuthProvider(), undefined, remoteSettings);
+
+  // The device's anonymous user sets their own delay (1500).
+  await act(async () => {
+    fireEvent.press(screen.getByTestId("set-delay"));
+  });
+  expect(screen.getByTestId("delay")).toHaveTextContent("1500");
+
+  // Sign in → the account's settings (300) are adopted…
+  await act(async () => {
+    fireEvent.press(screen.getByTestId("in"));
+  });
+  await waitFor(() =>
+    expect(screen.getByTestId("delay")).toHaveTextContent("300"),
+  );
+  // …but the anonymous prefs blob is untouched — it still holds 1500, not 300.
+  await waitFor(async () =>
+    expect((await loadPrefs()).settings?.delayMs).toBe(1500),
+  );
+
+  // Sign out → the device's anonymous settings (1500) come back, NOT the
+  // account's 300. No cross-identity leak onto the shared device.
+  await act(async () => {
+    fireEvent.press(screen.getByTestId("out"));
+  });
+  expect(screen.getByTestId("delay")).toHaveTextContent("1500");
+  expect((await loadPrefs()).settings?.delayMs).toBe(1500);
+});
+
+// A settings edit made WHILE signed in follows the account (cloud) but never
+// rewrites the device's anonymous prefs, so it can't survive a sign-out onto the
+// shared device.
+test("a signed-in edit follows the account, not the device's anonymous prefs", async () => {
+  const remoteSettings = new FakeRemoteSettings().seed({ ...DEFAULT_SETTINGS });
+  await renderApp(new MockAuthProvider(), undefined, remoteSettings);
+  await act(async () => {
+    fireEvent.press(screen.getByTestId("in")); // sign in (anonymous delay is 0)
+  });
+
+  // Edit while signed in → the cloud row gets it…
+  await act(async () => {
+    fireEvent.press(screen.getByTestId("set-delay"));
+  });
+  await waitFor(() =>
+    expect(remoteSettings.saves.at(-1)).toEqual({
+      ...DEFAULT_SETTINGS,
+      delayMs: 1500,
+    }),
+  );
+  // …but the device's anonymous prefs stay at the default (0), untouched.
+  expect((await loadPrefs()).settings?.delayMs).toBe(0);
+
+  // Sign out → the device returns to its anonymous default, not the edit.
+  await act(async () => {
+    fireEvent.press(screen.getByTestId("out"));
+  });
+  expect(screen.getByTestId("delay")).toHaveTextContent("0");
 });
