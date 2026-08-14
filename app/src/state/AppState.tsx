@@ -158,6 +158,14 @@ interface AppStoreInternal extends AppState {
   auth: AuthProvider;
   remoteHistory: RemoteHistoryStore | null;
   remoteSettings: RemoteSettingsStore | null;
+  /** The device's ANONYMOUS drill settings — the settings bucket scoped to the
+   *  signed-out identity, mirroring history's per-identity isolation. While
+   *  signed out it tracks `settings` (they're the same thing); a signed-in edit
+   *  changes only `settings`, holding this snapshot back so sign-out can restore
+   *  it and the account's tweaks never persist onto a shared device. This — NOT
+   *  `settings` — is what the device-local prefs blob stores, so the anonymous
+   *  bucket is what survives a restart. */
+  _anonSettings: DrillSettings;
   /** Adopt the loaded prefs (settings + court orientation), then mark hydrated. */
   _adoptPrefs: (p: Awaited<ReturnType<typeof loadPrefs>>) => void;
   /** Fold a transport Status event into connection / paired layout / handoff. */
@@ -208,6 +216,7 @@ export const createAppStore = ({
     connection: "disconnected",
     connectionError: null,
     settings: DEFAULT_SETTINGS,
+    _anonSettings: DEFAULT_SETTINGS,
     playerName: "",
     pairedSpots: [],
     courtRotation: 0,
@@ -222,7 +231,15 @@ export const createAppStore = ({
     historyVersion: 0,
     hydrated: false,
 
-    setSettings: (next) => set({ settings: next }),
+    setSettings: (next) =>
+      set((s) => ({
+        settings: next,
+        // Signed out, the live settings ARE the anonymous bucket — keep the
+        // snapshot in step. Signed in, only the account's settings change; the
+        // anonymous snapshot is held back so sign-out can restore it (and the
+        // account's tweak never leaks onto a shared device's anonymous prefs).
+        ...(s.authStatus === "signed-in" ? {} : { _anonSettings: next }),
+      })),
     setPlayerName: (next) => set({ playerName: next }),
     rotateCourt: () =>
       set((s) => ({ courtRotation: (s.courtRotation + 1) % 4 })),
@@ -263,24 +280,31 @@ export const createAppStore = ({
     skipAuthGate: () => set({ authGatePassed: true }),
 
     _adoptPrefs: (p) =>
-      set((s) => ({
+      set((s) => {
         // Merge over the defaults so a prefs blob written before mode/stopBy/
         // count/durationMs existed backfills the new fields (no undefined config
-        // on an upgrade), while a stored value still wins field by field.
-        settings: p.settings
+        // on an upgrade), while a stored value still wins field by field. The
+        // stored settings ARE the anonymous bucket (the account's live in the
+        // cloud), so both the live settings and the anonymous snapshot adopt it;
+        // a sign-in reconcile then overwrites `settings` alone.
+        const adoptedSettings = p.settings
           ? { ...DEFAULT_SETTINGS, ...p.settings }
-          : s.settings,
-        playerName:
-          typeof p.playerName === "string" ? p.playerName : s.playerName,
-        courtRotation:
-          typeof p.courtRotation === "number"
-            ? ((p.courtRotation % 4) + 4) % 4 // clamp a corrupt value to 0–3
-            : s.courtRotation,
-        // A stored "gate passed" only ever latches it ON — never un-passes a
-        // gate already cleared in this session (e.g. an auto sign-in on boot).
-        authGatePassed: s.authGatePassed || p.authGatePassed === true,
-        hydrated: true,
-      })),
+          : s.settings;
+        return {
+          settings: adoptedSettings,
+          _anonSettings: adoptedSettings,
+          playerName:
+            typeof p.playerName === "string" ? p.playerName : s.playerName,
+          courtRotation:
+            typeof p.courtRotation === "number"
+              ? ((p.courtRotation % 4) + 4) % 4 // clamp a corrupt value to 0–3
+              : s.courtRotation,
+          // A stored "gate passed" only ever latches it ON — never un-passes a
+          // gate already cleared in this session (e.g. an auto sign-in on boot).
+          authGatePassed: s.authGatePassed || p.authGatePassed === true,
+          hydrated: true,
+        };
+      }),
 
     _handleStatus: (e) => {
       if (e.kind === "connection") {
@@ -332,6 +356,15 @@ export const createAppStore = ({
             : e.status === "signed-out" && s.authStatus === "signed-in"
               ? false
               : s.authGatePassed,
+        // Restore the device's anonymous settings on an EXPLICIT sign-out
+        // (signed-in → signed-out), so an account's tweaks never persist onto a
+        // shared device — the same per-identity isolation history has. A
+        // cancelled/failed sign-in (signing-in → signed-out) leaves the live
+        // settings untouched.
+        settings:
+          e.status === "signed-out" && s.authStatus === "signed-in"
+            ? s._anonSettings
+            : s.settings,
       })),
 
     _bumpHistory: () => set((s) => ({ historyVersion: s.historyVersion + 1 })),
@@ -407,16 +440,25 @@ export const AppStateProvider = ({
   }, [store]);
 
   // Persist the durable prefs whenever they change — but only after hydration,
-  // so the load above isn't clobbered by a first-render defaults write.
+  // so the load above isn't clobbered by a first-render defaults write. The
+  // settings written here are the ANONYMOUS snapshot, never the account's live
+  // settings: those follow the account in the cloud (below), and writing them to
+  // the device-global blob would leak an account's tweaks onto a shared device.
   const settings = useStore(store, (s) => s.settings);
+  const anonSettings = useStore(store, (s) => s._anonSettings);
   const playerName = useStore(store, (s) => s.playerName);
   const courtRotation = useStore(store, (s) => s.courtRotation);
   const authGatePassed = useStore(store, (s) => s.authGatePassed);
   const hydrated = useStore(store, (s) => s.hydrated);
   useEffect(() => {
     if (!hydrated) return;
-    savePrefs({ settings, playerName, courtRotation, authGatePassed });
-  }, [hydrated, settings, playerName, courtRotation, authGatePassed]);
+    savePrefs({
+      settings: anonSettings,
+      playerName,
+      courtRotation,
+      authGatePassed,
+    });
+  }, [hydrated, anonSettings, playerName, courtRotation, authGatePassed]);
 
   // The transport Status stream drives connection / paired layout / handoff.
   useEffect(() => {
@@ -462,9 +504,11 @@ export const AppStateProvider = ({
     };
   }, [authStatus, userId, store]);
 
-  // Cloud settings sync (signed-in only; anonymous stays on the local prefs
-  // above). Two halves, coordinated by `settingsSyncRef` so a load never races a
-  // push into overwriting the account's real row with the pre-load defaults:
+  // Cloud settings sync (signed-in only). The account's settings live in the
+  // cloud, isolated from the device's anonymous settings (which stay in the
+  // prefs blob via `_anonSettings`, restored on sign-out). Two halves,
+  // coordinated by `settingsSyncRef` so a load never races a push into
+  // overwriting the account's real row with the pre-load defaults:
   //   1. On sign-in, reconcile: the account's saved settings win, or a fresh
   //      account is seeded from the device's current settings (never a reset to
   //      defaults). The ref then records "this user's settings are in sync",
