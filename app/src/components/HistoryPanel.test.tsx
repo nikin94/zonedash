@@ -32,6 +32,32 @@ test("empty history shows the hint and no list — the list is pure now", async 
   expect(screen.queryByText("Clear history")).toBeNull();
 });
 
+// A skeleton stands in while the first read is in flight, so the list never
+// flashes "no sessions yet" before the log loads — then it swaps out for the
+// real content (here: the empty hint), never lingering.
+test("shows a loading skeleton first, then swaps it for the content", async () => {
+  render(<HistoryPanel />);
+  // Synchronously (the async read hasn't resolved): the skeleton, not the hint.
+  expect(screen.getByTestId("history-skeleton")).toBeTruthy();
+  expect(screen.queryByTestId("history-empty")).toBeNull();
+
+  // Once the read resolves, the skeleton is gone and the real content shows.
+  expect(await screen.findByTestId("history-empty")).toBeTruthy();
+  expect(screen.queryByTestId("history-skeleton")).toBeNull();
+});
+
+// A refresh (refreshKey bump) re-reads WITHOUT flashing the skeleton back — the
+// current rows stay on screen through the re-read.
+test("a refresh does not re-show the skeleton — the rows stay put", async () => {
+  await appendSession(summary(1));
+  const { rerender } = render(<HistoryPanel refreshKey={0} />);
+  await screen.findByTestId("history-row-1");
+
+  rerender(<HistoryPanel refreshKey={1} />);
+  expect(screen.queryByTestId("history-skeleton")).toBeNull(); // no flash-back
+  expect(screen.getByTestId("history-row-1")).toBeTruthy();
+});
+
 test("reports the loaded session count via onLoaded", async () => {
   const onLoaded = jest.fn();
   await appendSession(summary(1));

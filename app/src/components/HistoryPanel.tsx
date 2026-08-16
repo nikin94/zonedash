@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { MAX_TARGETS } from "../ble/codec";
@@ -7,6 +7,10 @@ import { formatSeconds, formatSessionTime } from "../helpers/time";
 import { loadHistory } from "../state/history";
 import { colors } from "../theme";
 import { AppText } from "./AppText";
+import { HistoryRowSkeleton } from "./Skeleton";
+
+/** Placeholder rows shown while the first read is in flight. */
+const SKELETON_ROWS = 4;
 
 const fmtSec = (ms: number | null) => (ms === null ? "—" : formatSeconds(ms));
 
@@ -60,13 +64,27 @@ export const HistoryPanel = ({
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   // The clock the relative labels read against — stamped on each (re)load.
   const [now, setNow] = useState(() => Date.now());
+  // False until the FIRST read resolves — gates a skeleton so the list doesn't
+  // flash "no sessions yet" before the log loads. A refresh (refreshKey bump)
+  // re-reads WITHOUT re-showing the skeleton, keeping the current rows on
+  // screen; only an identity swap (below) resets it, since that's a fresh
+  // bucket the current rows don't belong to.
+  const [loaded, setLoaded] = useState(false);
+  const prevUserId = useRef(userId);
 
   useEffect(() => {
     let live = true;
     setNow(Date.now());
+    // An identity swap loads a different bucket from scratch → skeleton again.
+    // A plain refresh keeps `loaded` true, so the current rows stay put.
+    if (prevUserId.current !== userId) {
+      prevUserId.current = userId;
+      setLoaded(false);
+    }
     loadHistory(userId).then((s) => {
       if (live) {
         setSessions(s);
+        setLoaded(true);
         onLoaded?.(s.length);
       }
     });
@@ -87,7 +105,13 @@ export const HistoryPanel = ({
 
   return (
     <View style={styles.panel}>
-      {shown.length === 0 ? (
+      {!loaded ? (
+        <View style={styles.list} testID="history-skeleton">
+          {Array.from({ length: SKELETON_ROWS }, (_, i) => (
+            <HistoryRowSkeleton key={i} />
+          ))}
+        </View>
+      ) : shown.length === 0 ? (
         <AppText
           center
           size={13}
