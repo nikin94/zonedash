@@ -78,7 +78,10 @@ test("reads the given identity's bucket, not the anonymous log", async () => {
   expect(screen.queryByTestId("history-row-1")).toBeNull(); // not the anon one
 });
 
-test("lists stored sessions newest-first with mode, average and best", async () => {
+// A row shows the average and best, newest first. The mode label is NOT on the
+// row — the History screen's mode tabs already name the shown mode, so repeating
+// it per row was redundant (removed here).
+test("lists stored sessions newest-first with average and best, no mode label", async () => {
   await appendSession(summary(1, { mode: "path", avgMs: 500, bestMs: 250 }));
   await appendSession(summary(2, { mode: "live" }));
 
@@ -86,10 +89,11 @@ test("lists stored sessions newest-first with mode, average and best", async () 
 
   expect(await screen.findByTestId("history-row-2")).toBeTruthy();
   expect(screen.getByTestId("history-row-1")).toBeTruthy();
-  expect(screen.getByText("Live")).toBeTruthy();
-  expect(screen.getByText("Path")).toBeTruthy();
   expect(screen.getByText("0.50s")).toBeTruthy(); // no space between value and unit
   expect(screen.getByText("best 0.25s")).toBeTruthy();
+  // The mode name is gone from the row (it lives in the tab bar now).
+  expect(screen.queryByText("Live")).toBeNull();
+  expect(screen.queryByText("Path")).toBeNull();
 });
 
 test("shows the runner name on a session that has one, and nothing for an unnamed run", async () => {

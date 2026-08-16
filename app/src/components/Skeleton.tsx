@@ -86,18 +86,20 @@ export const Skeleton = ({
 };
 
 /**
- * One History-row-shaped skeleton: a lead column (mode + meta lines) and a
- * right-aligned stats column, matching HistoryPanel's row so the swap to real
- * rows doesn't shift the layout.
+ * One History-row-shaped skeleton: a lead column (a headline + meta line) and a
+ * right-aligned stats column (average + best), matching HistoryPanel's row so
+ * the swap to real rows doesn't shift the layout. The row no longer carries a
+ * mode label (the History mode tabs say the mode), so the lead's headline block
+ * now stands in for the runner name over the meta line.
  */
 export const HistoryRowSkeleton = () => (
   <View style={styles.row}>
     <View style={styles.lead}>
-      <Skeleton width={64} height={15} />
-      <Skeleton width={132} height={12} />
+      <Skeleton width={90} height={14} />
+      <Skeleton width={140} height={13} />
     </View>
     <View style={styles.stats}>
-      <Skeleton width={44} height={15} />
+      <Skeleton width={48} height={15} />
       <Skeleton width={60} height={12} />
     </View>
   </View>

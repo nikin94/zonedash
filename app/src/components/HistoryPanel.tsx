@@ -14,14 +14,11 @@ const SKELETON_ROWS = 4;
 
 const fmtSec = (ms: number | null) => (ms === null ? "—" : formatSeconds(ms));
 
-/** Title-case the stored UI mode label ("random" -> "Random"). */
-const fmtMode = (mode: string) =>
-  mode.length > 0 ? mode[0].toUpperCase() + mode.slice(1) : mode;
-
-/** The sub-line under a session's mode: when · hits [· targets]. Time is an
- *  absolute stamp (formatSessionTime); the target count comes LAST and only for
- *  a reduced layout (the full MAX_TARGETS layout is the default, so "8 targets"
- *  is noise). */
+/** A row's lead line: when · hits [· targets]. Time is an absolute stamp
+ *  (formatSessionTime); the target count comes LAST and only for a reduced
+ *  layout (the full MAX_TARGETS layout is the default, so "8 targets" is noise).
+ *  The mode label is gone from the row — the History screen's mode tabs already
+ *  say which mode is shown, so repeating it per row was redundant. */
 const fmtMeta = (s: SessionSummary, now: number) => {
   const hits = `${s.attempts} ${s.attempts === 1 ? "hit" : "hits"}`;
   const parts = [formatSessionTime(s.endedAt, now), hits];
@@ -126,10 +123,24 @@ export const HistoryPanel = ({
           {shown.map((s) => (
             <View key={s.id} style={styles.row} testID={`history-row-${s.id}`}>
               <View style={styles.rowLead}>
-                <View style={styles.modeLine}>
-                  <AppText size={14} weight="600">
-                    {fmtMode(s.mode)}
+                {s.playerName != null && (
+                  <AppText
+                    size={14}
+                    weight="600"
+                    numberOfLines={1}
+                    testID={`history-player-${s.id}`}
+                  >
+                    {s.playerName}
                   </AppText>
+                )}
+                <AppText size={13} color={colors.textMuted}>
+                  {fmtMeta(s, now)}
+                </AppText>
+              </View>
+              <View style={styles.rowStats}>
+                {/* The "best" badge marks the fastest average; with the mode
+                    label gone it sits beside the number it describes. */}
+                <View style={styles.avgLine}>
                   {s.id === bestId && (
                     <AppText
                       size={11}
@@ -142,25 +153,10 @@ export const HistoryPanel = ({
                       ★ best
                     </AppText>
                   )}
-                </View>
-                {s.playerName != null && (
-                  <AppText
-                    size={13}
-                    weight="600"
-                    numberOfLines={1}
-                    testID={`history-player-${s.id}`}
-                  >
-                    {s.playerName}
+                  <AppText size={15} weight="700">
+                    {fmtSec(s.avgMs)}
                   </AppText>
-                )}
-                <AppText size={12} color={colors.textMuted}>
-                  {fmtMeta(s, now)}
-                </AppText>
-              </View>
-              <View style={styles.rowStats}>
-                <AppText size={14} weight="600">
-                  {fmtSec(s.avgMs)}
-                </AppText>
+                </View>
                 <AppText size={12} color={colors.textMuted}>
                   best {fmtSec(s.bestMs)}
                 </AppText>
@@ -196,7 +192,7 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     gap: 2,
   },
-  modeLine: {
+  avgLine: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
