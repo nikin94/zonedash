@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { MAX_TARGETS } from "../ble/codec";
@@ -7,17 +7,18 @@ import { formatSeconds, formatSessionTime } from "../helpers/time";
 import { loadHistory } from "../state/history";
 import { colors } from "../theme";
 import { AppText } from "./AppText";
+import { HistoryRowSkeleton } from "./Skeleton";
+
+/** Placeholder rows shown while the first read is in flight. */
+const SKELETON_ROWS = 4;
 
 const fmtSec = (ms: number | null) => (ms === null ? "—" : formatSeconds(ms));
 
-/** Title-case the stored UI mode label ("random" -> "Random"). */
-const fmtMode = (mode: string) =>
-  mode.length > 0 ? mode[0].toUpperCase() + mode.slice(1) : mode;
-
-/** The sub-line under a session's mode: when · hits [· targets]. Time is an
- *  absolute stamp (formatSessionTime); the target count comes LAST and only for
- *  a reduced layout (the full MAX_TARGETS layout is the default, so "8 targets"
- *  is noise). */
+/** A row's lead line: when · hits [· targets]. Time is an absolute stamp
+ *  (formatSessionTime); the target count comes LAST and only for a reduced
+ *  layout (the full MAX_TARGETS layout is the default, so "8 targets" is noise).
+ *  The mode label is gone from the row — the History screen's mode tabs already
+ *  say which mode is shown, so repeating it per row was redundant. */
 const fmtMeta = (s: SessionSummary, now: number) => {
   const hits = `${s.attempts} ${s.attempts === 1 ? "hit" : "hits"}`;
   const parts = [formatSessionTime(s.endedAt, now), hits];
@@ -60,13 +61,27 @@ export const HistoryPanel = ({
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   // The clock the relative labels read against — stamped on each (re)load.
   const [now, setNow] = useState(() => Date.now());
+  // False until the FIRST read resolves — gates a skeleton so the list doesn't
+  // flash "no sessions yet" before the log loads. A refresh (refreshKey bump)
+  // re-reads WITHOUT re-showing the skeleton, keeping the current rows on
+  // screen; only an identity swap (below) resets it, since that's a fresh
+  // bucket the current rows don't belong to.
+  const [loaded, setLoaded] = useState(false);
+  const prevUserId = useRef(userId);
 
   useEffect(() => {
     let live = true;
     setNow(Date.now());
+    // An identity swap loads a different bucket from scratch → skeleton again.
+    // A plain refresh keeps `loaded` true, so the current rows stay put.
+    if (prevUserId.current !== userId) {
+      prevUserId.current = userId;
+      setLoaded(false);
+    }
     loadHistory(userId).then((s) => {
       if (live) {
         setSessions(s);
+        setLoaded(true);
         onLoaded?.(s.length);
       }
     });
@@ -87,7 +102,13 @@ export const HistoryPanel = ({
 
   return (
     <View style={styles.panel}>
-      {shown.length === 0 ? (
+      {!loaded ? (
+        <View style={styles.list} testID="history-skeleton">
+          {Array.from({ length: SKELETON_ROWS }, (_, i) => (
+            <HistoryRowSkeleton key={i} />
+          ))}
+        </View>
+      ) : shown.length === 0 ? (
         <AppText
           center
           size={13}
@@ -102,10 +123,24 @@ export const HistoryPanel = ({
           {shown.map((s) => (
             <View key={s.id} style={styles.row} testID={`history-row-${s.id}`}>
               <View style={styles.rowLead}>
-                <View style={styles.modeLine}>
-                  <AppText size={14} weight="600">
-                    {fmtMode(s.mode)}
+                {s.playerName != null && (
+                  <AppText
+                    size={14}
+                    weight="600"
+                    numberOfLines={1}
+                    testID={`history-player-${s.id}`}
+                  >
+                    {s.playerName}
                   </AppText>
+                )}
+                <AppText size={13} color={colors.textMuted}>
+                  {fmtMeta(s, now)}
+                </AppText>
+              </View>
+              <View style={styles.rowStats}>
+                {/* The "best" badge marks the fastest average; with the mode
+                    label gone it sits beside the number it describes. */}
+                <View style={styles.avgLine}>
                   {s.id === bestId && (
                     <AppText
                       size={11}
@@ -118,25 +153,10 @@ export const HistoryPanel = ({
                       ★ best
                     </AppText>
                   )}
-                </View>
-                {s.playerName != null && (
-                  <AppText
-                    size={13}
-                    weight="600"
-                    numberOfLines={1}
-                    testID={`history-player-${s.id}`}
-                  >
-                    {s.playerName}
+                  <AppText size={15} weight="700">
+                    {fmtSec(s.avgMs)}
                   </AppText>
-                )}
-                <AppText size={12} color={colors.textMuted}>
-                  {fmtMeta(s, now)}
-                </AppText>
-              </View>
-              <View style={styles.rowStats}>
-                <AppText size={14} weight="600">
-                  {fmtSec(s.avgMs)}
-                </AppText>
+                </View>
                 <AppText size={12} color={colors.textMuted}>
                   best {fmtSec(s.bestMs)}
                 </AppText>
@@ -172,7 +192,7 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     gap: 2,
   },
-  modeLine: {
+  avgLine: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,

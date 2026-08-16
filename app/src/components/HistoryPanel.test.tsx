@@ -32,6 +32,32 @@ test("empty history shows the hint and no list — the list is pure now", async 
   expect(screen.queryByText("Clear history")).toBeNull();
 });
 
+// A skeleton stands in while the first read is in flight, so the list never
+// flashes "no sessions yet" before the log loads — then it swaps out for the
+// real content (here: the empty hint), never lingering.
+test("shows a loading skeleton first, then swaps it for the content", async () => {
+  render(<HistoryPanel />);
+  // Synchronously (the async read hasn't resolved): the skeleton, not the hint.
+  expect(screen.getByTestId("history-skeleton")).toBeTruthy();
+  expect(screen.queryByTestId("history-empty")).toBeNull();
+
+  // Once the read resolves, the skeleton is gone and the real content shows.
+  expect(await screen.findByTestId("history-empty")).toBeTruthy();
+  expect(screen.queryByTestId("history-skeleton")).toBeNull();
+});
+
+// A refresh (refreshKey bump) re-reads WITHOUT flashing the skeleton back — the
+// current rows stay on screen through the re-read.
+test("a refresh does not re-show the skeleton — the rows stay put", async () => {
+  await appendSession(summary(1));
+  const { rerender } = render(<HistoryPanel refreshKey={0} />);
+  await screen.findByTestId("history-row-1");
+
+  rerender(<HistoryPanel refreshKey={1} />);
+  expect(screen.queryByTestId("history-skeleton")).toBeNull(); // no flash-back
+  expect(screen.getByTestId("history-row-1")).toBeTruthy();
+});
+
 test("reports the loaded session count via onLoaded", async () => {
   const onLoaded = jest.fn();
   await appendSession(summary(1));
@@ -52,7 +78,10 @@ test("reads the given identity's bucket, not the anonymous log", async () => {
   expect(screen.queryByTestId("history-row-1")).toBeNull(); // not the anon one
 });
 
-test("lists stored sessions newest-first with mode, average and best", async () => {
+// A row shows the average and best, newest first. The mode label is NOT on the
+// row — the History screen's mode tabs already name the shown mode, so repeating
+// it per row was redundant (removed here).
+test("lists stored sessions newest-first with average and best, no mode label", async () => {
   await appendSession(summary(1, { mode: "path", avgMs: 500, bestMs: 250 }));
   await appendSession(summary(2, { mode: "live" }));
 
@@ -60,10 +89,11 @@ test("lists stored sessions newest-first with mode, average and best", async () 
 
   expect(await screen.findByTestId("history-row-2")).toBeTruthy();
   expect(screen.getByTestId("history-row-1")).toBeTruthy();
-  expect(screen.getByText("Live")).toBeTruthy();
-  expect(screen.getByText("Path")).toBeTruthy();
   expect(screen.getByText("0.50s")).toBeTruthy(); // no space between value and unit
   expect(screen.getByText("best 0.25s")).toBeTruthy();
+  // The mode name is gone from the row (it lives in the tab bar now).
+  expect(screen.queryByText("Live")).toBeNull();
+  expect(screen.queryByText("Path")).toBeNull();
 });
 
 test("shows the runner name on a session that has one, and nothing for an unnamed run", async () => {
