@@ -1,11 +1,11 @@
-// ZoneDash central unit (ESP32-S3, Matrix Portal S3) — ESP-NOW bring-up.
-// The first hardware increment: prove the radio before the engine, display, or
-// BLE are wired. The brain listens for target Hello beacons, discovers each
-// node by its MAC (logging RSSI / fw / battery), registers it as a unicast peer
-// and sends one Ping back — which the target answers with a Hello, proving the
-// link works in BOTH directions. Later increments layer the drill engine, the
-// HUB75 panel, BLE, and Ed25519 on top of this proven link (see the TODO ladder
-// that used to fill this file — tracked in docs/architecture.md).
+// ZoneDash central unit (ESP32-S3, Matrix Portal S3) — ESP-NOW bring-up + hit
+// cycle. Builds on the proven radio link: the brain discovers a target by its
+// Hello, pings it (round-trip proof), then runs a simple ARM cycle so the whole
+// hit path can be exercised end to end without a display, BLE, or the drill
+// engine. It Syncs its clock to the node, Arms it, and waits for a Pressed —
+// then logs the reaction time (t_hit − t_arm, both in the brain's clock domain)
+// and re-arms after a beat. On the target, a BOOT-button press stands in for the
+// sensor (still in transit). The drill engine / HUB75 / BLE layer on top later.
 //
 // The HUB75 panel is NOT needed for this step: bring-up is observed over
 // USB-serial @ 115200 (docs/architecture.md "Testing without the app"). This
@@ -14,6 +14,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <esp_now.h>
+#include <esp_timer.h>
 #include <esp_wifi.h>
 
 #include <cstring>
@@ -30,6 +31,20 @@ static const uint8_t BROADCAST[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 // pairing round, the next increment); here we only prove who is on the air.
 static Mac g_nodes[MAX_TARGETS];
 static uint8_t g_node_count = 0;
+
+// Arm-cycle state: drives Sync → Arm → (await Pressed) → re-arm against node 0,
+// so a single target proves the full hit path. Multi-node arming waits for the
+// pairing round + drill engine.
+static uint32_t g_session_id = 0;
+static bool g_synced = false;      // Sync sent for this session
+static bool g_awaiting_hit = false;
+static uint16_t g_seq = 0;         // step index, bumped per Arm
+static uint64_t g_arm_us = 0;      // brain clock at the last Arm (reaction base)
+static uint32_t g_next_arm_ms = 0; // when to Arm next (post-Sync / post-hit beat)
+static uint32_t g_arm_deadline_ms = 0; // re-arm if no press by here
+
+static constexpr uint32_t REARM_DELAY_MS = 1500;  // beat between hit and next Arm
+static constexpr uint32_t ARM_TIMEOUT_MS = 15000; // missed-press safety re-arm
 
 static bool mac_eq(const uint8_t* a, const Mac& b) {
   return memcmp(a, b.data(), 6) == 0;
@@ -60,6 +75,27 @@ static void send_ping(const uint8_t mac[6]) {
   esp_now_send(mac, reinterpret_cast<const uint8_t*>(&ping), sizeof(ping));
 }
 
+// Broadcast the central clock so the node can map its local µs into this domain.
+static void send_sync(const uint8_t mac[6], uint32_t session, uint64_t central_us) {
+  Sync s = {};
+  s.hdr.version = PROTOCOL_VERSION;
+  s.hdr.type = static_cast<uint8_t>(MsgType::Sync);
+  s.session_id = session;
+  s.t_central_us = central_us;
+  esp_now_send(mac, reinterpret_cast<const uint8_t*>(&s), sizeof(s));
+}
+
+static void send_arm(const uint8_t mac[6], uint32_t session, uint8_t position,
+                     uint16_t seq) {
+  Arm a = {};
+  a.hdr.version = PROTOCOL_VERSION;
+  a.hdr.type = static_cast<uint8_t>(MsgType::Arm);
+  a.session_id = session;
+  a.position = position;
+  a.seq = seq;
+  esp_now_send(mac, reinterpret_cast<const uint8_t*>(&a), sizeof(a));
+}
+
 static void handle_recv(const uint8_t* src, int rssi, const uint8_t* data,
                         int len) {
   MsgType type;
@@ -80,8 +116,14 @@ static void handle_recv(const uint8_t* src, int rssi, const uint8_t* data,
     }
     case MsgType::Pressed: {
       const Pressed* p = reinterpret_cast<const Pressed*>(data);
-      Serial.printf("[hit] pos=%u seq=%u t_hit=%llu sensor=%u\n", p->position,
-                    p->seq, (unsigned long long)p->t_hit_us, p->sensor);
+      // Reaction = hit − arm, both in the brain's clock (target maps t_hit into
+      // it via Sync). Guard a hit stamped before the arm (unsynced / stray).
+      const double rt_ms =
+          p->t_hit_us > g_arm_us ? (p->t_hit_us - g_arm_us) / 1000.0 : 0.0;
+      Serial.printf("[hit] pos=%u seq=%u reaction=%.1fms sensor=%u\n", p->position,
+                    p->seq, rt_ms, p->sensor);
+      g_awaiting_hit = false;
+      g_next_arm_ms = millis() + REARM_DELAY_MS;
       break;
     }
     default:
@@ -122,7 +164,39 @@ void setup() {
 }
 
 void loop() {
-  // Nothing to poll yet — discovery is interrupt-driven via the recv callback.
-  // Next increment: serial operator console (lib/serialcmd) + drill engine tick.
-  delay(1000);
+  const uint32_t now = millis();
+  if (g_node_count == 0) {
+    delay(50); // nothing discovered yet — discovery is recv-callback driven
+    return;
+  }
+  const uint8_t* node = g_nodes[0].data();
+
+  // Establish the clock once, then let the target record the offset for a beat
+  // before the first Arm, so t_hit maps cleanly into the brain's domain.
+  if (!g_synced) {
+    g_session_id++;
+    send_sync(node, g_session_id, static_cast<uint64_t>(esp_timer_get_time()));
+    g_synced = true;
+    g_next_arm_ms = now + 500;
+    Serial.printf("[sync] session=%u sent to node0\n", g_session_id);
+  }
+
+  // Arm the node when it's time and we're not already waiting on a hit.
+  if (!g_awaiting_hit && static_cast<int32_t>(now - g_next_arm_ms) >= 0) {
+    g_seq++;
+    g_arm_us = static_cast<uint64_t>(esp_timer_get_time());
+    send_arm(node, g_session_id, 0 /*position*/, g_seq);
+    g_awaiting_hit = true;
+    g_arm_deadline_ms = now + ARM_TIMEOUT_MS;
+    Serial.printf("[arm] node0 seq=%u — press the target's BOOT button\n", g_seq);
+  }
+
+  // A missed press must not wedge the cycle: re-arm after the timeout.
+  if (g_awaiting_hit && static_cast<int32_t>(now - g_arm_deadline_ms) >= 0) {
+    Serial.println("[arm] timeout — re-arming");
+    g_awaiting_hit = false;
+    g_next_arm_ms = now;
+  }
+
+  delay(10);
 }
