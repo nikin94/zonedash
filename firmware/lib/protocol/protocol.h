@@ -13,6 +13,13 @@ constexpr uint8_t PROTOCOL_VERSION = 1;
 // Physical target count — the largest active layout (4 corners + 4 mid-sides).
 constexpr uint8_t MAX_TARGETS = 8;
 
+// ESP-NOW radio channel both builds pin to, so brain and targets never have to
+// negotiate one (architecture.md "channel discipline" — the mitigation for the
+// S3's single shared radio). Change here once; both sides read it. Host-safe:
+// a plain constant, no hardware include, so the native protocol tests still
+// compile.
+constexpr uint8_t ESPNOW_CHANNEL = 1;
+
 // Which sensor registered a hit (logged so we can A/B ToF vs piezo on court).
 enum class Sensor : uint8_t { ToF = 0, Piezo = 1 };
 
