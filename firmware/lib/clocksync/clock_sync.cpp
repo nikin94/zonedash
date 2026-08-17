@@ -7,7 +7,10 @@ namespace {
 // A two-point skew fit is only trustworthy once the samples span a real
 // interval: over a short base, µs-level RX jitter on the beacon timestamp turns
 // into hundreds of thousands of phantom ppm. Below this, stay offset-only.
-constexpr int64_t MIN_SKEW_BASE_US = 20'000'000; // 20 s
+// Plain digits (no C++14 ' separators): the ESP32 Arduino build compiles at an
+// older standard than the host tests (-std=c++17), where "20'000'000" tokenizes
+// as multi-char char constants and fails to build. See firmware/platformio.ini.
+constexpr int64_t MIN_SKEW_BASE_US = 20000000; // 20 s
 // A real crystal pair drifts tens of ppm; clamp the estimate to a plausible
 // bound so one bad sample can't bias the whole session.
 constexpr double MAX_SKEW = 200e-6; // ±200 ppm
