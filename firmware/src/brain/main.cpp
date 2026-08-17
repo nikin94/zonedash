@@ -70,6 +70,15 @@ static bool add_peer(const uint8_t mac[6]) {
   return esp_now_add_peer(&peer) == ESP_OK;
 }
 
+// Surface an addressed tx that never reached its peer — a unicast Arm/Sync/Ping
+// to a node that dropped off (a Pressed we're waiting on then simply never
+// comes). Success is silent to keep the log readable; only a FAIL is news.
+static void on_sent(const uint8_t* mac, esp_now_send_status_t status) {
+  if (status == ESP_NOW_SEND_SUCCESS) return;
+  Serial.printf("[tx-fail] -> %02x:%02x:%02x:%02x:%02x:%02x\n", mac[0], mac[1],
+                mac[2], mac[3], mac[4], mac[5]);
+}
+
 static void send_ping(const uint8_t mac[6]) {
   Header ping = {PROTOCOL_VERSION, static_cast<uint8_t>(MsgType::Ping)};
   esp_now_send(mac, reinterpret_cast<const uint8_t*>(&ping), sizeof(ping));
@@ -160,6 +169,7 @@ void setup() {
     return;
   }
   esp_now_register_recv_cb(on_recv);
+  esp_now_register_send_cb(on_sent); // report a unicast that never landed
   add_peer(BROADCAST);
 }
 
@@ -184,6 +194,11 @@ void loop() {
   // Arm the node when it's time and we're not already waiting on a hit.
   if (!g_awaiting_hit && static_cast<int32_t>(now - g_next_arm_ms) >= 0) {
     g_seq++;
+    // Re-Sync the node's clock on every arm: a target that rebooted (the C3
+    // USB-CDC reset) lost its offset, so an Arm without a fresh Sync would stamp
+    // t_hit in the node's own domain and the reaction would read 0. One tiny
+    // extra packet keeps the hit timestamp comparable across a node reset.
+    send_sync(node, g_session_id, static_cast<uint64_t>(esp_timer_get_time()));
     g_arm_us = static_cast<uint64_t>(esp_timer_get_time());
     send_arm(node, g_session_id, 0 /*position*/, g_seq);
     g_awaiting_hit = true;
@@ -193,7 +208,7 @@ void loop() {
 
   // A missed press must not wedge the cycle: re-arm after the timeout.
   if (g_awaiting_hit && static_cast<int32_t>(now - g_arm_deadline_ms) >= 0) {
-    Serial.println("[arm] timeout — re-arming");
+    Serial.printf("[arm] timeout seq=%u — no hit, re-arming\n", g_seq);
     g_awaiting_hit = false;
     g_next_arm_ms = now;
   }

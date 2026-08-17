@@ -40,10 +40,29 @@ static bool g_armed = false;
 static uint8_t g_armed_position = 0;
 static uint16_t g_armed_seq = 0;
 
-// The brain's MAC, learned from the first Ping so Pressed can be UNICAST back to
-// it (a hit is addressed, not broadcast). Falls back to broadcast until known.
+// The brain's MAC, learned from ANY brain→target message (Sync/Arm/Ping) so
+// Pressed can be UNICAST back to it (a hit is addressed, not broadcast). Learning
+// from every brain message — not only the one-shot Ping — is what makes this
+// survive a target reset: the brain re-pings only on first discovery, so a node
+// that reboots (the C3 USB-CDC reset) would otherwise never re-learn the MAC and
+// silently broadcast its hits. The first Arm after a reboot re-teaches it.
 static uint8_t g_brain_mac[6] = {};
 static bool g_have_brain = false;
+
+// True for exactly one send: set right before a Pressed unicast so the send-cb
+// logs THAT tx's delivery status (OK/FAIL) without spamming on every Hello.
+static volatile bool g_log_tx = false;
+
+static bool add_peer(const uint8_t mac[6]);
+
+// Remember the brain from any message it sends us, and register it as a unicast
+// peer so an addressed Pressed can go straight back.
+static void learn_brain(const uint8_t* src) {
+  if (g_have_brain && memcmp(g_brain_mac, src, 6) == 0) return;
+  memcpy(g_brain_mac, src, 6);
+  g_have_brain = true;
+  add_peer(g_brain_mac);
+}
 
 // Battery telemetry comes later with the ADC divider (bom.md); report 0 until
 // then so the Hello field is honest rather than a made-up voltage.
@@ -80,7 +99,19 @@ static void send_pressed(uint8_t position, uint16_t seq, uint64_t t_hit_us) {
   p.t_hit_us = t_hit_us;
   p.sensor = static_cast<uint8_t>(Sensor::Piezo); // stub button ~ contact trigger
   const uint8_t* dst = g_have_brain ? g_brain_mac : BROADCAST;
+  g_log_tx = true; // ask the send-cb to report THIS tx's delivery status
   esp_now_send(dst, reinterpret_cast<const uint8_t*>(&p), sizeof(p));
+}
+
+// Delivery status for the Pressed tx (esp_now_send only queues; this fires when
+// the frame is actually acked/dropped on air). Gated by g_log_tx so a failed
+// Hello beacon doesn't spam — we only care whether the HIT got through.
+static void on_sent(const uint8_t* mac, esp_now_send_status_t status) {
+  if (!g_log_tx) return;
+  g_log_tx = false;
+  Serial.printf("[tx] pressed -> %02x:%02x:%02x:%02x:%02x:%02x status=%s\n",
+                mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
+                status == ESP_NOW_SEND_SUCCESS ? "OK" : "FAIL");
 }
 
 // One dispatch, fed by whichever recv-callback signature the installed Arduino
@@ -91,6 +122,7 @@ static void handle_recv(const uint8_t* src, int rssi, const uint8_t* data,
   if (!peek_header(data, static_cast<size_t>(len), type)) return; // reject junk
   switch (type) {
     case MsgType::Sync: {
+      learn_brain(src); // any brain message teaches us its MAC (reset-safe)
       const Sync* s = reinterpret_cast<const Sync*>(data);
       g_session_id = s->session_id;
       g_clock.addSample(s->t_central_us, static_cast<uint64_t>(esp_timer_get_time()));
@@ -99,6 +131,7 @@ static void handle_recv(const uint8_t* src, int rssi, const uint8_t* data,
       break;
     }
     case MsgType::Arm: {
+      learn_brain(src); // re-teaches the brain MAC after a target reboot
       const Arm* a = reinterpret_cast<const Arm*>(data);
       g_session_id = a->session_id; // same id as the Sync; defensive if Sync missed
       g_armed = true;
@@ -114,9 +147,7 @@ static void handle_recv(const uint8_t* src, int rssi, const uint8_t* data,
       break;
     case MsgType::Ping:
       // Round-trip proof + learn the brain's MAC so Pressed can be addressed.
-      memcpy(g_brain_mac, src, 6);
-      g_have_brain = true;
-      add_peer(g_brain_mac);
+      learn_brain(src);
       Serial.printf("[ping] from %02x:%02x:%02x:%02x:%02x:%02x rssi=%d\n",
                     src[0], src[1], src[2], src[3], src[4], src[5], rssi);
       send_hello();
@@ -158,6 +189,7 @@ void setup() {
     return;
   }
   esp_now_register_recv_cb(on_recv);
+  esp_now_register_send_cb(on_sent); // surface Pressed delivery (OK/FAIL)
   add_peer(BROADCAST);
   send_hello(); // announce at once so a listening brain finds us immediately
 }
