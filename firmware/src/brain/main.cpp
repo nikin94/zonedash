@@ -17,8 +17,12 @@
 #include <esp_timer.h>
 #include <esp_wifi.h>
 
+#include <cstdio>
 #include <cstring>
 
+#include <Adafruit_Protomatter.h>
+
+#include "layout.h"  // host-tested panel geometry (lib/display)
 #include "pairing.h" // Mac type (reused; full pairing round is the next increment)
 #include "protocol.h"
 
@@ -45,6 +49,12 @@ static uint32_t g_arm_deadline_ms = 0; // re-arm if no press by here
 
 static constexpr uint32_t REARM_DELAY_MS = 1500;  // beat between hit and next Arm
 static constexpr uint32_t ARM_TIMEOUT_MS = 15000; // missed-press safety re-arm
+
+// Display state read by render_display: the last reaction shown in the status
+// strip (-1 = none yet) and a brief green flash on the hit dot.
+static double g_last_rt_ms = -1.0;
+static uint32_t g_hit_flash_until = 0;
+static constexpr uint32_t HIT_FLASH_MS = 300;
 
 static bool mac_eq(const uint8_t* a, const Mac& b) {
   return memcmp(a, b.data(), 6) == 0;
@@ -133,6 +143,8 @@ static void handle_recv(const uint8_t* src, int rssi, const uint8_t* data,
                     p->seq, rt_ms, p->sensor);
       g_awaiting_hit = false;
       g_next_arm_ms = millis() + REARM_DELAY_MS;
+      g_last_rt_ms = rt_ms;                          // show it in the status strip
+      g_hit_flash_until = millis() + HIT_FLASH_MS;   // flash the hit dot green
       break;
     }
     default:
@@ -150,6 +162,61 @@ static void on_recv(const uint8_t* src, const uint8_t* data, int len) {
   handle_recv(src, 0, data, len);
 }
 #endif
+
+// ── HUB75 display (Adafruit Protomatter on MatrixPortal S3) ─────────────────
+// Fixed MatrixPortal S3 HUB75 pin map (Adafruit). A 64x64 panel uses 5 address
+// lines (A..E); a 64x32 would use 4 — set ADDR_N=4 (drop pin 21) if the image
+// comes out vertically doubled. Low bit depth + dim colours + a sparse dark
+// screen keep the panel draw inside a USB-bench power budget, so no 5 V boost is
+// needed to develop the UI (see the PR's power/wiring notes).
+static uint8_t RGB_PINS[] = {42, 41, 40, 38, 39, 37};
+static uint8_t ADDR_PINS[] = {45, 36, 48, 35, 21}; // A,B,C,D,E
+static constexpr uint8_t ADDR_N = 5;               // 5 = 64x64, 4 = 64x32
+static constexpr uint8_t CLK_PIN = 2, LAT_PIN = 47, OE_PIN = 14;
+static Adafruit_Protomatter matrix(PANEL_W, 6 /*bit depth*/, 1, RGB_PINS, ADDR_N,
+                                   ADDR_PINS, CLK_PIN, LAT_PIN, OE_PIN,
+                                   true /*double-buffered — show() = flush*/);
+static bool g_display_ok = false;
+
+// Render one frame: a 12 px status strip (name + last reaction) over the 8-slot
+// layout map. Only node 0 exists this increment, so its dot tracks the live
+// arm/hit state; the others are dim "off" markers so the court map still reads.
+// Dim colours cap the panel draw for USB-bench power.
+static void render_display() {
+  if (!g_display_ok) return;
+  const uint32_t now = millis();
+  matrix.fillScreen(0);
+
+  matrix.setTextColor(matrix.color565(90, 90, 90));
+  matrix.setCursor(1, 2);
+  matrix.print("ZD");
+  if (g_last_rt_ms >= 0) {
+    char buf[12];
+    snprintf(buf, sizeof(buf), "%dms", (int)(g_last_rt_ms + 0.5));
+    matrix.setCursor(PANEL_W - (int)strlen(buf) * 6, 2);
+    matrix.print(buf);
+  }
+
+  for (uint8_t i = 0; i < MAX_TARGETS; i++) {
+    const Point p = spot_xy(i);
+    uint16_t col = matrix.color565(8, 8, 8); // unbound / off marker
+    int half = 0;
+    if (i == 0 && g_node_count > 0) {
+      if (now < g_hit_flash_until) {
+        col = matrix.color565(0, 180, 0); // hit flash (green)
+        half = 2;
+      } else if (g_awaiting_hit) {
+        col = matrix.color565(70, 50, 200); // armed (accent)
+        half = 2;
+      } else {
+        col = matrix.color565(30, 30, 30); // bound, idle (dim white)
+        half = 1;
+      }
+    }
+    matrix.fillRect(p.x - half, p.y - half, 2 * half + 1, 2 * half + 1, col);
+  }
+  matrix.show();
+}
 
 void setup() {
   Serial.begin(115200);
@@ -171,10 +238,28 @@ void setup() {
   esp_now_register_recv_cb(on_recv);
   esp_now_register_send_cb(on_sent); // report a unicast that never landed
   add_peer(BROADCAST);
+
+  // Bring the panel up LAST, after the radio, so this one run also proves the
+  // HUB75 output and ESP-NOW coexist on the S3 (the BOM's radio-coexistence
+  // risk). A begin() failure is non-fatal: the radio cycle keeps running, so a
+  // dead panel is told apart from a dead link in the serial log.
+  ProtomatterStatus ds = matrix.begin();
+  g_display_ok = (ds == PROTOMATTER_OK);
+  Serial.printf("[disp] protomatter begin=%d (%s)\n", (int)ds,
+                g_display_ok ? "ok" : "FAILED");
 }
 
 void loop() {
   const uint32_t now = millis();
+
+  // Redraw at ~20 fps regardless of radio state, so the idle map shows before a
+  // node is discovered and the armed/hit dot tracks the cycle after.
+  static uint32_t last_render = 0;
+  if (g_display_ok && now - last_render >= 50) {
+    last_render = now;
+    render_display();
+  }
+
   if (g_node_count == 0) {
     delay(50); // nothing discovered yet — discovery is recv-callback driven
     return;
