@@ -21,7 +21,6 @@
 #include <cstring>
 
 #include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
-#include <ESP32-HUB75-VirtualMatrixPanel_T.hpp> // scan-type remap for non-1/32 panels
 
 #include "layout.h"  // host-tested panel geometry (lib/display)
 #include "pairing.h" // Mac type (reused; full pairing round is the next increment)
@@ -168,27 +167,21 @@ static void on_recv(const uint8_t* src, const uint8_t* data, int len) {
 // Fixed MatrixPortal S3 HUB75 pin map (Adafruit) in this lib's i2s_pins order:
 // r1,g1,b1, r2,g2,b2, a,b,c,d,e, lat,oe,clk.
 //
-// SCAN TYPE: this generic "HRXCP3" P3 64x64 is NOT a plain 1/32-scan panel. A
-// single-row sweep lit ~8 physical rows for one logical row — the signature of a
-// "four-scan" (1/8–1/16 multiplex) panel driven as 1/32. That mismatch is what
-// showed as random stripes the whole time, and is why toggling the FM6126A
-// driver changed nothing: the fault is the scan REMAP, not the shift-register
-// init. Fix (ESP32-HUB75-VirtualMatrixPanel_T): configure the DMA panel at the
-// ELECTRICAL geometry — a four-scan 64x64 is wired as 128x32 (width*2, height/2)
-// — and wrap it in a VirtualMatrixPanel_T<ScanTypeMapping> that remaps it back to
-// a true 64x64 canvas the render code draws on. Driver returns to the default
-// shift-register init. If the image is structured-but-wrong (not noise),
-// PANEL_SCAN_TYPE is the one knob: try the neighbouring FOUR_SCAN_*PX_HIGH enums.
-#define PANEL_SCAN_TYPE FOUR_SCAN_64PX_HIGH
-using ScanMap = ScanTypeMapping<PANEL_SCAN_TYPE>;
-
+// SCAN TYPE: the panel back silkscreen reads "P3(2121)64X64-32S" — 32S = a
+// STANDARD 1/32-scan panel (2 rows lit per address, full A..E binary), NOT a
+// four-scan one. So the plain 64x64 config below is correct; the four-scan
+// VirtualMatrixPanel remap was the WRONG direction (it split the image into
+// left/right halves — the width-doubling scrambling a normal panel). Reverted.
+// The residual "content collapses to the top rows" fault is therefore an ADDRESS
+// line not reaching the panel — the prime suspect on the MatrixPortal S3 is its
+// ADDR-E solder jumper (routes E to HUB75 pin 8 OR pin 16; generic panels often
+// need the other pad). That is hardware, verified separately before soldering.
 static HUB75_I2S_CFG::i2s_pins DISP_PINS = {
     42, 41, 40, 38, 39, 37, // r1 g1 b1 r2 g2 b2
     45, 36, 48, 35, 21,     // a b c d e
     47, 14, 2,              // lat oe clk
 };
-static MatrixPanel_I2S_DMA* dma_display = nullptr;                  // raw electrical panel
-static VirtualMatrixPanel_T<CHAIN_NONE, ScanMap>* matrix = nullptr; // 64x64 canvas
+static MatrixPanel_I2S_DMA* matrix = nullptr; // 64x64 1/32-scan panel
 static bool g_display_ok = false;
 
 // Local RGB→565 so the draw code doesn't depend on which class exposes color565:
@@ -292,23 +285,21 @@ void setup() {
   // HUB75 output and ESP-NOW coexist on the S3 (the BOM's radio-coexistence
   // risk). A begin() failure is non-fatal: the radio cycle keeps running, so a
   // dead panel is told apart from a dead link in the serial log.
-  // Electrical geometry: a four-scan 64x64 is physically wired as a 128x32 panel
-  // (width*2, height/2); the virtual layer below remaps it to a true 64x64 canvas.
-  // Driver stays at the default shift-register init — FM6126A changed nothing here
-  // (the fault was the scan remap, not the chip), so its extra init is dropped.
-  HUB75_I2S_CFG mxconfig(PANEL_W * 2, PANEL_H / 2, 1 /*chain*/, DISP_PINS);
-  dma_display = new MatrixPanel_I2S_DMA(mxconfig);
-  g_display_ok = dma_display->begin();
+  // Standard 1/32-scan 64x64 (per the panel silkscreen "64X64-32S"). FM6126A
+  // init kept — these generic P3 panels commonly carry that chip and it's
+  // harmless on a plain shift-register panel; it does NOT affect row addressing,
+  // so the diagnostic sweep below reads the same either way.
+  HUB75_I2S_CFG mxconfig(PANEL_W, PANEL_H, 1 /*chain*/, DISP_PINS);
+  mxconfig.driver = HUB75_I2S_CFG::FM6126A;
+  matrix = new MatrixPanel_I2S_DMA(mxconfig);
+  g_display_ok = matrix->begin();
   if (g_display_ok) {
-    dma_display->setBrightness8(128); // ~50% — bench-readable; the sparse UI (text
-                                      // + a few dots) keeps the draw small. Re-cap
-                                      // lower for battery in the final build.
-    dma_display->clearScreen();
-    // Remap the electrical panel onto a real 64x64 drawing surface.
-    matrix = new VirtualMatrixPanel_T<CHAIN_NONE, ScanMap>(1, 1, PANEL_W, PANEL_H);
-    matrix->setDisplay(*dma_display);
+    matrix->setBrightness8(128); // ~50% — bench-readable; the sparse UI (text +
+                                 // a few dots) keeps the draw small. Re-cap lower
+                                 // for battery in the final build.
+    matrix->clearScreen();
   }
-  Serial.printf("[disp] hub75-dma begin=%d scan=FOUR_SCAN_64PX_HIGH (%s)\n",
+  Serial.printf("[disp] hub75-dma begin=%d 64x64 1/32 (%s)\n",
                 (int)g_display_ok, g_display_ok ? "ok" : "FAILED");
 }
 
