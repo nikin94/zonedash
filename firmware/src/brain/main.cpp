@@ -285,22 +285,23 @@ void setup() {
   // HUB75 output and ESP-NOW coexist on the S3 (the BOM's radio-coexistence
   // risk). A begin() failure is non-fatal: the radio cycle keeps running, so a
   // dead panel is told apart from a dead link in the serial log.
-  // Standard 1/32-scan 64x64 (per the panel silkscreen "64X64-32S"). FM6126A
-  // init kept — these generic P3 panels commonly carry that chip and it's
-  // harmless on a plain shift-register panel; it does NOT affect row addressing,
-  // so the diagnostic sweep below reads the same either way.
+  // FINAL CONFIG per the chip markings read off the panel (UR8 = FM6124DJ
+  // columns, U8 = TC7262FJ rows) + the TC7262 datasheet: the FM6124 columns are
+  // plain shift registers (no init sequence — driver stays at the SHIFTREG
+  // default; the FM6126A init was never needed), and the TC7262 row chip is a
+  // purely COMBINATIONAL 74HC138-class 3-to-8 binary decoder with power FETs —
+  // no clock, no data, no shift register. So the panel IS plain 5-bit binary
+  // (TYPE138, the default) and every shift-register row mode (SM5266P/TYPE595)
+  // was structurally wrong — their waveforms decoded on a binary panel exactly
+  // reproduce the quarter-jump / stuck-at-0-and-32 sweeps that were observed.
+  //
+  // The REMAINING fault is HARDWARE: the connector position where binary D
+  // (weight 8) belongs is GND on this panel — the real weight-8 input lives on
+  // a nominally-GND HUB75 pin (16 or 4), so the board's D signal never reaches
+  // the row chips. Signature (SM5266P run): lines snapped to 0/25/50/75% =
+  // bits A..C + E acting, bit D dead. Fix is on the ribbon (route conductor 12
+  // to the panel's real D pin) — nothing more to change in firmware.
   HUB75_I2S_CFG mxconfig(PANEL_W, PANEL_H, 1 /*chain*/, DISP_PINS);
-  mxconfig.driver = HUB75_I2S_CFG::FM6126A;
-  // ROW-ADDRESS DECODER: the panel's connector silk shows GND where a
-  // binary-addressed panel has D (opposite C) — a shift-register row decoder,
-  // not the default TYPE138 binary one. The panel spec confirms 1/32 SCAN RATE,
-  // which is a separate axis from the ADDRESSING scheme. line_decoder is the
-  // ONLY config field that changes row addressing. SM5266P produced a clean,
-  // bright, structured-but-wrong sweep (lines snapping to 0/25/50/75% height) —
-  // right family, wrong variant — so this is the one remaining sibling: TYPE595
-  // (aka SM5368). If this is still wrong, the small row-driver IC markings on
-  // the panel's back decide it outright.
-  mxconfig.line_decoder = HUB75_I2S_CFG::TYPE595;
   matrix = new MatrixPanel_I2S_DMA(mxconfig);
   g_display_ok = matrix->begin();
   if (g_display_ok) {
@@ -309,7 +310,7 @@ void setup() {
                                  // for battery in the final build.
     matrix->clearScreen();
   }
-  Serial.printf("[disp] hub75-dma begin=%d 64x64 decoder=SM5266P (%s)\n",
+  Serial.printf("[disp] hub75-dma begin=%d 64x64 binary/TYPE138 (%s)\n",
                 (int)g_display_ok, g_display_ok ? "ok" : "FAILED");
 }
 
