@@ -291,16 +291,16 @@ void setup() {
   // so the diagnostic sweep below reads the same either way.
   HUB75_I2S_CFG mxconfig(PANEL_W, PANEL_H, 1 /*chain*/, DISP_PINS);
   mxconfig.driver = HUB75_I2S_CFG::FM6126A;
-  // ROW-ADDRESS DECODER: the panel's own connector silk shows GND where a
-  // binary-addressed panel has D (opposite C), and the board's E jumper is
-  // already bridged to HUB75 pin 8 — yet one logical row lights ~8 physical
-  // rows, i.e. only A/B/C are acting. That combination is the signature of a
-  // shift-register row decoder (SM5266P / 595-class), not the default TYPE138
-  // binary decoder. line_decoder is the ONLY config field that changes row
-  // addressing (driver/clkphase/latch tune colour/ghosting, never rows). Try
-  // SM5266P first; if the sweep comes out structured-but-wrong, the one-line
-  // fallback is TYPE595.
-  mxconfig.line_decoder = HUB75_I2S_CFG::SM5266P;
+  // ROW-ADDRESS DECODER: the panel's connector silk shows GND where a
+  // binary-addressed panel has D (opposite C) — a shift-register row decoder,
+  // not the default TYPE138 binary one. The panel spec confirms 1/32 SCAN RATE,
+  // which is a separate axis from the ADDRESSING scheme. line_decoder is the
+  // ONLY config field that changes row addressing. SM5266P produced a clean,
+  // bright, structured-but-wrong sweep (lines snapping to 0/25/50/75% height) —
+  // right family, wrong variant — so this is the one remaining sibling: TYPE595
+  // (aka SM5368). If this is still wrong, the small row-driver IC markings on
+  // the panel's back decide it outright.
+  mxconfig.line_decoder = HUB75_I2S_CFG::TYPE595;
   matrix = new MatrixPanel_I2S_DMA(mxconfig);
   g_display_ok = matrix->begin();
   if (g_display_ok) {
