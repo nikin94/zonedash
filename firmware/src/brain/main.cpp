@@ -183,28 +183,34 @@ static bool g_display_ok = false;
 // layout map. Only node 0 exists this increment, so its dot tracks the live
 // arm/hit state; the others are dim "off" markers so the court map still reads.
 // Dim colours cap the panel draw for USB-bench power.
-// DIAGNOSTIC calibration frame — draws known geometry so a distorted panel can
-// be read out instead of guessed at. A 1px border traces the full 64x64 extent;
-// four distinct corner blocks (R top-left, G top-right, B bottom-left, white
-// bottom-right) reveal mapping / rotation; a centre cross and a mid-height line
-// expose a scan-rate split (a 1/32-scan panel driven as 1/16 shows the image cut
-// and stacked at the half). Swap render_test → render_display in loop() once the
-// geometry is confirmed (DISPLAY_TEST below is the switch).
+// DIAGNOSTIC E-line sweep — the single decisive test for "rows don't advance".
+// ONE full-width white line steps down the panel a row every ~120 ms and wraps.
+// Only one row is ever lit, so the draw is tiny (safe on USB — unlike a solid
+// white fill, which on a P3 pulls several amps and browns the USB rail out, then
+// itself looks like "only some rows light" and MISLEADS the diagnosis). A dim
+// static column down the left edge and a mid marker give a fixed reference.
+//
+// Reading it:
+//  - the line sweeps SMOOTHLY top→bottom across all 64 rows → the panel is fully
+//    addressable, E works → the fault was mapping/config, NOT the jumper → do
+//    NOT solder; retune in firmware.
+//  - the line only ever appears in the TOP portion and never reaches the bottom
+//    (or two lines fold onto the top) → the E address line never reaches the
+//    panel → the MatrixPortal S3 E-jumper is on the wrong pad → soldering is
+//    justified.
+// Swap render_test → render_display in loop() once geometry is confirmed
+// (DISPLAY_TEST below is the switch).
 static void render_test() {
   if (!g_display_ok) return;
   matrix->fillScreen(0);
-  const uint16_t W = matrix->color565(160, 160, 160);
-  const uint16_t R = matrix->color565(200, 0, 0);
-  const uint16_t G = matrix->color565(0, 200, 0);
-  const uint16_t B = matrix->color565(0, 0, 200);
-  matrix->drawRect(0, 0, PANEL_W, PANEL_H, W);          // full-extent border
-  matrix->fillRect(1, 1, 5, 5, R);                      // top-left  = red
-  matrix->fillRect(PANEL_W - 6, 1, 5, 5, G);            // top-right = green
-  matrix->fillRect(1, PANEL_H - 6, 5, 5, B);            // bot-left  = blue
-  matrix->fillRect(PANEL_W - 6, PANEL_H - 6, 5, 5, W);  // bot-right = white
-  const uint16_t D = matrix->color565(50, 50, 50);
-  matrix->drawFastHLine(0, PANEL_H / 2, PANEL_W, D);    // mid-height line
-  matrix->drawFastVLine(PANEL_W / 2, 0, PANEL_H, D);    // mid-width line
+  // Fixed reference: a dim left-edge column spanning the full height, so the
+  // eye has a "this is where row 0..63 should be" ruler even mid-sweep.
+  const uint16_t D = matrix->color565(30, 30, 30);
+  matrix->drawFastVLine(0, 0, PANEL_H, D);
+  matrix->drawFastHLine(0, PANEL_H / 2, PANEL_W, D); // mid-height marker
+  // The moving row — one bright white line, its Y stepping down over time.
+  const int y = (int)((millis() / 120) % PANEL_H);
+  matrix->drawFastHLine(0, y, PANEL_W, matrix->color565(180, 180, 180));
 }
 
 static void render_display() {
