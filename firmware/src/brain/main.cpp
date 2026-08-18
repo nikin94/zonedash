@@ -20,7 +20,7 @@
 #include <cstdio>
 #include <cstring>
 
-#include <Adafruit_Protomatter.h>
+#include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
 
 #include "layout.h"  // host-tested panel geometry (lib/display)
 #include "pairing.h" // Mac type (reused; full pairing round is the next increment)
@@ -163,19 +163,20 @@ static void on_recv(const uint8_t* src, const uint8_t* data, int len) {
 }
 #endif
 
-// ── HUB75 display (Adafruit Protomatter on MatrixPortal S3) ─────────────────
-// Fixed MatrixPortal S3 HUB75 pin map (Adafruit). A 64x64 panel uses 5 address
-// lines (A..E); a 64x32 would use 4 — set ADDR_N=4 (drop pin 21) if the image
-// comes out vertically doubled. Low bit depth + dim colours + a sparse dark
-// screen keep the panel draw inside a USB-bench power budget, so no 5 V boost is
-// needed to develop the UI (see the PR's power/wiring notes).
-static uint8_t RGB_PINS[] = {42, 41, 40, 38, 39, 37};
-static uint8_t ADDR_PINS[] = {45, 36, 48, 35, 21}; // A,B,C,D,E
-static constexpr uint8_t ADDR_N = 5;               // 5 = 64x64, 4 = 64x32
-static constexpr uint8_t CLK_PIN = 2, LAT_PIN = 47, OE_PIN = 14;
-static Adafruit_Protomatter matrix(PANEL_W, 6 /*bit depth*/, 1, RGB_PINS, ADDR_N,
-                                   ADDR_PINS, CLK_PIN, LAT_PIN, OE_PIN,
-                                   true /*double-buffered — show() = flush*/);
+// ── HUB75 display (ESP32-HUB75-MatrixPanel-DMA on MatrixPortal S3) ───────────
+// Fixed MatrixPortal S3 HUB75 pin map (Adafruit) in this lib's i2s_pins order:
+// r1,g1,b1, r2,g2,b2, a,b,c,d,e, lat,oe,clk. A 64x64 panel uses 5 address lines
+// (A..E, the E pin); a 64x32 would drop E — pass e=-1 and PANEL_H=32 if the
+// image comes out vertically doubled. The FM6126A driver init (mxconfig.driver)
+// is what Protomatter lacked; without it this generic panel showed garbage.
+// Brightness is capped low + a sparse dark screen keeps the draw inside a
+// USB-bench power budget (no 5 V boost needed to develop the UI).
+static HUB75_I2S_CFG::i2s_pins DISP_PINS = {
+    42, 41, 40, 38, 39, 37, // r1 g1 b1 r2 g2 b2
+    45, 36, 48, 35, 21,     // a b c d e
+    47, 14, 2,              // lat oe clk
+};
+static MatrixPanel_I2S_DMA* matrix = nullptr;
 static bool g_display_ok = false;
 
 // Render one frame: a 12 px status strip (name + last reaction) over the 8-slot
@@ -185,37 +186,37 @@ static bool g_display_ok = false;
 static void render_display() {
   if (!g_display_ok) return;
   const uint32_t now = millis();
-  matrix.fillScreen(0);
+  matrix->fillScreen(0);
 
-  matrix.setTextColor(matrix.color565(90, 90, 90));
-  matrix.setCursor(1, 2);
-  matrix.print("ZD");
+  matrix->setTextColor(matrix->color565(90, 90, 90));
+  matrix->setCursor(1, 2);
+  matrix->print("ZD");
   if (g_last_rt_ms >= 0) {
     char buf[12];
     snprintf(buf, sizeof(buf), "%dms", (int)(g_last_rt_ms + 0.5));
-    matrix.setCursor(PANEL_W - (int)strlen(buf) * 6, 2);
-    matrix.print(buf);
+    matrix->setCursor(PANEL_W - (int)strlen(buf) * 6, 2);
+    matrix->print(buf);
   }
 
   for (uint8_t i = 0; i < MAX_TARGETS; i++) {
     const Point p = spot_xy(i);
-    uint16_t col = matrix.color565(8, 8, 8); // unbound / off marker
+    uint16_t col = matrix->color565(8, 8, 8); // unbound / off marker
     int half = 0;
     if (i == 0 && g_node_count > 0) {
       if (now < g_hit_flash_until) {
-        col = matrix.color565(0, 180, 0); // hit flash (green)
+        col = matrix->color565(0, 180, 0); // hit flash (green)
         half = 2;
       } else if (g_awaiting_hit) {
-        col = matrix.color565(70, 50, 200); // armed (accent)
+        col = matrix->color565(70, 50, 200); // armed (accent)
         half = 2;
       } else {
-        col = matrix.color565(30, 30, 30); // bound, idle (dim white)
+        col = matrix->color565(30, 30, 30); // bound, idle (dim white)
         half = 1;
       }
     }
-    matrix.fillRect(p.x - half, p.y - half, 2 * half + 1, 2 * half + 1, col);
+    matrix->fillRect(p.x - half, p.y - half, 2 * half + 1, 2 * half + 1, col);
   }
-  matrix.show();
+  // Single-buffered: the draw is live, no flush call needed.
 }
 
 void setup() {
@@ -243,10 +244,16 @@ void setup() {
   // HUB75 output and ESP-NOW coexist on the S3 (the BOM's radio-coexistence
   // risk). A begin() failure is non-fatal: the radio cycle keeps running, so a
   // dead panel is told apart from a dead link in the serial log.
-  ProtomatterStatus ds = matrix.begin();
-  g_display_ok = (ds == PROTOMATTER_OK);
-  Serial.printf("[disp] protomatter begin=%d (%s)\n", (int)ds,
-                g_display_ok ? "ok" : "FAILED");
+  HUB75_I2S_CFG mxconfig(PANEL_W, PANEL_H, 1 /*chain*/, DISP_PINS);
+  mxconfig.driver = HUB75_I2S_CFG::FM6126A; // the init Protomatter lacked
+  matrix = new MatrixPanel_I2S_DMA(mxconfig);
+  g_display_ok = matrix->begin();
+  if (g_display_ok) {
+    matrix->setBrightness8(40); // ~16% — capped for USB-bench power
+    matrix->clearScreen();
+  }
+  Serial.printf("[disp] hub75-dma begin=%d driver=FM6126A (%s)\n",
+                (int)g_display_ok, g_display_ok ? "ok" : "FAILED");
 }
 
 void loop() {
