@@ -21,6 +21,7 @@
 #include <cstring>
 
 #include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
+#include <ESP32-HUB75-VirtualMatrixPanel_T.hpp> // scan-type remap for non-1/32 panels
 
 #include "layout.h"  // host-tested panel geometry (lib/display)
 #include "pairing.h" // Mac type (reused; full pairing round is the next increment)
@@ -165,19 +166,36 @@ static void on_recv(const uint8_t* src, const uint8_t* data, int len) {
 
 // ── HUB75 display (ESP32-HUB75-MatrixPanel-DMA on MatrixPortal S3) ───────────
 // Fixed MatrixPortal S3 HUB75 pin map (Adafruit) in this lib's i2s_pins order:
-// r1,g1,b1, r2,g2,b2, a,b,c,d,e, lat,oe,clk. A 64x64 panel uses 5 address lines
-// (A..E, the E pin); a 64x32 would drop E — pass e=-1 and PANEL_H=32 if the
-// image comes out vertically doubled. The FM6126A driver init (mxconfig.driver)
-// is what Protomatter lacked; without it this generic panel showed garbage.
-// Brightness is capped low + a sparse dark screen keeps the draw inside a
-// USB-bench power budget (no 5 V boost needed to develop the UI).
+// r1,g1,b1, r2,g2,b2, a,b,c,d,e, lat,oe,clk.
+//
+// SCAN TYPE: this generic "HRXCP3" P3 64x64 is NOT a plain 1/32-scan panel. A
+// single-row sweep lit ~8 physical rows for one logical row — the signature of a
+// "four-scan" (1/8–1/16 multiplex) panel driven as 1/32. That mismatch is what
+// showed as random stripes the whole time, and is why toggling the FM6126A
+// driver changed nothing: the fault is the scan REMAP, not the shift-register
+// init. Fix (ESP32-HUB75-VirtualMatrixPanel_T): configure the DMA panel at the
+// ELECTRICAL geometry — a four-scan 64x64 is wired as 128x32 (width*2, height/2)
+// — and wrap it in a VirtualMatrixPanel_T<ScanTypeMapping> that remaps it back to
+// a true 64x64 canvas the render code draws on. Driver returns to the default
+// shift-register init. If the image is structured-but-wrong (not noise),
+// PANEL_SCAN_TYPE is the one knob: try the neighbouring FOUR_SCAN_*PX_HIGH enums.
+#define PANEL_SCAN_TYPE FOUR_SCAN_64PX_HIGH
+using ScanMap = ScanTypeMapping<PANEL_SCAN_TYPE>;
+
 static HUB75_I2S_CFG::i2s_pins DISP_PINS = {
     42, 41, 40, 38, 39, 37, // r1 g1 b1 r2 g2 b2
     45, 36, 48, 35, 21,     // a b c d e
     47, 14, 2,              // lat oe clk
 };
-static MatrixPanel_I2S_DMA* matrix = nullptr;
+static MatrixPanel_I2S_DMA* dma_display = nullptr;                  // raw electrical panel
+static VirtualMatrixPanel_T<CHAIN_NONE, ScanMap>* matrix = nullptr; // 64x64 canvas
 static bool g_display_ok = false;
+
+// Local RGB→565 so the draw code doesn't depend on which class exposes color565:
+// the virtual panel is Adafruit_GFX-derived, and GFX has no color565 member.
+static uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b) {
+  return (uint16_t)(((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3));
+}
 
 // Render one frame: a 12 px status strip (name + last reaction) over the 8-slot
 // layout map. Only node 0 exists this increment, so its dot tracks the live
@@ -205,12 +223,12 @@ static void render_test() {
   matrix->fillScreen(0);
   // Fixed reference: a dim left-edge column spanning the full height, so the
   // eye has a "this is where row 0..63 should be" ruler even mid-sweep.
-  const uint16_t D = matrix->color565(30, 30, 30);
+  const uint16_t D = rgb565(30, 30, 30);
   matrix->drawFastVLine(0, 0, PANEL_H, D);
   matrix->drawFastHLine(0, PANEL_H / 2, PANEL_W, D); // mid-height marker
   // The moving row — one bright white line, its Y stepping down over time.
   const int y = (int)((millis() / 120) % PANEL_H);
-  matrix->drawFastHLine(0, y, PANEL_W, matrix->color565(180, 180, 180));
+  matrix->drawFastHLine(0, y, PANEL_W, rgb565(180, 180, 180));
 }
 
 static void render_display() {
@@ -218,7 +236,7 @@ static void render_display() {
   const uint32_t now = millis();
   matrix->fillScreen(0);
 
-  matrix->setTextColor(matrix->color565(220, 220, 220));
+  matrix->setTextColor(rgb565(220, 220, 220));
   matrix->setCursor(1, 2);
   matrix->print("ZD");
   if (g_last_rt_ms >= 0) {
@@ -230,17 +248,17 @@ static void render_display() {
 
   for (uint8_t i = 0; i < MAX_TARGETS; i++) {
     const Point p = spot_xy(i);
-    uint16_t col = matrix->color565(60, 60, 60); // unbound / off marker
+    uint16_t col = rgb565(60, 60, 60); // unbound / off marker
     int half = 1;                                // every spot visible for now
     if (i == 0 && g_node_count > 0) {
       if (now < g_hit_flash_until) {
-        col = matrix->color565(0, 255, 0); // hit flash (green)
+        col = rgb565(0, 255, 0); // hit flash (green)
         half = 2;
       } else if (g_awaiting_hit) {
-        col = matrix->color565(90, 70, 255); // armed (accent)
+        col = rgb565(90, 70, 255); // armed (accent)
         half = 2;
       } else {
-        col = matrix->color565(180, 180, 180); // bound, idle (dim white)
+        col = rgb565(180, 180, 180); // bound, idle (dim white)
         half = 1;
       }
     }
@@ -274,17 +292,23 @@ void setup() {
   // HUB75 output and ESP-NOW coexist on the S3 (the BOM's radio-coexistence
   // risk). A begin() failure is non-fatal: the radio cycle keeps running, so a
   // dead panel is told apart from a dead link in the serial log.
-  HUB75_I2S_CFG mxconfig(PANEL_W, PANEL_H, 1 /*chain*/, DISP_PINS);
-  mxconfig.driver = HUB75_I2S_CFG::FM6126A; // the init Protomatter lacked
-  matrix = new MatrixPanel_I2S_DMA(mxconfig);
-  g_display_ok = matrix->begin();
+  // Electrical geometry: a four-scan 64x64 is physically wired as a 128x32 panel
+  // (width*2, height/2); the virtual layer below remaps it to a true 64x64 canvas.
+  // Driver stays at the default shift-register init — FM6126A changed nothing here
+  // (the fault was the scan remap, not the chip), so its extra init is dropped.
+  HUB75_I2S_CFG mxconfig(PANEL_W * 2, PANEL_H / 2, 1 /*chain*/, DISP_PINS);
+  dma_display = new MatrixPanel_I2S_DMA(mxconfig);
+  g_display_ok = dma_display->begin();
   if (g_display_ok) {
-    matrix->setBrightness8(128); // ~50% — bench-readable; the UI is sparse (text
-                                 // + a few dots), so the draw stays small even
-                                 // here. Re-cap lower for battery in the final build.
-    matrix->clearScreen();
+    dma_display->setBrightness8(128); // ~50% — bench-readable; the sparse UI (text
+                                      // + a few dots) keeps the draw small. Re-cap
+                                      // lower for battery in the final build.
+    dma_display->clearScreen();
+    // Remap the electrical panel onto a real 64x64 drawing surface.
+    matrix = new VirtualMatrixPanel_T<CHAIN_NONE, ScanMap>(1, 1, PANEL_W, PANEL_H);
+    matrix->setDisplay(*dma_display);
   }
-  Serial.printf("[disp] hub75-dma begin=%d driver=FM6126A (%s)\n",
+  Serial.printf("[disp] hub75-dma begin=%d scan=FOUR_SCAN_64PX_HIGH (%s)\n",
                 (int)g_display_ok, g_display_ok ? "ok" : "FAILED");
 }
 
