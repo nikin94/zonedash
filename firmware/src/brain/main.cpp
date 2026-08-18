@@ -183,6 +183,30 @@ static bool g_display_ok = false;
 // layout map. Only node 0 exists this increment, so its dot tracks the live
 // arm/hit state; the others are dim "off" markers so the court map still reads.
 // Dim colours cap the panel draw for USB-bench power.
+// DIAGNOSTIC calibration frame — draws known geometry so a distorted panel can
+// be read out instead of guessed at. A 1px border traces the full 64x64 extent;
+// four distinct corner blocks (R top-left, G top-right, B bottom-left, white
+// bottom-right) reveal mapping / rotation; a centre cross and a mid-height line
+// expose a scan-rate split (a 1/32-scan panel driven as 1/16 shows the image cut
+// and stacked at the half). Swap render_test → render_display in loop() once the
+// geometry is confirmed (DISPLAY_TEST below is the switch).
+static void render_test() {
+  if (!g_display_ok) return;
+  matrix->fillScreen(0);
+  const uint16_t W = matrix->color565(160, 160, 160);
+  const uint16_t R = matrix->color565(200, 0, 0);
+  const uint16_t G = matrix->color565(0, 200, 0);
+  const uint16_t B = matrix->color565(0, 0, 200);
+  matrix->drawRect(0, 0, PANEL_W, PANEL_H, W);          // full-extent border
+  matrix->fillRect(1, 1, 5, 5, R);                      // top-left  = red
+  matrix->fillRect(PANEL_W - 6, 1, 5, 5, G);            // top-right = green
+  matrix->fillRect(1, PANEL_H - 6, 5, 5, B);            // bot-left  = blue
+  matrix->fillRect(PANEL_W - 6, PANEL_H - 6, 5, 5, W);  // bot-right = white
+  const uint16_t D = matrix->color565(50, 50, 50);
+  matrix->drawFastHLine(0, PANEL_H / 2, PANEL_W, D);    // mid-height line
+  matrix->drawFastVLine(PANEL_W / 2, 0, PANEL_H, D);    // mid-width line
+}
+
 static void render_display() {
   if (!g_display_ok) return;
   const uint32_t now = millis();
@@ -263,10 +287,16 @@ void loop() {
 
   // Redraw at ~20 fps regardless of radio state, so the idle map shows before a
   // node is discovered and the armed/hit dot tracks the cycle after.
+  // DIAGNOSTIC: flip to false once the calibration frame confirms the geometry,
+  // and the normal court UI (render_display) resumes.
+  static constexpr bool DISPLAY_TEST = true;
   static uint32_t last_render = 0;
   if (g_display_ok && now - last_render >= 50) {
     last_render = now;
-    render_display();
+    if (DISPLAY_TEST)
+      render_test();
+    else
+      render_display();
   }
 
   if (g_node_count == 0) {
