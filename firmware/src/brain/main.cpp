@@ -188,7 +188,7 @@ static void render_display() {
   const uint32_t now = millis();
   matrix->fillScreen(0);
 
-  matrix->setTextColor(matrix->color565(90, 90, 90));
+  matrix->setTextColor(matrix->color565(220, 220, 220));
   matrix->setCursor(1, 2);
   matrix->print("ZD");
   if (g_last_rt_ms >= 0) {
@@ -200,17 +200,17 @@ static void render_display() {
 
   for (uint8_t i = 0; i < MAX_TARGETS; i++) {
     const Point p = spot_xy(i);
-    uint16_t col = matrix->color565(8, 8, 8); // unbound / off marker
-    int half = 0;
+    uint16_t col = matrix->color565(60, 60, 60); // unbound / off marker
+    int half = 1;                                // every spot visible for now
     if (i == 0 && g_node_count > 0) {
       if (now < g_hit_flash_until) {
-        col = matrix->color565(0, 180, 0); // hit flash (green)
+        col = matrix->color565(0, 255, 0); // hit flash (green)
         half = 2;
       } else if (g_awaiting_hit) {
-        col = matrix->color565(70, 50, 200); // armed (accent)
+        col = matrix->color565(90, 70, 255); // armed (accent)
         half = 2;
       } else {
-        col = matrix->color565(30, 30, 30); // bound, idle (dim white)
+        col = matrix->color565(180, 180, 180); // bound, idle (dim white)
         half = 1;
       }
     }
@@ -249,7 +249,9 @@ void setup() {
   matrix = new MatrixPanel_I2S_DMA(mxconfig);
   g_display_ok = matrix->begin();
   if (g_display_ok) {
-    matrix->setBrightness8(40); // ~16% — capped for USB-bench power
+    matrix->setBrightness8(128); // ~50% — bench-readable; the UI is sparse (text
+                                 // + a few dots), so the draw stays small even
+                                 // here. Re-cap lower for battery in the final build.
     matrix->clearScreen();
   }
   Serial.printf("[disp] hub75-dma begin=%d driver=FM6126A (%s)\n",
