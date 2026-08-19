@@ -354,7 +354,12 @@ static void handle_key(int ch) {
       print_state();
       break;
     default:
-      break; // ignore newlines/echo
+      // Echo anything else (except line endings) so "are my keypresses even
+      // reaching the board?" is answerable from the monitor alone.
+      if (ch != '\r' && ch != '\n')
+        Serial.printf("[diag] key 0x%02x ('%c') — unknown, ignored\n", ch,
+                      (ch >= 32 && ch < 127) ? (char)ch : '?');
+      break;
   }
 }
 
@@ -380,6 +385,19 @@ static void setup() {
 static void loop() {
   while (Serial.available()) handle_key(Serial.read());
   poll_buttons();
+
+  // Heartbeat: the boot banner prints once, ~200 ms after reset — native
+  // USB-CDC DROPS anything printed before the host actually opens the port,
+  // so a monitor attached a moment later sees pure silence and the board
+  // looks dead. A periodic line makes liveness unmissable regardless of when
+  // the monitor attaches.
+  static uint32_t last_beat = 0;
+  if (millis() - last_beat >= 2000) {
+    last_beat = millis();
+    Serial.printf("[diag] alive t=%lus — keys: a/b/c/d/e bit, 0 low, f fill, "
+                  "w scan-all, o OE, r reload, s state | UP/DOWN step row\n",
+                  (unsigned long)(millis() / 1000));
+  }
 
   if (g_scan_all) {
     // One bit-banged frame: every scan position gets a short OE window. Duty
