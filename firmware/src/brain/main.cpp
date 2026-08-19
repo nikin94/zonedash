@@ -184,14 +184,15 @@ static HUB75_I2S_CFG::i2s_pins DISP_PINS = {
 static MatrixPanel_I2S_DMA* matrix = nullptr; // 64x64 1/32-scan panel
 static bool g_display_ok = false;
 
-// ── STATIC ADDRESS DIAG (no DMA, no library) ────────────────────────────────
-// The one measurement mode that dodges BOTH ambiguities the scan-driven tests
-// carry: (1) a DC voltmeter cannot tell complementary 50%-duty signals apart
-// under a continuously scanning DMA sweep, and (2) any library quirk is in the
-// loop. Here the panel is bit-banged directly: a sparse red pattern is shifted
-// into the row latches ONCE, then the A..E address lines are held STATIC and
-// toggled one at a time over serial. The lit rows and every enable-pin voltage
-// are then steady-state — a multimeter reads them exactly.
+// ── SOLO-SCAN ADDRESS DIAG (no DMA, no library) ─────────────────────────────
+// Bit-bangs the panel directly so no library quirk is in the loop. A truly
+// STATIC address probe turned out impossible on this panel: the TC7262 row
+// driver has an anti-burn input-lockup self-check that BLANKS its outputs when
+// the scan stops (protecting LEDs from a parked 100%-duty row) — every static
+// mode read as a dead panel. So the refresh loop scans all 32 addresses
+// continuously (keeping the chips alive) and selects a row by opening the OE
+// window ONLY at the chosen scan position ("solo"). Address-bit health is read
+// off which PHYSICAL row lights for each selected position.
 //
 // Serial (115200), single-character commands:
 //   a b c d e  toggle that address bit     0  all bits low
@@ -205,15 +206,14 @@ static bool g_display_ok = false;
 // 7→8 step is the D-bit crossing.
 //
 // Power: a full red row is ~128 LEDs ≈ 2.5 A instantaneous — far over a USB
-// rail — so FILL is never held statically: static fill strobes OE at ~12%
-// duty, and scan-all keeps a short per-row OE window. The panel therefore
-// looks deliberately dim in fill/scan modes; that's the USB power cap, not a
-// fault.
+// rail — so OE windows stay short (duty-capped). The panel therefore looks
+// deliberately dim, brighter in solo than in scan-all; that's the USB power
+// cap, not a fault.
 //
-// Expected on a healthy binary 1/32 panel: toggling A/B/C/D/E jumps the lit
-// row pair by 1/2/4/8/16 scan positions. If D alone does nothing — and the
-// TC7262 enable pins (7=E1, 10=E2 on U8..U11) don't change between d=0 and
-// d=1 on the meter — the D branch is dead inside the panel, proven statically.
+// Expected on a healthy binary 1/32 panel: stepping the selected position
+// 0→1→2… moves the lit row pair by one each step, and toggling A/B/C/D/E
+// jumps it by 1/2/4/8/16. If crossing 7→8 (or toggling d) snaps back to the
+// row for 0 instead of moving to 8, the D branch is dead inside the panel.
 #define DISPLAY_STATIC_DIAG 1
 #if DISPLAY_STATIC_DIAG
 namespace diag {
@@ -238,25 +238,18 @@ static int scan_of_bits() {
          (bits[3] ? 8 : 0) + (bits[4] ? 16 : 0);
 }
 
-static void apply_addr() {
-  for (int i = 0; i < 5; i++) digitalWrite(ADDR[i], bits[i] ? HIGH : LOW);
-}
-
 static void write_addr(int scan) {
   for (int i = 0; i < 5; i++) digitalWrite(ADDR[i], (scan >> i) & 1 ? HIGH : LOW);
 }
 
-// OE for the STATIC modes. Sparse (16 LEDs) can sit enabled at 100% duty; FILL
-// must not — a full red row is ~2.5 A, so the loop strobes it instead.
-static void apply_static_oe() {
-  if (g_scan_all) return; // scan-all owns OE inside its refresh
-  const bool hold_low = g_oe_on && !g_fill;
-  digitalWrite(OE, hold_low ? LOW : HIGH);
-}
-
-// Shift one row pattern into the column drivers (FM6124 = plain shift
-// registers, slow bit-bang is fine). Sparse: every 8th pixel red on both
-// halves. Fill: every pixel red on both halves.
+// Shift one row pattern into the column drivers. Sparse: every 8th pixel red
+// on both halves. Fill: every pixel red on both halves.
+//
+// LATCH FIX: FM6124-family drivers sample LAT on the CLOCK edge — a bare LAT
+// pulse with no clock never latches (which is how the fill/sparse patterns
+// showed up swapped/stale on the panel). So LAT is raised DURING the last 3
+// data clocks instead of pulsed after; that latches on FM6124 and still works
+// on a plain latch-on-falling register.
 static void shift_pattern() {
   digitalWrite(OE, HIGH); // blank while loading
   digitalWrite(PIN_G1, LOW);
@@ -267,12 +260,11 @@ static void shift_pattern() {
     const bool on = g_fill || (x % 8) == 0;
     digitalWrite(PIN_R1, on ? HIGH : LOW);
     digitalWrite(PIN_R2, on ? HIGH : LOW);
+    if (x == 61) digitalWrite(LAT, HIGH); // overlap LAT with the last 3 clocks
     digitalWrite(CLK, HIGH);
     digitalWrite(CLK, LOW);
   }
-  digitalWrite(LAT, HIGH);
   digitalWrite(LAT, LOW);
-  apply_static_oe();
 }
 
 static void print_state() {
@@ -284,16 +276,15 @@ static void print_state() {
 }
 
 // Board-button row stepping: UP/DOWN move the selected scan position ±1 (mod
-// 32) — serial-free debugging. A step exits scan-all, back to a single row.
+// 32) — serial-free debugging. A step exits scan-all into SOLO mode (the
+// refresh keeps scanning; only the selected position gets an OE window).
 static void step_scan(int dir) {
   if (g_scan_all) {
     g_scan_all = false;
-    Serial.println("[diag] scan-all OFF (button step)");
+    Serial.println("[diag] scan-all OFF (button step) — solo row");
   }
   const int scan = (scan_of_bits() + dir + 32) & 31;
   for (int i = 0; i < 5; i++) bits[i] = (scan >> i) & 1;
-  apply_addr();
-  apply_static_oe();
   print_state();
 }
 
@@ -315,15 +306,11 @@ static void handle_key(int ch) {
     case 'a': case 'b': case 'c': case 'd': case 'e': {
       const int i = ch - 'a';
       bits[i] = !bits[i];
-      apply_addr();
-      apply_static_oe();
       print_state();
       break;
     }
     case '0':
       for (bool& b : bits) b = false;
-      apply_addr();
-      apply_static_oe();
       print_state();
       break;
     case 'f':
@@ -334,17 +321,13 @@ static void handle_key(int ch) {
       break;
     case 'w':
       g_scan_all = !g_scan_all;
-      if (!g_scan_all) {
-        apply_addr(); // back to the statically selected row
-        apply_static_oe();
-      }
       Serial.printf("[diag] scan-all %s\n",
-                    g_scan_all ? "ON (whole panel, duty-capped)" : "OFF (static row)");
+                    g_scan_all ? "ON (whole panel, duty-capped)"
+                               : "OFF (solo row — only the selected scan lights)");
       break;
     case 'o':
       g_oe_on = !g_oe_on;
-      apply_static_oe();
-      Serial.printf("[diag] OE %s\n", g_oe_on ? "ENABLED (pin low)" : "BLANKED (pin high)");
+      Serial.printf("[diag] OE %s\n", g_oe_on ? "ENABLED" : "BLANKED (no OE windows)");
       break;
     case 'r':
       shift_pattern();
@@ -374,11 +357,11 @@ static void setup() {
   digitalWrite(OE, HIGH); // blanked until the pattern is loaded
   pinMode(PIN_BTN_UP, INPUT_PULLUP);
   pinMode(PIN_BTN_DOWN, INPUT_PULLUP);
-  Serial.println("[diag] STATIC ADDRESS PROBE — no DMA, pins bit-banged.");
+  Serial.println("[diag] SOLO-SCAN ADDRESS PROBE — no DMA, pins bit-banged.");
+  Serial.println("[diag] scan never stops (TC7262 blanks itself on frozen inputs); OE opens on the selected row only");
   Serial.println("[diag] keys: a/b/c/d/e bit, 0 all low, f fill, w scan-all, o OE, r reload, s state");
   Serial.println("[diag] board buttons: UP/DOWN step the selected row +-1");
   shift_pattern();
-  apply_addr();
   print_state();
 }
 
@@ -399,28 +382,24 @@ static void loop() {
                   (unsigned long)(millis() / 1000));
   }
 
-  if (g_scan_all) {
-    // One bit-banged frame: every scan position gets a short OE window. Duty
-    // capped for the USB rail (fill = ~2.5 A instantaneous per row) — the
-    // panel reads dim by design here.
-    const uint32_t on_us = g_fill ? 60 : 300;
-    const uint32_t off_us = g_fill ? 360 : 120;
-    for (int s = 0; s < 32; s++) {
-      write_addr(s);
+  // ONE bit-banged frame, ALWAYS scanning all 32 positions. The TC7262 row
+  // driver has an anti-burn input-lockup self-check: if the address inputs
+  // stop toggling it BLANKS its outputs (protecting LEDs from a parked
+  // 100%-duty row) — which is exactly why every "hold the address static" mode
+  // showed a dark panel. So the scan never stops; row SELECTION is done by
+  // opening the OE window only at the chosen position (solo) or at every
+  // position (scan-all). Duty stays capped for the USB rail.
+  const int sel = scan_of_bits();
+  const uint32_t on_us = g_fill ? 60 : 300;
+  for (int s = 0; s < 32; s++) {
+    write_addr(s);
+    delayMicroseconds(5); // let the address settle before opening the window
+    if (g_oe_on && (g_scan_all || s == sel)) {
       digitalWrite(OE, LOW);
       delayMicroseconds(on_us);
       digitalWrite(OE, HIGH);
-      delayMicroseconds(off_us);
     }
-  } else if (g_fill && g_oe_on) {
-    // Static fill: strobe the one selected row at ~12% duty instead of
-    // holding ~2.5 A continuously on the USB rail.
-    digitalWrite(OE, LOW);
-    delayMicroseconds(500);
-    digitalWrite(OE, HIGH);
-    delay(4);
-  } else {
-    delay(5);
+    delayMicroseconds(g_fill ? 60 : 20);
   }
 }
 
