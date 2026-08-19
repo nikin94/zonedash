@@ -184,6 +184,116 @@ static HUB75_I2S_CFG::i2s_pins DISP_PINS = {
 static MatrixPanel_I2S_DMA* matrix = nullptr; // 64x64 1/32-scan panel
 static bool g_display_ok = false;
 
+// ── STATIC ADDRESS DIAG (no DMA, no library) ────────────────────────────────
+// The one measurement mode that dodges BOTH ambiguities the scan-driven tests
+// carry: (1) a DC voltmeter cannot tell complementary 50%-duty signals apart
+// under a continuously scanning DMA sweep, and (2) any library quirk is in the
+// loop. Here the panel is bit-banged directly: a sparse red pattern is shifted
+// into the row latches ONCE, then the A..E address lines are held STATIC and
+// toggled one at a time over serial. The lit rows and every enable-pin voltage
+// are then steady-state — a multimeter reads them exactly.
+//
+// Serial (115200), single-character commands:
+//   a b c d e  toggle that address bit     0  all bits low
+//   s          print the current state     r  re-shift the pixel pattern
+//
+// Expected on a healthy binary 1/32 panel: toggling A/B/C/D/E jumps the lit
+// row pair by 1/2/4/8/16 scan positions. If D alone does nothing — and the
+// TC7262 enable pins (7=E1, 10=E2 on U8..U11) don't change between d=0 and
+// d=1 on the meter — the D branch is dead inside the panel, proven statically.
+#define DISPLAY_STATIC_DIAG 1
+#if DISPLAY_STATIC_DIAG
+namespace diag {
+
+// Pin aliases from DISP_PINS, named for readability.
+constexpr int R1 = 42, G1 = 41, B1 = 40, R2 = 38, G2 = 39, B2 = 37;
+constexpr int ADDR[5] = {45, 36, 48, 35, 21}; // A B C D E
+constexpr int LAT = 47, OE = 14, CLK = 2;
+
+static bool bits[5] = {false, false, false, false, false};
+
+static void apply_addr() {
+  for (int i = 0; i < 5; i++) digitalWrite(ADDR[i], bits[i] ? HIGH : LOW);
+}
+
+// Shift one sparse row pattern into the column drivers: every 8th pixel red on
+// BOTH halves (16 LEDs total — trivial draw, USB-safe even at 100% duty).
+// FM6124 columns are plain shift registers, so a slow bit-banged load is fine.
+static void shift_pattern() {
+  digitalWrite(OE, HIGH); // blank while loading
+  digitalWrite(G1, LOW);
+  digitalWrite(B1, LOW);
+  digitalWrite(G2, LOW);
+  digitalWrite(B2, LOW);
+  for (int x = 0; x < 64; x++) {
+    const bool on = (x % 8) == 0;
+    digitalWrite(R1, on ? HIGH : LOW);
+    digitalWrite(R2, on ? HIGH : LOW);
+    digitalWrite(CLK, HIGH);
+    digitalWrite(CLK, LOW);
+  }
+  digitalWrite(LAT, HIGH);
+  digitalWrite(LAT, LOW);
+  digitalWrite(OE, LOW); // enable output — the selected row stays lit, static
+}
+
+static void print_state() {
+  const int scan = (bits[0] ? 1 : 0) + (bits[1] ? 2 : 0) + (bits[2] ? 4 : 0) +
+                   (bits[3] ? 8 : 0) + (bits[4] ? 16 : 0);
+  Serial.printf("[diag] A=%d B=%d C=%d D=%d E=%d -> scan=%d (rows y=%d and y=%d)\n",
+                (int)bits[0], (int)bits[1], (int)bits[2], (int)bits[3],
+                (int)bits[4], scan, scan, scan + 32);
+}
+
+static void setup() {
+  const int outs[] = {R1, G1, B1, R2, G2, B2, ADDR[0], ADDR[1], ADDR[2],
+                      ADDR[3], ADDR[4], LAT, OE, CLK};
+  for (int p : outs) {
+    pinMode(p, OUTPUT);
+    digitalWrite(p, LOW);
+  }
+  digitalWrite(OE, HIGH); // blanked until the pattern is loaded
+  Serial.println("[diag] STATIC ADDRESS PROBE — no DMA, pins bit-banged.");
+  Serial.println("[diag] keys: a/b/c/d/e toggle bit, 0 all low, r reload pattern, s state");
+  shift_pattern();
+  apply_addr();
+  print_state();
+}
+
+static void loop() {
+  if (!Serial.available()) {
+    delay(10);
+    return;
+  }
+  const int ch = Serial.read();
+  switch (ch) {
+    case 'a': case 'b': case 'c': case 'd': case 'e': {
+      const int i = ch - 'a';
+      bits[i] = !bits[i];
+      apply_addr();
+      print_state();
+      break;
+    }
+    case '0':
+      for (bool& b : bits) b = false;
+      apply_addr();
+      print_state();
+      break;
+    case 'r':
+      shift_pattern();
+      Serial.println("[diag] pattern reloaded");
+      break;
+    case 's':
+      print_state();
+      break;
+    default:
+      break; // ignore newlines/echo
+  }
+}
+
+} // namespace diag
+#endif // DISPLAY_STATIC_DIAG
+
 // Local RGB→565 so the draw code doesn't depend on which class exposes color565:
 // the virtual panel is Adafruit_GFX-derived, and GFX has no color565 member.
 static uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b) {
@@ -264,6 +374,14 @@ void setup() {
   Serial.begin(115200);
   delay(200);
 
+#if DISPLAY_STATIC_DIAG
+  // Static probe ONLY: no radio, no DMA library — the fewest moving parts, so
+  // whatever the panel does is the panel, not the driver stack. Flip the define
+  // off to restore the normal radio + display firmware.
+  diag::setup();
+  return;
+#endif
+
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
   esp_wifi_set_channel(ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE);
@@ -315,6 +433,11 @@ void setup() {
 }
 
 void loop() {
+#if DISPLAY_STATIC_DIAG
+  diag::loop();
+  return;
+#endif
+
   const uint32_t now = millis();
 
   // Redraw at ~20 fps regardless of radio state, so the idle map shows before a
