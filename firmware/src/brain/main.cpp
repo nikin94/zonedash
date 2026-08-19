@@ -13,6 +13,7 @@
 // `pio run -e brain -t upload` and read the serial log.
 #include <Arduino.h>
 #include <WiFi.h>
+#include <driver/gpio.h> // gpio_set_drive_capability — see diag::setup()
 #include <esp_now.h>
 #include <esp_timer.h>
 #include <esp_wifi.h>
@@ -353,6 +354,15 @@ static void setup() {
   for (int p : outs) {
     pinMode(p, OUTPUT);
     digitalWrite(p, LOW);
+    // Max drive strength (40 mA vs the 20 mA default). Metered on the free
+    // 16-pin header with the panel seated: the working address lines (B, E)
+    // average ~2.0 V under the continuous scan, but A/C/D sag to ~1.13 V —
+    // i.e. their HIGH level is loaded down to ~2.3 V. The TC7262 datasheet
+    // wants VIH >= 3.0 V at VDD=5 V, so a sagged high never registers and
+    // those bits read as dead. The S3's 3.3 V swing is borderline by design
+    // (bom.md's 74AHCT245 level-shifter caveat); stronger drive may lift the
+    // loaded highs back over the threshold without extra hardware.
+    gpio_set_drive_capability((gpio_num_t)p, GPIO_DRIVE_CAP_3);
   }
   digitalWrite(OE, HIGH); // blanked until the pattern is loaded
   pinMode(PIN_BTN_UP, INPUT_PULLUP);
