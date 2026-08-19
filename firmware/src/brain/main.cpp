@@ -205,8 +205,11 @@ static bool g_display_ok = false;
 #if DISPLAY_STATIC_DIAG
 namespace diag {
 
-// Pin aliases from DISP_PINS, named for readability.
-constexpr int R1 = 42, G1 = 41, B1 = 40, R2 = 38, G2 = 39, B2 = 37;
+// Pin aliases from DISP_PINS, named for readability. PIN_-prefixed because
+// Arduino's binary.h defines B0/B1/B10/... as macros, so a bare `B1` constant
+// preprocesses into `1 = 40` and the whole block fails to compile.
+constexpr int PIN_R1 = 42, PIN_G1 = 41, PIN_B1 = 40;
+constexpr int PIN_R2 = 38, PIN_G2 = 39, PIN_B2 = 37;
 constexpr int ADDR[5] = {45, 36, 48, 35, 21}; // A B C D E
 constexpr int LAT = 47, OE = 14, CLK = 2;
 
@@ -221,14 +224,14 @@ static void apply_addr() {
 // FM6124 columns are plain shift registers, so a slow bit-banged load is fine.
 static void shift_pattern() {
   digitalWrite(OE, HIGH); // blank while loading
-  digitalWrite(G1, LOW);
-  digitalWrite(B1, LOW);
-  digitalWrite(G2, LOW);
-  digitalWrite(B2, LOW);
+  digitalWrite(PIN_G1, LOW);
+  digitalWrite(PIN_B1, LOW);
+  digitalWrite(PIN_G2, LOW);
+  digitalWrite(PIN_B2, LOW);
   for (int x = 0; x < 64; x++) {
     const bool on = (x % 8) == 0;
-    digitalWrite(R1, on ? HIGH : LOW);
-    digitalWrite(R2, on ? HIGH : LOW);
+    digitalWrite(PIN_R1, on ? HIGH : LOW);
+    digitalWrite(PIN_R2, on ? HIGH : LOW);
     digitalWrite(CLK, HIGH);
     digitalWrite(CLK, LOW);
   }
@@ -246,8 +249,9 @@ static void print_state() {
 }
 
 static void setup() {
-  const int outs[] = {R1, G1, B1, R2, G2, B2, ADDR[0], ADDR[1], ADDR[2],
-                      ADDR[3], ADDR[4], LAT, OE, CLK};
+  const int outs[] = {PIN_R1, PIN_G1, PIN_B1, PIN_R2, PIN_G2, PIN_B2,
+                      ADDR[0], ADDR[1], ADDR[2], ADDR[3], ADDR[4],
+                      LAT, OE, CLK};
   for (int p : outs) {
     pinMode(p, OUTPUT);
     digitalWrite(p, LOW);
