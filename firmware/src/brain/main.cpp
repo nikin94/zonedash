@@ -196,6 +196,19 @@ static bool g_display_ok = false;
 // Serial (115200), single-character commands:
 //   a b c d e  toggle that address bit     0  all bits low
 //   s          print the current state     r  re-shift the pixel pattern
+//   f          toggle FILL (every pixel red) vs sparse (every 8th)
+//   w          toggle SCAN-ALL: bit-banged refresh over all 32 scan positions,
+//              so the whole panel lights — the "is the panel alive at all" test
+//   o          toggle OE by hand (rules out an OE-polarity surprise)
+// Board buttons (MatrixPortal S3, active LOW): UP / DOWN step the selected scan
+// position +1 / -1 — walking rows without touching the serial monitor. The
+// 7→8 step is the D-bit crossing.
+//
+// Power: a full red row is ~128 LEDs ≈ 2.5 A instantaneous — far over a USB
+// rail — so FILL is never held statically: static fill strobes OE at ~12%
+// duty, and scan-all keeps a short per-row OE window. The panel therefore
+// looks deliberately dim in fill/scan modes; that's the USB power cap, not a
+// fault.
 //
 // Expected on a healthy binary 1/32 panel: toggling A/B/C/D/E jumps the lit
 // row pair by 1/2/4/8/16 scan positions. If D alone does nothing — and the
@@ -212,16 +225,38 @@ constexpr int PIN_R1 = 42, PIN_G1 = 41, PIN_B1 = 40;
 constexpr int PIN_R2 = 38, PIN_G2 = 39, PIN_B2 = 37;
 constexpr int ADDR[5] = {45, 36, 48, 35, 21}; // A B C D E
 constexpr int LAT = 47, OE = 14, CLK = 2;
+// MatrixPortal S3 user buttons (per Adafruit board pinout): active LOW.
+constexpr int PIN_BTN_UP = 6, PIN_BTN_DOWN = 7;
 
 static bool bits[5] = {false, false, false, false, false};
+static bool g_fill = false;     // false = every 8th pixel; true = EVERY pixel red
+static bool g_scan_all = false; // refresh over all 32 scan positions (whole panel)
+static bool g_oe_on = true;     // static modes: output enabled (o toggles)
+
+static int scan_of_bits() {
+  return (bits[0] ? 1 : 0) + (bits[1] ? 2 : 0) + (bits[2] ? 4 : 0) +
+         (bits[3] ? 8 : 0) + (bits[4] ? 16 : 0);
+}
 
 static void apply_addr() {
   for (int i = 0; i < 5; i++) digitalWrite(ADDR[i], bits[i] ? HIGH : LOW);
 }
 
-// Shift one sparse row pattern into the column drivers: every 8th pixel red on
-// BOTH halves (16 LEDs total — trivial draw, USB-safe even at 100% duty).
-// FM6124 columns are plain shift registers, so a slow bit-banged load is fine.
+static void write_addr(int scan) {
+  for (int i = 0; i < 5; i++) digitalWrite(ADDR[i], (scan >> i) & 1 ? HIGH : LOW);
+}
+
+// OE for the STATIC modes. Sparse (16 LEDs) can sit enabled at 100% duty; FILL
+// must not — a full red row is ~2.5 A, so the loop strobes it instead.
+static void apply_static_oe() {
+  if (g_scan_all) return; // scan-all owns OE inside its refresh
+  const bool hold_low = g_oe_on && !g_fill;
+  digitalWrite(OE, hold_low ? LOW : HIGH);
+}
+
+// Shift one row pattern into the column drivers (FM6124 = plain shift
+// registers, slow bit-bang is fine). Sparse: every 8th pixel red on both
+// halves. Fill: every pixel red on both halves.
 static void shift_pattern() {
   digitalWrite(OE, HIGH); // blank while loading
   digitalWrite(PIN_G1, LOW);
@@ -229,7 +264,7 @@ static void shift_pattern() {
   digitalWrite(PIN_G2, LOW);
   digitalWrite(PIN_B2, LOW);
   for (int x = 0; x < 64; x++) {
-    const bool on = (x % 8) == 0;
+    const bool on = g_fill || (x % 8) == 0;
     digitalWrite(PIN_R1, on ? HIGH : LOW);
     digitalWrite(PIN_R2, on ? HIGH : LOW);
     digitalWrite(CLK, HIGH);
@@ -237,15 +272,90 @@ static void shift_pattern() {
   }
   digitalWrite(LAT, HIGH);
   digitalWrite(LAT, LOW);
-  digitalWrite(OE, LOW); // enable output — the selected row stays lit, static
+  apply_static_oe();
 }
 
 static void print_state() {
-  const int scan = (bits[0] ? 1 : 0) + (bits[1] ? 2 : 0) + (bits[2] ? 4 : 0) +
-                   (bits[3] ? 8 : 0) + (bits[4] ? 16 : 0);
-  Serial.printf("[diag] A=%d B=%d C=%d D=%d E=%d -> scan=%d (rows y=%d and y=%d)\n",
-                (int)bits[0], (int)bits[1], (int)bits[2], (int)bits[3],
-                (int)bits[4], scan, scan, scan + 32);
+  const int scan = scan_of_bits();
+  Serial.printf(
+      "[diag] A=%d B=%d C=%d D=%d E=%d -> scan=%d (rows y=%d and y=%d) | fill=%d scan-all=%d oe=%d\n",
+      (int)bits[0], (int)bits[1], (int)bits[2], (int)bits[3], (int)bits[4],
+      scan, scan, scan + 32, (int)g_fill, (int)g_scan_all, (int)g_oe_on);
+}
+
+// Board-button row stepping: UP/DOWN move the selected scan position ±1 (mod
+// 32) — serial-free debugging. A step exits scan-all, back to a single row.
+static void step_scan(int dir) {
+  if (g_scan_all) {
+    g_scan_all = false;
+    Serial.println("[diag] scan-all OFF (button step)");
+  }
+  const int scan = (scan_of_bits() + dir + 32) & 31;
+  for (int i = 0; i < 5; i++) bits[i] = (scan >> i) & 1;
+  apply_addr();
+  apply_static_oe();
+  print_state();
+}
+
+static void poll_buttons() {
+  static bool prev_up = true, prev_dn = true;
+  static uint32_t last_ms = 0;
+  const bool up = digitalRead(PIN_BTN_UP) == HIGH;
+  const bool dn = digitalRead(PIN_BTN_DOWN) == HIGH;
+  if (millis() - last_ms >= 150) { // debounce + repeat cap
+    if (!up && prev_up) { last_ms = millis(); step_scan(+1); }
+    else if (!dn && prev_dn) { last_ms = millis(); step_scan(-1); }
+  }
+  prev_up = up;
+  prev_dn = dn;
+}
+
+static void handle_key(int ch) {
+  switch (ch) {
+    case 'a': case 'b': case 'c': case 'd': case 'e': {
+      const int i = ch - 'a';
+      bits[i] = !bits[i];
+      apply_addr();
+      apply_static_oe();
+      print_state();
+      break;
+    }
+    case '0':
+      for (bool& b : bits) b = false;
+      apply_addr();
+      apply_static_oe();
+      print_state();
+      break;
+    case 'f':
+      g_fill = !g_fill;
+      shift_pattern(); // reload columns with the new pattern
+      Serial.printf("[diag] fill %s\n", g_fill ? "ON (every pixel red)" : "OFF (sparse)");
+      print_state();
+      break;
+    case 'w':
+      g_scan_all = !g_scan_all;
+      if (!g_scan_all) {
+        apply_addr(); // back to the statically selected row
+        apply_static_oe();
+      }
+      Serial.printf("[diag] scan-all %s\n",
+                    g_scan_all ? "ON (whole panel, duty-capped)" : "OFF (static row)");
+      break;
+    case 'o':
+      g_oe_on = !g_oe_on;
+      apply_static_oe();
+      Serial.printf("[diag] OE %s\n", g_oe_on ? "ENABLED (pin low)" : "BLANKED (pin high)");
+      break;
+    case 'r':
+      shift_pattern();
+      Serial.println("[diag] pattern reloaded");
+      break;
+    case 's':
+      print_state();
+      break;
+    default:
+      break; // ignore newlines/echo
+  }
 }
 
 static void setup() {
@@ -257,41 +367,42 @@ static void setup() {
     digitalWrite(p, LOW);
   }
   digitalWrite(OE, HIGH); // blanked until the pattern is loaded
+  pinMode(PIN_BTN_UP, INPUT_PULLUP);
+  pinMode(PIN_BTN_DOWN, INPUT_PULLUP);
   Serial.println("[diag] STATIC ADDRESS PROBE — no DMA, pins bit-banged.");
-  Serial.println("[diag] keys: a/b/c/d/e toggle bit, 0 all low, r reload pattern, s state");
+  Serial.println("[diag] keys: a/b/c/d/e bit, 0 all low, f fill, w scan-all, o OE, r reload, s state");
+  Serial.println("[diag] board buttons: UP/DOWN step the selected row +-1");
   shift_pattern();
   apply_addr();
   print_state();
 }
 
 static void loop() {
-  if (!Serial.available()) {
-    delay(10);
-    return;
-  }
-  const int ch = Serial.read();
-  switch (ch) {
-    case 'a': case 'b': case 'c': case 'd': case 'e': {
-      const int i = ch - 'a';
-      bits[i] = !bits[i];
-      apply_addr();
-      print_state();
-      break;
+  while (Serial.available()) handle_key(Serial.read());
+  poll_buttons();
+
+  if (g_scan_all) {
+    // One bit-banged frame: every scan position gets a short OE window. Duty
+    // capped for the USB rail (fill = ~2.5 A instantaneous per row) — the
+    // panel reads dim by design here.
+    const uint32_t on_us = g_fill ? 60 : 300;
+    const uint32_t off_us = g_fill ? 360 : 120;
+    for (int s = 0; s < 32; s++) {
+      write_addr(s);
+      digitalWrite(OE, LOW);
+      delayMicroseconds(on_us);
+      digitalWrite(OE, HIGH);
+      delayMicroseconds(off_us);
     }
-    case '0':
-      for (bool& b : bits) b = false;
-      apply_addr();
-      print_state();
-      break;
-    case 'r':
-      shift_pattern();
-      Serial.println("[diag] pattern reloaded");
-      break;
-    case 's':
-      print_state();
-      break;
-    default:
-      break; // ignore newlines/echo
+  } else if (g_fill && g_oe_on) {
+    // Static fill: strobe the one selected row at ~12% duty instead of
+    // holding ~2.5 A continuously on the USB rail.
+    digitalWrite(OE, LOW);
+    delayMicroseconds(500);
+    digitalWrite(OE, HIGH);
+    delay(4);
+  } else {
+    delay(5);
   }
 }
 
