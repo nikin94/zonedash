@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   Animated,
   ScrollView,
@@ -76,41 +76,38 @@ export const HistoryScreen = () => {
   // thumb that slides in the tab bar. The ScrollView clips it horizontally, so a
   // half-width offset reads as the list sliding in. No swipe gesture: taps drive
   // it, which is all a segmented control needs (and keeps it dependency-free).
+  //
+  // The slide is a TAB-TAP affordance only, so it runs from the tap handler
+  // below rather than watching activeMode: the focus effect above also changes
+  // the mode (opening the last run's tab on entry), and that programmatic jump
+  // must land with the list already in place — entering the screen used to
+  // slide the content in as if a tab had been tapped.
   const { width } = useWindowDimensions();
   const slideX = useRef(new Animated.Value(0)).current;
   const slideOpacity = useRef(new Animated.Value(1)).current;
-  const prevIndexRef = useRef(MODES.findIndex((m) => m.key === activeMode));
-  const didMountRef = useRef(false);
-  const activeIndex = Math.max(
-    0,
-    MODES.findIndex((m) => m.key === activeMode),
-  );
-  useEffect(() => {
-    // Skip the first run — only an actual tab change should animate, not the
-    // screen mounting (or re-mounting on tab focus).
-    if (!didMountRef.current) {
-      didMountRef.current = true;
-      prevIndexRef.current = activeIndex;
-      return;
+  const changeMode = (key: string) => {
+    const from = MODES.findIndex((m) => m.key === activeMode);
+    const to = MODES.findIndex((m) => m.key === key);
+    if (to !== from) {
+      const dir = Math.sign(to - from) || 1;
+      slideX.setValue(dir * width * 0.5);
+      slideOpacity.setValue(0);
+      Animated.parallel([
+        Animated.spring(slideX, {
+          toValue: 0,
+          useNativeDriver: true,
+          speed: 16,
+          bounciness: 4,
+        }),
+        Animated.timing(slideOpacity, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
     }
-    const dir = Math.sign(activeIndex - prevIndexRef.current) || 1;
-    prevIndexRef.current = activeIndex;
-    slideX.setValue(dir * width * 0.5);
-    slideOpacity.setValue(0);
-    Animated.parallel([
-      Animated.spring(slideX, {
-        toValue: 0,
-        useNativeDriver: true,
-        speed: 16,
-        bounciness: 4,
-      }),
-      Animated.timing(slideOpacity, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [activeIndex, width, slideX, slideOpacity]);
+    setActiveMode(key);
+  };
 
   const [hasSessions, setHasSessions] = useState(false);
   const [clearAsk, setClearAsk] = useState(false);
@@ -139,7 +136,7 @@ export const HistoryScreen = () => {
           testID="history-mode-tabs"
           tabs={MODES}
           activeKey={activeMode}
-          onChange={setActiveMode}
+          onChange={changeMode}
         />
       </View>
 

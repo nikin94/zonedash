@@ -391,6 +391,42 @@ test("the History mode tabs filter the log by drill mode", async () => {
   expect(screen.getByTestId("history-menu-button")).toBeTruthy();
 });
 
+// The horizontal offset of the History list's page-slide wrapper. The slide
+// parks at 0; a tab tap arms it to a half-width offset and springs back. Read
+// via __getValue because the transform holds a live Animated node.
+const historySlideX = (): number => {
+  const style = StyleSheet.flatten(
+    screen.getByTestId("history-slide").props.style,
+  ) as { transform?: { translateX?: number | { __getValue(): number } }[] };
+  const t = style.transform?.find(
+    (p) => p.translateX !== undefined,
+  )?.translateX;
+  if (t === undefined) return 0;
+  return typeof t === "number" ? t : t.__getValue();
+};
+
+// The page-slide is a TAB-TAP affordance only: tapping another mode tab arms
+// the directional slide, but simply entering the History screen lands with the
+// list already in place.
+test("the mode-tab slide arms on a tab tap, not on entering History", async () => {
+  await renderApp();
+
+  fireEvent.press(screen.getByTestId("tab-history"));
+  expect(historySlideX()).toBe(0); // plain entry — no slide armed
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+  expect(historySlideX()).toBe(0);
+
+  // A real tab tap arms the slide: the wrapper starts offset to the side of
+  // travel (and then springs back to rest).
+  fireEvent.press(screen.getByTestId("segment-path"));
+  expect(historySlideX()).not.toBe(0);
+  await act(async () => {
+    await jest.runAllTimersAsync();
+  });
+});
+
 // Regression: a finished run must be visible on the History tab without manually
 // switching modes. The mode tabs default to Random, so a Path/Live run used to
 // land behind a hidden tab and look "missing" — recordSession now remembers the
@@ -423,11 +459,15 @@ test("a finished Path run is visible on the History tab, not hidden behind Rando
   });
 
   // Open History → it opens on the Path tab (the run's mode), so the run shows
-  // straight away instead of the empty Random tab.
+  // straight away instead of the empty Random tab. That programmatic tab jump
+  // must NOT arm the page-slide — entering the screen used to slide the list
+  // in as if a tab had been tapped (the slide is a tab-tap affordance only).
   fireEvent.press(screen.getByTestId("tab-history"));
+  expect(historySlideX()).toBe(0);
   await act(async () => {
     await jest.runAllTimersAsync();
   });
+  expect(historySlideX()).toBe(0);
   expect(
     screen.getByTestId("segment-path").props.accessibilityState.selected,
   ).toBe(true);
