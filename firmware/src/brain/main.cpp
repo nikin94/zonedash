@@ -37,11 +37,14 @@ static const uint8_t BROADCAST[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 static Mac g_nodes[MAX_TARGETS];
 static uint8_t g_node_count = 0;
 
-// Arm-cycle state: drives Sync → Arm → (await Pressed) → re-arm against node 0,
-// so a single target proves the full hit path. Multi-node arming waits for the
-// pairing round + drill engine.
+// Arm-cycle state: drives Sync → Arm → (await Pressed) → advance, ROUND-ROBIN
+// over every discovered node — so a bench of N targets proves the full hit path
+// on each button in turn. Position = discovery index for now (0..N-1); binding
+// positions to court slots is the pairing round, the next increment. The armed
+// node advances on hit OR timeout, so one dead node can't wedge the cycle.
 static uint32_t g_session_id = 0;
 static bool g_synced = false;      // Sync sent for this session
+static uint8_t g_cur = 0;          // round-robin index into g_nodes
 static bool g_awaiting_hit = false;
 static uint16_t g_seq = 0;         // step index, bumped per Arm
 static uint64_t g_arm_us = 0;      // brain clock at the last Arm (reaction base)
@@ -136,6 +139,15 @@ static void handle_recv(const uint8_t* src, int rssi, const uint8_t* data,
     }
     case MsgType::Pressed: {
       const Pressed* p = reinterpret_cast<const Pressed*>(data);
+      // With several buttons on the bench, only the CURRENTLY armed step counts:
+      // a press that lands after its timeout (or a duplicate) carries a stale
+      // seq — log it as [late] so the operator sees it, but don't let it close
+      // someone else's step.
+      if (!g_awaiting_hit || p->seq != g_seq) {
+        Serial.printf("[late] pos=%u seq=%u (armed seq=%u) — ignored\n",
+                      p->position, p->seq, g_seq);
+        break;
+      }
       // Reaction = hit − arm, both in the brain's clock (target maps t_hit into
       // it via Sync). Guard a hit stamped before the arm (unsynced / stray).
       const double rt_ms =
@@ -143,6 +155,7 @@ static void handle_recv(const uint8_t* src, int rssi, const uint8_t* data,
       Serial.printf("[hit] pos=%u seq=%u reaction=%.1fms sensor=%u\n", p->position,
                     p->seq, rt_ms, p->sensor);
       g_awaiting_hit = false;
+      g_cur = (g_cur + 1) % (g_node_count ? g_node_count : 1); // next button
       g_next_arm_ms = millis() + REARM_DELAY_MS;
       g_last_rt_ms = rt_ms;                          // show it in the status strip
       g_hit_flash_until = millis() + HIT_FLASH_MS;   // flash the hit dot green
@@ -215,7 +228,10 @@ static bool g_display_ok = false;
 // 0→1→2… moves the lit row pair by one each step, and toggling A/B/C/D/E
 // jumps it by 1/2/4/8/16. If crossing 7→8 (or toggling d) snaps back to the
 // row for 0 instead of moving to 8, the D branch is dead inside the panel.
-#define DISPLAY_STATIC_DIAG 1
+// OFF: display track is parked (clone board without level shifters + strict
+// panel — awaiting the genuine MatrixPortal S3 + Adafruit #6484). Flip to 1 to
+// boot the address probe again for the new panel's first flash.
+#define DISPLAY_STATIC_DIAG 0
 #if DISPLAY_STATIC_DIAG
 namespace diag {
 
@@ -423,7 +439,7 @@ static uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b) {
 }
 
 // Render one frame: a 12 px status strip (name + last reaction) over the 8-slot
-// layout map. Only node 0 exists this increment, so its dot tracks the live
+// layout map. The currently armed node's dot tracks the live
 // arm/hit state; the others are dim "off" markers so the court map still reads.
 // Dim colours cap the panel draw for USB-bench power.
 // DIAGNOSTIC E-line sweep — the single decisive test for "rows don't advance".
@@ -475,7 +491,7 @@ static void render_display() {
     const Point p = spot_xy(i);
     uint16_t col = rgb565(60, 60, 60); // unbound / off marker
     int half = 1;                                // every spot visible for now
-    if (i == 0 && g_node_count > 0) {
+    if (g_node_count > 0 && i == g_cur) { // dot of the currently armed node
       if (now < g_hit_flash_until) {
         col = rgb565(0, 255, 0); // hit flash (green)
         half = 2;
@@ -580,37 +596,50 @@ void loop() {
     delay(50); // nothing discovered yet — discovery is recv-callback driven
     return;
   }
-  const uint8_t* node = g_nodes[0].data();
-
-  // Establish the clock once, then let the target record the offset for a beat
-  // before the first Arm, so t_hit maps cleanly into the brain's domain.
+  // Establish the clock once per session — to EVERY node found so far — then
+  // let the targets record the offset for a beat before the first Arm. Nodes
+  // that show up later are covered by the per-arm re-Sync below.
   if (!g_synced) {
     g_session_id++;
-    send_sync(node, g_session_id, static_cast<uint64_t>(esp_timer_get_time()));
+    for (uint8_t i = 0; i < g_node_count; i++)
+      send_sync(g_nodes[i].data(), g_session_id,
+                static_cast<uint64_t>(esp_timer_get_time()));
     g_synced = true;
     g_next_arm_ms = now + 500;
-    Serial.printf("[sync] session=%u sent to node0\n", g_session_id);
+    Serial.printf("[sync] session=%u sent to %u node(s)\n", g_session_id,
+                  g_node_count);
   }
 
-  // Arm the node when it's time and we're not already waiting on a hit.
+  // Arm the next node in the round-robin when it's time and we're not already
+  // waiting on a hit. Position = discovery index, echoed back in Pressed, so
+  // the [hit] line identifies which button answered.
   if (!g_awaiting_hit && static_cast<int32_t>(now - g_next_arm_ms) >= 0) {
+    g_cur %= g_node_count; // a node may have joined since the last wrap
+    const uint8_t* node = g_nodes[g_cur].data();
     g_seq++;
-    // Re-Sync the node's clock on every arm: a target that rebooted (the C3
-    // USB-CDC reset) lost its offset, so an Arm without a fresh Sync would stamp
-    // t_hit in the node's own domain and the reaction would read 0. One tiny
-    // extra packet keeps the hit timestamp comparable across a node reset.
+    // Re-Sync the armed node's clock on every arm: a target that rebooted (the
+    // C3 USB-CDC reset) lost its offset, so an Arm without a fresh Sync would
+    // stamp t_hit in the node's own domain and the reaction would read 0. One
+    // tiny extra packet keeps the hit timestamp comparable across a node reset.
     send_sync(node, g_session_id, static_cast<uint64_t>(esp_timer_get_time()));
     g_arm_us = static_cast<uint64_t>(esp_timer_get_time());
-    send_arm(node, g_session_id, 0 /*position*/, g_seq);
+    send_arm(node, g_session_id, g_cur /*position*/, g_seq);
     g_awaiting_hit = true;
     g_arm_deadline_ms = now + ARM_TIMEOUT_MS;
-    Serial.printf("[arm] node0 seq=%u — press the target's BOOT button\n", g_seq);
+    Serial.printf(
+        "[arm] node%u/%u %02x:%02x:%02x:%02x:%02x:%02x seq=%u — press ITS "
+        "BOOT button\n",
+        g_cur, g_node_count, node[0], node[1], node[2], node[3], node[4],
+        node[5], g_seq);
   }
 
-  // A missed press must not wedge the cycle: re-arm after the timeout.
+  // A missed press must not wedge the cycle: on timeout move on to the NEXT
+  // node, so one unplugged/dead button costs one 15 s window, not the session.
   if (g_awaiting_hit && static_cast<int32_t>(now - g_arm_deadline_ms) >= 0) {
-    Serial.printf("[arm] timeout seq=%u — no hit, re-arming\n", g_seq);
+    Serial.printf("[arm] timeout node%u seq=%u — no hit, advancing\n", g_cur,
+                  g_seq);
     g_awaiting_hit = false;
+    g_cur = (g_cur + 1) % g_node_count;
     g_next_arm_ms = now;
   }
 
